@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Workout Swipe Logger</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <button class="theme-floater" id="themeToggle" aria-label="Toggle light and dark theme">
+    <span class="theme-floater-icon" id="themeIcon">☾</span>
+    <span class="theme-floater-label" id="themeLabel">Light</span>
+  </button>
+
+  <div class="device-wrapper">
+    <header class="screen-header">
+      <button class="chrome-btn th-text-muted" id="prevExBtn" aria-label="Previous exercise">←</button>
+
+      <div class="header-copy">
+        <h1 class="exercise-name th-text-main" id="exerciseName">Bench Press</h1>
+        <div class="header-meta">
+          <span class="set-counter th-text-muted" id="setCounter">Set 1 / 4</span>
+        </div>
+      </div>
+
+      <button class="chrome-btn th-text-muted" id="nextExBtn" aria-label="Next exercise">→</button>
+    </header>
+
+    <section class="main-view exercise-view is-active" id="exerciseView">
+      <section class="swipe-card-container" id="swipeContainer">
+        <div class="action-underlay action-left" id="bgLeft">
+          <div class="underlay-copy">
+            <div class="underlay-icon" id="bgLeftIcon">⇥</div>
+            <span id="bgLeftLabel">Next Exercise</span>
+          </div>
+        </div>
+
+        <div class="action-underlay action-right" id="bgRight">
+          <div class="underlay-copy">
+            <div class="underlay-icon" id="bgRightIcon">✓</div>
+            <span id="bgRightLabel">Log Set</span>
+          </div>
+        </div>
+
+        <article class="swipe-card th-card" id="swipeCard" data-card-mode="set">
+          <div class="card-view card-view-set is-active" id="setView">
+            <div class="metrics-stack" id="metricsStack"></div>
+          </div>
+
+          <div class="card-view card-view-timer" id="timerView">
+            <div class="timer-head">
+              <span class="metric-label th-text-muted">Rest Timer</span>
+              <div class="timer-next th-text-muted" id="restNext">Next: Set 2 · 62.5 × 8</div>
+            </div>
+
+            <div class="timer-layout">
+              <button class="rest-core th-dial" id="timerBtn" aria-label="Start or pause rest timer">
+                <svg class="timer-ring" viewBox="0 0 220 220" aria-hidden="true">
+                  <circle cx="110" cy="110" r="92" class="timer-ring-track"></circle>
+                  <circle cx="110" cy="110" r="92" class="timer-ring-progress" id="timerRing"></circle>
+                </svg>
+                <span class="rest-time th-text-main" id="timerValue">1:30</span>
+                <span class="rest-state th-text-muted" id="timerState">Tap to start</span>
+              </button>
+
+              <div class="rest-step-stack">
+                <button class="rest-step th-dial" data-seconds="-15">−15</button>
+                <button class="rest-step th-dial" data-seconds="15">+15</button>
+              </div>
+            </div>
+
+            <div class="preset-row" aria-label="Rest presets">
+              <button class="preset-btn th-dial" data-preset="30">30s</button>
+              <button class="preset-btn th-dial" data-preset="60">60s</button>
+              <button class="preset-btn th-dial is-selected" data-preset="90">90s</button>
+              <button class="preset-btn th-dial" data-preset="120">120s</button>
+            </div>
+          </div>
+
+          <div class="card-foot">
+            <span class="swipe-note th-text-muted" id="swipeHint">Swipe right to log set</span>
+          </div>
+        </article>
+      </section>
+    </section>
+
+    <section class="main-view workout-view" id="workoutView">
+      <div class="workout-shell">
+        <div class="program-panel th-card">
+          <div class="timeline-head">
+            <span class="metric-label th-text-muted">Mock programs</span>
+            <span class="timeline-head-note th-text-muted">Switch the workout to preview different exercise flows</span>
+          </div>
+          <div class="program-switcher" id="planList"></div>
+          <div class="program-detail">
+            <div class="program-copy">
+              <strong class="program-title th-text-main" id="programTitle">Power Push</strong>
+              <span class="program-note th-text-muted" id="programNote">Bilateral pressing with accessory dumbbell work.</span>
+            </div>
+            <div class="program-badges" id="programBadges"></div>
+          </div>
+          <div class="category-strip" id="categoryStrip"></div>
+        </div>
+
+        <div class="workout-summary th-card">
+          <div class="summary-card">
+            <span class="metric-label th-text-muted">Session</span>
+            <strong class="summary-number th-text-main" id="summaryLogged">0</strong>
+            <span class="summary-caption th-text-muted">Sets logged</span>
+          </div>
+          <div class="summary-card">
+            <span class="metric-label th-text-muted">Current</span>
+            <strong class="summary-number th-text-main" id="summaryCurrent">Bench</strong>
+            <span class="summary-caption th-text-muted">Active exercise</span>
+          </div>
+          <div class="summary-card">
+            <span class="metric-label th-text-muted">Remaining</span>
+            <strong class="summary-number th-text-main" id="summaryRemaining">0</strong>
+            <span class="summary-caption th-text-muted">Sets to go</span>
+          </div>
+        </div>
+
+        <div class="timeline-panel th-card">
+          <div class="timeline-head">
+            <span class="metric-label th-text-muted">Workout timeline</span>
+            <span class="timeline-head-note th-text-muted">Recorded and upcoming work</span>
+          </div>
+          <div class="timeline-list" id="timelineList"></div>
+        </div>
+      </div>
+    </section>
+
+    <nav class="pill-nav th-pill-nav" aria-label="Primary navigation">
+      <button class="pill-nav-btn th-pill-active" id="exerciseTabBtn" aria-current="page" aria-label="Exercise view">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="pill-icon">
+          <path d="M4 10h2v4H4v-4zm2-2h2v8H6V8zm10 0h2v8h-2V8zm2 2h2v4h-2v-4zM8 11h8v2H8v-2z"></path>
+        </svg>
+      </button>
+      <button class="pill-nav-btn th-pill-inactive" id="workoutTabBtn" aria-label="Workout timeline view">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="pill-icon">
+          <path d="M5 5h4v4H5V5zm0 10h4v4H5v-4zm10-10h4v4h-4V5zm-4 2h2v10h-2V7zm4 8h4v4h-4v-4z"></path>
+        </svg>
+      </button>
+    </nav>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
