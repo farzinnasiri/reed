@@ -1,24 +1,25 @@
 // Convex generates the `_generated` types after `npx convex dev` or `npm run convex:codegen`.
 // Until then, keep this file out of the root app typecheck and use it as server plumbing only.
 import { createClient, type GenericCtx } from '@convex-dev/better-auth';
-import { convex } from '@convex-dev/better-auth/plugins';
+import { convex, crossDomain } from '@convex-dev/better-auth/plugins';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { expo } from '@better-auth/expo';
 import { components } from './_generated/api';
 import { internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
 import authConfig from './auth.config';
-import { getAuthBaseURL, getTrustedOrigin } from './auth_support';
+import { getAuthBaseURL, getSiteURL, getTrustedOrigins } from './auth_support';
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export function createAuth(ctx: GenericCtx<DataModel>) {
   const googleClientId = process.env.GOOGLE_CLIENT_ID;
   const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const siteUrl = getSiteURL();
 
   return betterAuth({
     baseURL: getAuthBaseURL(),
-    trustedOrigins: [getTrustedOrigin()],
+    trustedOrigins: getTrustedOrigins(),
     database: authComponent.adapter(ctx),
     account: {
       accountLinking: {
@@ -61,6 +62,6 @@ export function createAuth(ctx: GenericCtx<DataModel>) {
         enabled: true,
       },
     },
-    plugins: [expo(), convex({ authConfig })],
+    plugins: [expo(), convex({ authConfig }), crossDomain({ siteUrl })],
   } satisfies BetterAuthOptions);
 }

@@ -1,17 +1,28 @@
 import { Link, Stack } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { GlassSurface } from '@/components/ui/glass-surface';
+import { ReedButton } from '@/components/ui/reed-button';
+import { ReedText } from '@/components/ui/reed-text';
+import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 
 export default function NotFoundScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Not found' }} />
-      <View style={styles.container}>
-        <Text style={styles.title}>This route does not exist.</Text>
-
-        <Link href="/" style={styles.link}>
-          <Text style={styles.linkText}>Go back to the app shell</Text>
-        </Link>
-      </View>
+      <ScreenBackdrop>
+        <View style={styles.container}>
+          <GlassSurface style={styles.card}>
+            <ReedText variant="brand">404</ReedText>
+            <ReedText variant="title">This route does not exist.</ReedText>
+            <ReedText tone="muted">
+              The app shell is still alive. This path just doesn&apos;t map to a screen yet.
+            </ReedText>
+            <Link href="/" asChild>
+              <ReedButton label="Go back to Reed" />
+            </Link>
+          </GlassSurface>
+        </View>
+      </ScreenBackdrop>
     </>
   );
 }
@@ -22,19 +33,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     padding: 20,
-    backgroundColor: '#020617',
   },
-  title: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#f8fafc',
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: '#38bdf8',
+  card: {
+    maxWidth: 420,
+    width: '100%',
   },
 });

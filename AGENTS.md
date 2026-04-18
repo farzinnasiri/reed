@@ -18,6 +18,7 @@ The role of this file is to describe common mistakes and confusion points that a
 4. Do not create/use `ConvexHttpClient` flows without token wiring.
 5. Keep UI/UX responsive and mobile-safe, with Android as the primary target.
 6. Do not move legacy prototype code back into the active Expo app by accident.
+7. Design philosophy: less is more, always elegant, every element intentional. Avoid repetitive page-chrome formulas such as eyebrow + oversized title + subtitle unless the user explicitly asks for them.
 
 ## Operational Rules
 
