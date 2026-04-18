@@ -8,6 +8,7 @@ The role of this file is to describe common mistakes and confusion points that a
 2. The previous static prototype was intentionally preserved under `legacy/`. Treat it as a reference artifact, not the active app runtime.
 3. Convex generated files under `convex/_generated/` do not exist until `npx convex dev` or `npx convex codegen` runs against a configured deployment. Avoid assuming those files are present in a fresh clone.
 4. GitHub CLI auth may be invalid in some local sessions even if an account appears configured. Verify `gh auth status` before planning repo creation or push steps.
+5. Better Auth's Expo social flow in this project does not use `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` or `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; server-side Google credentials plus the Convex site callback are the active integration path.
 
 ## Keep These Invariants
 
@@ -28,7 +29,7 @@ The role of this file is to describe common mistakes and confusion points that a
 
 1. `app/` is the active runtime. `legacy/` is not part of the Expo Router app.
 2. The root TypeScript config excludes `convex/` because Convex auth plumbing references generated types that are only available after codegen. Do not treat this as permission to ignore backend correctness; run Convex codegen before finalizing backend work.
-3. The current auth setup is plumbing-only: providers and client wiring exist, but sign-in screens are intentionally not implemented yet.
+3. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
 4. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
 
 ## Required Validation Before Finalizing
@@ -47,3 +48,10 @@ Strict collaboration rule:
 2. If you see a materially better approach, propose it before or alongside implementation.
 3. Do not silently continue with questionable code just to ship quickly; actively ask questions and seek clarification.
 4. Treat this as collaborative engineering: surface tradeoffs, risks, and alternatives, then align with the developer.
+
+<!-- convex-ai-start -->
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+
+<!-- convex-ai-end -->

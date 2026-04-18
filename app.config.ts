@@ -1,5 +1,14 @@
-import 'dotenv/config';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { config as loadEnv } from 'dotenv';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+
+const selectedEnvFile = process.env.REED_ENV_FILE ?? '.env.local';
+const resolvedEnvFile = resolve(selectedEnvFile);
+
+if (existsSync(resolvedEnvFile)) {
+  loadEnv({ path: resolvedEnvFile, override: true });
+}
 
 const appName = 'reed';
 const slug = 'reed';

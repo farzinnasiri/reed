@@ -20,7 +20,7 @@ export default function RootLayout() {
             <Text style={styles.eyebrow}>Missing environment</Text>
             <Text style={styles.title}>Reed needs public Expo env values before the app can boot.</Text>
             <Text style={styles.copy}>
-              Add the missing keys to <Text style={styles.code}>.env.local</Text> and restart Expo.
+              Add the missing keys to <Text style={styles.code}>.env.dev</Text> and restart Expo.
             </Text>
             {missingPublicEnv.map(name => (
               <Text key={name} style={styles.missingItem}>

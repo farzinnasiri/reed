@@ -5,35 +5,62 @@ import { convex } from '@convex-dev/better-auth/plugins';
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
 import { expo } from '@better-auth/expo';
 import { components } from './_generated/api';
+import { internal } from './_generated/api';
 import type { DataModel } from './_generated/dataModel';
-import { query } from './_generated/server';
 import authConfig from './auth.config';
+import { getAuthBaseURL, getTrustedOrigin } from './auth_support';
 
 export const authComponent = createClient<DataModel>(components.betterAuth);
 
 export function createAuth(ctx: GenericCtx<DataModel>) {
-  const trustedOrigin = process.env.EXPO_PUBLIC_APP_SCHEME ?? 'reed://';
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   return betterAuth({
-    baseURL: process.env.EXPO_PUBLIC_CONVEX_SITE_URL,
-    trustedOrigins: [trustedOrigin],
+    baseURL: getAuthBaseURL(),
+    trustedOrigins: [getTrustedOrigin()],
     database: authComponent.adapter(ctx),
+    account: {
+      accountLinking: {
+        allowDifferentEmails: false,
+        allowUnlinkingAll: false,
+        enabled: true,
+        trustedProviders: ['google', 'apple'],
+        updateUserInfoOnLink: true,
+      },
+    },
     emailAndPassword: {
       enabled: true,
+      autoSignIn: true,
       requireEmailVerification: false,
     },
-    socialProviders: {
-      google: {
-        clientId: process.env.GOOGLE_CLIENT_ID as string,
-        clientSecret: process.env.GOOGLE_CLIENT_SECRET as string,
-        prompt: 'select_account',
+    session: {
+      expiresIn: 60 * 60 * 24 * 7,
+      freshAge: 60 * 15,
+      updateAge: 60 * 60 * 24,
+    },
+    socialProviders:
+      googleClientId && googleClientSecret
+        ? {
+            google: {
+              clientId: googleClientId,
+              clientSecret: googleClientSecret,
+              prompt: 'select_account',
+            },
+          }
+        : undefined,
+    user: {
+      deleteUser: {
+        afterDelete: async user => {
+          if ('runMutation' in ctx) {
+            await ctx.runMutation(internal.profiles.deleteByAuthUserId, {
+              authUserId: user.id,
+            });
+          }
+        },
+        enabled: true,
       },
     },
     plugins: [expo(), convex({ authConfig })],
   } satisfies BetterAuthOptions);
 }
-
-export const getCurrentUser = query({
-  args: {},
-  handler: async ctx => authComponent.getAuthUser(ctx),
-});

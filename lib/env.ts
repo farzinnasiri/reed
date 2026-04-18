@@ -1,8 +1,6 @@
 const publicEnv = {
   convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL ?? '',
   convexSiteUrl: process.env.EXPO_PUBLIC_CONVEX_SITE_URL ?? '',
-  googleAndroidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '',
-  googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
 } as const;
 
 export const missingPublicEnv = Object.entries({
