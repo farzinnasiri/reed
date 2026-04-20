@@ -1,4 +1,4 @@
-import type { ColorValue, ShadowStyleIOS, TextStyle, ViewStyle } from 'react-native';
+import { Platform, type ColorValue, type TextStyle, type ViewStyle } from 'react-native';
 
 export type ThemeMode = 'light' | 'dark';
 export type ThemePreference = ThemeMode | 'system';
@@ -122,19 +122,39 @@ type ReedTheme = {
   };
 };
 
-const lightShadow: ShadowStyleIOS = {
-  shadowColor: '#0f172a',
-  shadowOffset: { width: 0, height: 18 },
-  shadowOpacity: 0.08,
-  shadowRadius: 24,
+type ShadowConfig = {
+  blur: number;
+  color: string;
+  elevation: number;
+  opacity: number;
+  y: number;
 };
 
-const darkShadow: ShadowStyleIOS = {
-  shadowColor: '#020617',
-  shadowOffset: { width: 0, height: 24 },
-  shadowOpacity: 0.34,
-  shadowRadius: 30,
-};
+function createShadow(config: ShadowConfig): ViewStyle {
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: `0px ${config.y}px ${config.blur}px ${toRgba(config.color, config.opacity)}`,
+    } as ViewStyle;
+  }
+
+  return {
+    elevation: config.elevation,
+    shadowColor: config.color,
+    shadowOffset: { width: 0, height: config.y },
+    shadowOpacity: config.opacity,
+    shadowRadius: config.blur,
+  };
+}
+
+function toRgba(hexColor: string, opacity: number) {
+  const hex = hexColor.replace('#', '');
+  const normalized = hex.length === 3 ? hex.split('').map(chunk => `${chunk}${chunk}`).join('') : hex;
+  const red = Number.parseInt(normalized.slice(0, 2), 16);
+  const green = Number.parseInt(normalized.slice(2, 4), 16);
+  const blue = Number.parseInt(normalized.slice(4, 6), 16);
+
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+}
 
 export const lightTheme: ReedTheme = {
   mode: 'light',
@@ -166,8 +186,8 @@ export const lightTheme: ReedTheme = {
     pillFill: 'rgba(241, 245, 249, 0.94)',
     pillActiveFill: 'rgba(255, 255, 255, 0.98)',
     pillActiveText: '#0f172a',
-    successText: '#0369a1',
-    successFill: 'rgba(125, 211, 252, 0.18)',
+    successText: '#166534',
+    successFill: 'rgba(34, 197, 94, 0.2)',
     dangerText: '#b91c1c',
     dangerFill: 'rgba(254, 226, 226, 0.84)',
     dangerBorder: 'rgba(248, 113, 113, 0.24)',
@@ -179,20 +199,30 @@ export const lightTheme: ReedTheme = {
   },
   shadows: {
     floating: {
-      ...lightShadow,
-      elevation: 12,
+      ...createShadow({
+        blur: 24,
+        color: '#0f172a',
+        elevation: 12,
+        opacity: 0.08,
+        y: 18,
+      }),
     },
     card: {
-      ...lightShadow,
-      elevation: 10,
+      ...createShadow({
+        blur: 24,
+        color: '#0f172a',
+        elevation: 10,
+        opacity: 0.08,
+        y: 18,
+      }),
     },
-    controlActive: {
-      shadowColor: '#0f172a',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.08,
-      shadowRadius: 18,
+    controlActive: createShadow({
+      blur: 18,
+      color: '#0f172a',
       elevation: 4,
-    },
+      opacity: 0.08,
+      y: 10,
+    }),
   },
   blur: {
     intensity: 44,
@@ -235,8 +265,8 @@ export const darkTheme: ReedTheme = {
     pillFill: 'rgba(24, 24, 27, 0.82)',
     pillActiveFill: '#27272a',
     pillActiveText: '#f8fafc',
-    successText: '#7dd3fc',
-    successFill: 'rgba(14, 116, 144, 0.24)',
+    successText: '#86efac',
+    successFill: 'rgba(22, 163, 74, 0.28)',
     dangerText: '#fecaca',
     dangerFill: 'rgba(69, 10, 10, 0.68)',
     dangerBorder: 'rgba(248, 113, 113, 0.18)',
@@ -248,20 +278,30 @@ export const darkTheme: ReedTheme = {
   },
   shadows: {
     floating: {
-      ...darkShadow,
-      elevation: 18,
+      ...createShadow({
+        blur: 30,
+        color: '#020617',
+        elevation: 18,
+        opacity: 0.34,
+        y: 24,
+      }),
     },
     card: {
-      ...darkShadow,
-      elevation: 16,
+      ...createShadow({
+        blur: 30,
+        color: '#020617',
+        elevation: 16,
+        opacity: 0.34,
+        y: 24,
+      }),
     },
-    controlActive: {
-      shadowColor: '#020617',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.2,
-      shadowRadius: 16,
+    controlActive: createShadow({
+      blur: 16,
+      color: '#020617',
       elevation: 3,
-    },
+      opacity: 0.2,
+      y: 8,
+    }),
   },
   blur: {
     intensity: 36,

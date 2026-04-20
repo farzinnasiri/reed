@@ -49,14 +49,13 @@ export function ReedButton({
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
-        theme.shadows.floating,
+        variant === 'ghost' ? null : theme.shadows.floating,
         {
           backgroundColor: palette.backgroundColor,
           borderColor: palette.borderColor,
           opacity: disabled ? 0.45 : 1,
           transform: [{ scale: pressed ? 0.985 : 1 }],
         },
-        variant === 'ghost' ? styles.ghost : null,
         style,
       ]}
       {...props}
@@ -77,10 +76,6 @@ const styles = StyleSheet.create({
   base: {
     borderRadius: 18,
     borderWidth: 1,
-  },
-  ghost: {
-    shadowOpacity: 0,
-    elevation: 0,
   },
   inner: {
     alignItems: 'center',

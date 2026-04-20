@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 
@@ -18,6 +19,9 @@ type SegmentedControlProps<T extends string> = {
   value: T;
 };
 
+const SHELL_PADDING = 4;
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
 export function SegmentedControl<T extends string>({
   compact = false,
   iconOnly = false,
@@ -26,9 +30,27 @@ export function SegmentedControl<T extends string>({
   value,
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
+  const [shellWidth, setShellWidth] = useState(0);
+  const progress = useRef(new Animated.Value(Math.max(0, options.findIndex(option => option.value === value)))).current;
+  const optionIndex = Math.max(0, options.findIndex(option => option.value === value));
+  const itemWidth = Math.max(0, (shellWidth - SHELL_PADDING * 2) / Math.max(1, options.length));
+  const indicatorTranslateX = useMemo(
+    () => Animated.multiply(progress, itemWidth || 0),
+    [itemWidth, progress],
+  );
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      duration: 240,
+      easing: Easing.out(Easing.cubic),
+      toValue: optionIndex,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+    }).start();
+  }, [optionIndex, progress]);
 
   return (
     <View
+      onLayout={event => setShellWidth(event.nativeEvent.layout.width)}
       style={[
         styles.shell,
         {
@@ -37,6 +59,22 @@ export function SegmentedControl<T extends string>({
         },
       ]}
     >
+      {itemWidth > 0 ? (
+        <Animated.View
+          style={[
+            styles.indicator,
+            theme.shadows.controlActive,
+            { pointerEvents: 'none' },
+            {
+              backgroundColor: theme.colors.controlActiveFill,
+              borderColor: theme.colors.controlActiveBorder,
+              transform: [{ translateX: indicatorTranslateX }],
+              width: itemWidth,
+            },
+          ]}
+        />
+      ) : null}
+
       {options.map(option => {
         const isActive = option.value === value;
 
@@ -47,11 +85,6 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(option.value)}
             style={[
               styles.item,
-              isActive ? theme.shadows.controlActive : null,
-              {
-                backgroundColor: isActive ? theme.colors.controlActiveFill : 'transparent',
-                borderColor: isActive ? theme.colors.controlActiveBorder : 'transparent',
-              },
               compact ? styles.itemCompact : null,
             ]}
           >
@@ -76,17 +109,27 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderWidth: 1,
     flexDirection: 'row',
-    padding: 4,
+    padding: SHELL_PADDING,
+    position: 'relative',
+  },
+  indicator: {
+    borderRadius: 18,
+    borderWidth: 1,
+    bottom: SHELL_PADDING,
+    left: SHELL_PADDING,
+    position: 'absolute',
+    top: SHELL_PADDING,
   },
   item: {
     alignItems: 'center',
     borderRadius: 18,
-    borderWidth: 1,
     flex: 1,
     gap: 6,
     justifyContent: 'center',
     minHeight: 44,
+    minWidth: 0,
     paddingHorizontal: 12,
+    zIndex: 1,
   },
   itemCompact: {
     minHeight: 40,

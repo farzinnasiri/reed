@@ -1,10 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { ReedIconButton } from '@/components/ui/reed-icon-button';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useReedTheme } from '@/design/provider';
+import { WorkoutSurface } from './workout-surface';
 import type { AppMode } from './types';
 
 type ChatMessage = {
@@ -12,6 +15,8 @@ type ChatMessage = {
   role: 'assistant' | 'user';
   text: string;
 };
+
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
@@ -40,19 +45,46 @@ export function SignedInShell({
   onOpenSettings,
 }: SignedInShellProps) {
   const { theme } = useReedTheme();
+  // Query used only to decide dock visibility; WorkoutSurface has its own
+  // subscription and is the canonical owner of session state.
+  const currentWorkoutSession = useQuery(api.liveSessions.getCurrent, {});
+  const hasActiveWorkoutSession = currentWorkoutSession !== null && currentWorkoutSession !== undefined;
+
+  // Animate the crossfade between tabs. Both surfaces remain mounted so
+  // WorkoutSurface internal state (editing sets, rest timer, page) is
+  // preserved while the user briefly checks the Coach tab.
+  const tabTransition = useRef(new Animated.Value(appMode === 'workout' ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(tabTransition, {
+      duration: theme.motion.regular + 40,
+      easing: Easing.out(Easing.cubic),
+      toValue: appMode === 'workout' ? 1 : 0,
+      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+    }).start();
+  }, [appMode, tabTransition, theme.motion.regular]);
+
+  const coachOpacity = tabTransition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0],
+  });
+
+  const coachTranslateY = tabTransition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -6],
+  });
+
+  const workoutOpacity = tabTransition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  const workoutTranslateY = tabTransition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [6, 0],
+  });
 
   const appOptions = [
-    {
-      accessibilityLabel: 'Coach',
-      icon: (
-        <Ionicons
-          color={String(appMode === 'coach' ? theme.colors.pillActiveText : theme.colors.textMuted)}
-          name="chatbubble-ellipses-outline"
-          size={20}
-        />
-      ),
-      value: 'coach' as const,
-    },
     {
       accessibilityLabel: 'Workout',
       icon: (
@@ -64,7 +96,23 @@ export function SignedInShell({
       ),
       value: 'workout' as const,
     },
+    {
+      accessibilityLabel: 'Coach',
+      icon: (
+        <Ionicons
+          color={String(appMode === 'coach' ? theme.colors.pillActiveText : theme.colors.textMuted)}
+          name="chatbubble-ellipses-outline"
+          size={20}
+        />
+      ),
+      value: 'coach' as const,
+    },
   ];
+
+  // Hide the bottom dock during a live workout so the swipe cards have
+  // full-screen room. The WorkoutSurface owns exit/back navigation in that
+  // state via its own nav button.
+  const showDock = !(appMode === 'workout' && hasActiveWorkoutSession);
 
   return (
     <View
@@ -77,23 +125,65 @@ export function SignedInShell({
         },
       ]}
     >
-      <View style={styles.shellHeaderFloating}>
-        <ReedIconButton accessibilityLabel="Open settings" onPress={onOpenSettings}>
-          <Ionicons color={String(theme.colors.textPrimary)} name="settings-outline" size={19} />
-        </ReedIconButton>
+      {/* Settings button — only visible on the Coach tab */}
+      {appMode === 'coach' ? (
+        <View style={styles.shellHeaderFloating}>
+          <ReedIconButton accessibilityLabel="Open settings" onPress={onOpenSettings}>
+            <Ionicons color={String(theme.colors.textPrimary)} name="settings-outline" size={19} />
+          </ReedIconButton>
+        </View>
+      ) : null}
+
+      <View style={styles.shellContentStack}>
+        {/*
+          Both surfaces stay mounted so internal state (chat draft, workout
+          metrics, rest timer) is not lost when switching tabs.
+          We switch hit-testing with pointerEvents and visibility with opacity
+          instead of display:'none' (which would stop layout but not effects).
+        */}
+        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'coach' ? 'auto' : 'none' }]}>
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                opacity: coachOpacity,
+                transform: [{ translateY: coachTranslateY }],
+              },
+            ]}
+          >
+            <CoachSurface displayName={displayName} />
+          </Animated.View>
+        </View>
+
+        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'workout' ? 'auto' : 'none' }]}>
+          <Animated.View
+            style={[
+              StyleSheet.absoluteFillObject,
+              {
+                opacity: workoutOpacity,
+                transform: [{ translateY: workoutTranslateY }],
+              },
+            ]}
+          >
+            <WorkoutSurface
+              onExitWorkout={() => onChangeMode('coach')}
+              showStartBackButton={false}
+            />
+          </Animated.View>
+        </View>
       </View>
 
-      {appMode === 'coach' ? <CoachSurface displayName={displayName} /> : <WorkoutSurface />}
-
-      <View style={styles.bottomDockFloating}>
-        <SegmentedControl<AppMode>
-          compact
-          iconOnly
-          onChange={onChangeMode}
-          options={appOptions}
-          value={appMode}
-        />
-      </View>
+      {showDock ? (
+        <View style={styles.bottomDockFloating}>
+          <SegmentedControl<AppMode>
+            compact
+            iconOnly
+            onChange={onChangeMode}
+            options={appOptions}
+            value={appMode}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -125,13 +215,13 @@ function CoachSurface({ displayName }: { displayName: string }) {
           duration: theme.motion.slow * 2,
           easing: Easing.out(Easing.quad),
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }),
         Animated.timing(voicePulse, {
           duration: theme.motion.slow * 2,
           easing: Easing.in(Easing.quad),
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
         }),
       ]),
     );
@@ -245,7 +335,6 @@ function CoachSurface({ displayName }: { displayName: string }) {
             <View style={styles.voiceWrap}>
               {isListening ? (
                 <Animated.View
-                  pointerEvents="none"
                   style={[
                     styles.voicePulse,
                     {
@@ -291,29 +380,6 @@ function CoachSurface({ displayName }: { displayName: string }) {
             </Pressable>
           </View>
         </View>
-      </View>
-    </View>
-  );
-}
-
-function WorkoutSurface() {
-  const { theme } = useReedTheme();
-
-  return (
-    <View style={styles.workoutSurface}>
-      <View style={styles.workoutEmpty}>
-        <View
-          style={[
-            styles.emptyIcon,
-            {
-              backgroundColor: theme.colors.controlFill,
-              borderColor: theme.colors.controlBorder,
-            },
-          ]}
-        >
-          <Ionicons color={String(theme.colors.textPrimary)} name="barbell-outline" size={22} />
-        </View>
-        <ReedText tone="muted">Workout is empty for now.</ReedText>
       </View>
     </View>
   );
@@ -378,13 +444,13 @@ function TypingIndicator() {
             duration: 220,
             easing: Easing.inOut(Easing.quad),
             toValue: 1,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
           Animated.timing(value, {
             duration: 220,
             easing: Easing.inOut(Easing.quad),
             toValue: 0.3,
-            useNativeDriver: true,
+            useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
           }),
         ]),
       );
@@ -461,6 +527,15 @@ const styles = StyleSheet.create({
   shellRoot: {
     flex: 1,
   },
+  shellContentStack: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+  },
+  shellContentLayer: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
   shellHeaderFloating: {
     position: 'absolute',
     right: 20,
@@ -522,7 +597,7 @@ const styles = StyleSheet.create({
   composerShell: {
     borderRadius: 30,
     borderWidth: 1,
-    bottom: 92,
+    bottom: 74,
     left: 0,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -550,6 +625,7 @@ const styles = StyleSheet.create({
     height: 30,
     position: 'absolute',
     width: 30,
+    zIndex: -1,
   },
   composerInput: {
     alignSelf: 'center',
@@ -567,26 +643,6 @@ const styles = StyleSheet.create({
     height: 28,
     justifyContent: 'center',
     width: 28,
-  },
-  workoutSurface: {
-    flex: 1,
-    justifyContent: 'center',
-    paddingBottom: 120,
-    paddingTop: 78,
-  },
-  workoutEmpty: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  emptyIcon: {
-    alignItems: 'center',
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    marginBottom: 14,
-    width: 44,
   },
   bottomDockFloating: {
     bottom: 20,

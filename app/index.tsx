@@ -20,7 +20,7 @@ export default function HomeScreen() {
   const { theme } = useReedTheme();
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('sign-in');
-  const [appMode, setAppMode] = useState<AppMode>('coach');
+  const [appMode, setAppMode] = useState<AppMode>('workout');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -54,12 +54,8 @@ export default function HomeScreen() {
     }
   }
 
-  function normalizedEmail() {
-    return email.trim().toLowerCase();
-  }
-
   async function handleSignUp() {
-    const nextEmail = normalizedEmail();
+    const nextEmail = email.trim().toLowerCase();
 
     if (!name.trim()) {
       setErrorMessage('Name is required.');
@@ -93,7 +89,7 @@ export default function HomeScreen() {
   }
 
   async function handleSignIn() {
-    const nextEmail = normalizedEmail();
+    const nextEmail = email.trim().toLowerCase();
 
     if (!nextEmail || !password) {
       setErrorMessage('Email and password are required.');
@@ -154,6 +150,23 @@ export default function HomeScreen() {
             <View style={styles.loadingRow}>
               <ActivityIndicator color={String(theme.colors.accentPrimary)} />
               <ReedText tone="muted">Checking the current session.</ReedText>
+            </View>
+          </GlassSurface>
+        </View>
+      ) : session && viewerProfile === undefined ? (
+        <View
+          style={[
+            styles.loadingScreen,
+            {
+              paddingHorizontal: theme.spacing.lg,
+              paddingVertical: theme.spacing.xl,
+            },
+          ]}
+        >
+          <GlassSurface>
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+              <ReedText tone="muted">Finishing your account setup.</ReedText>
             </View>
           </GlassSurface>
         </View>

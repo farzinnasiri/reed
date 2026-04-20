@@ -55,9 +55,9 @@ export function GlassSurface({
       ) : null}
       <LinearGradient colors={palette.gradient} style={StyleSheet.absoluteFill} />
       <View
-        pointerEvents="none"
         style={[
           StyleSheet.absoluteFill,
+          { pointerEvents: 'none' },
           {
             backgroundColor: canUseBlur ? 'transparent' : palette.fill,
             borderColor: theme.colors.glassHighlight,

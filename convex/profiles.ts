@@ -1,6 +1,7 @@
 import { internalMutation, mutation, query } from './_generated/server';
 import { ConvexError, v } from 'convex/values';
 import { authComponent } from './auth';
+import type { QueryCtx, MutationCtx } from './_generated/server';
 
 const profileValidator = v.object({
   _creationTime: v.number(),
@@ -25,6 +26,20 @@ function profilePatchFromAuthUser(user: {
     email: user.email,
     updatedAt: Date.now(),
   };
+}
+
+export async function requireViewerProfile(ctx: QueryCtx | MutationCtx) {
+  const authUser = await authComponent.getAuthUser(ctx);
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
+    .unique();
+
+  if (!profile) {
+    throw new ConvexError('Viewer profile is missing. Reload the app and try again.');
+  }
+
+  return profile;
 }
 
 export const viewer = query({

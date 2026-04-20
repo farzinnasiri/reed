@@ -11,7 +11,8 @@
     "doctor": "npx expo-doctor",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
-    "convex:deploy": "convex deploy"
+    "convex:deploy": "convex deploy",
+    "catalog:import": "tsx scripts/import-exercise-catalog.ts"
   },
   "dependencies": {
     "@better-auth/expo": "1.5.3",
@@ -36,10 +37,13 @@
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
+    "react-native-svg": "15.12.1",
     "react-native-web": "~0.21.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "csv-parse": "^5.6.0",
+    "tsx": "^4.20.6",
     "typescript": "~5.9.2"
   },
   "private": true

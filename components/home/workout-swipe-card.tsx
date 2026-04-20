@@ -1,0 +1,317 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useMemo, useRef } from 'react';
+import { Animated, Easing, PanResponder, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ReedText } from '@/components/ui/reed-text';
+import { useReedTheme } from '@/design/provider';
+
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+type SwipeCardProps = {
+  children: React.ReactNode;
+  disabled?: boolean;
+  hint: string;
+  leftIcon?: IconName;
+  leftLabel: string;
+  leftTone?: 'neutral' | 'danger';
+  onSwipeLeft?: () => void | Promise<void>;
+  onSwipeRight?: () => void | Promise<void>;
+  rightIcon?: IconName;
+  rightLabel: string;
+};
+
+const SWIPE_THRESHOLD = 96;
+const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
+export function WorkoutSwipeCard({
+  children,
+  disabled = false,
+  hint,
+  leftIcon = 'arrow-back',
+  leftLabel,
+  leftTone = 'neutral',
+  onSwipeLeft,
+  onSwipeRight,
+  rightIcon = 'checkmark',
+  rightLabel,
+}: SwipeCardProps) {
+  const { theme } = useReedTheme();
+  const { width } = useWindowDimensions();
+  const translateX = useRef(new Animated.Value(0)).current;
+  const entryScale = useRef(new Animated.Value(1)).current;
+  const entryTranslateY = useRef(new Animated.Value(0)).current;
+  const isHandlingSwipe = useRef(false);
+  const flyoutDistance = Math.max(width * 1.05, 360);
+
+  const rotation = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-flyoutDistance, 0, flyoutDistance],
+        outputRange: ['-20deg', '0deg', '20deg'],
+        extrapolate: 'clamp',
+      }),
+    [flyoutDistance, translateX],
+  );
+
+  const dragScale = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-220, 0, 220],
+        outputRange: [0.96, 1, 0.96],
+        extrapolate: 'clamp',
+      }),
+    [translateX],
+  );
+
+  const scale = useMemo(() => Animated.multiply(dragScale, entryScale), [dragScale, entryScale]);
+
+  const leftOpacity = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-140, -24, 0],
+        outputRange: [1, 0.28, 0],
+        extrapolate: 'clamp',
+      }),
+    [translateX],
+  );
+
+  const rightOpacity = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [0, 24, 140],
+        outputRange: [0, 0.28, 1],
+        extrapolate: 'clamp',
+      }),
+    [translateX],
+  );
+
+  const leftCopyX = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [-140, 0],
+        outputRange: [0, -16],
+        extrapolate: 'clamp',
+      }),
+    [translateX],
+  );
+
+  const rightCopyX = useMemo(
+    () =>
+      translateX.interpolate({
+        inputRange: [0, 140],
+        outputRange: [16, 0],
+        extrapolate: 'clamp',
+      }),
+    [translateX],
+  );
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          !disabled &&
+          !isHandlingSwipe.current &&
+          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
+          Math.abs(gestureState.dx) > 8,
+        onPanResponderGrant: () => {
+          translateX.stopAnimation();
+        },
+        onPanResponderMove: (_, gestureState) => {
+          translateX.setValue(gestureState.dx);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          void handleSwipeEnd(gestureState.dx);
+        },
+        onPanResponderTerminate: (_, gestureState) => {
+          void handleSwipeEnd(gestureState.dx);
+        },
+      }),
+    [disabled, onSwipeLeft, onSwipeRight, translateX, width],
+  );
+
+  async function handleSwipeEnd(deltaX: number) {
+    if (isHandlingSwipe.current) {
+      return;
+    }
+
+    const completedRight = deltaX > SWIPE_THRESHOLD && onSwipeRight;
+    const completedLeft = deltaX < -SWIPE_THRESHOLD && onSwipeLeft;
+
+    if (!completedRight && !completedLeft) {
+      Animated.spring(translateX, {
+        bounciness: 8,
+        speed: 18,
+        toValue: 0,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+      }).start();
+      return;
+    }
+
+    isHandlingSwipe.current = true;
+    const target = completedRight ? flyoutDistance : -flyoutDistance;
+
+    await new Promise<void>(resolve => {
+      Animated.timing(translateX, {
+        duration: 320,
+        easing: Easing.out(Easing.cubic),
+        toValue: target,
+        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+      }).start(() => resolve());
+    });
+
+    try {
+      if (completedRight) {
+        await onSwipeRight?.();
+      } else {
+        await onSwipeLeft?.();
+      }
+    } finally {
+      translateX.setValue(0);
+      entryScale.setValue(0.9);
+      entryTranslateY.setValue(36);
+      Animated.parallel([
+        Animated.timing(entryScale, {
+          duration: 350,
+          easing: Easing.bezier(0.175, 0.885, 0.32, 1.275),
+          toValue: 1,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+        }),
+        Animated.timing(entryTranslateY, {
+          duration: 350,
+          easing: Easing.out(Easing.cubic),
+          toValue: 0,
+          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
+        }),
+      ]).start();
+      isHandlingSwipe.current = false;
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Animated.View
+        style={[
+          styles.underlay,
+          styles.leftUnderlay,
+          { pointerEvents: 'none' },
+          {
+            opacity: leftOpacity,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={
+            leftTone === 'danger'
+              ? ['rgba(239,68,68,0.9)', 'rgba(239,68,68,0.12)']
+              : theme.mode === 'dark'
+                ? ['rgba(82,82,91,0.6)', 'rgba(82,82,91,0.05)']
+                : ['rgba(100,116,139,0.5)', 'rgba(100,116,139,0.08)']
+          }
+          end={{ x: 1, y: 0.5 }}
+          start={{ x: 0, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: leftCopyX }] }]}>
+          <Ionicons color="#ffffff" name={leftIcon} size={32} />
+          <ReedText style={styles.underlayText} variant="label">
+            {leftLabel}
+          </ReedText>
+        </Animated.View>
+      </Animated.View>
+
+      <Animated.View
+        style={[
+          styles.underlay,
+          styles.rightUnderlay,
+          { pointerEvents: 'none' },
+          {
+            opacity: rightOpacity,
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={['rgba(16,185,129,0.9)', 'rgba(16,185,129,0.12)']}
+          end={{ x: 0, y: 0.5 }}
+          start={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: rightCopyX }] }]}>
+          <Ionicons color="#ffffff" name={rightIcon} size={32} />
+          <ReedText style={styles.underlayText} variant="label">
+            {rightLabel}
+          </ReedText>
+        </Animated.View>
+      </Animated.View>
+
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[
+          styles.card,
+          {
+            backgroundColor: theme.colors.glassFallback,
+            borderColor: theme.colors.glassHighlight,
+            transform: [{ translateX }, { translateY: entryTranslateY }, { rotate: rotation }, { scale }],
+          },
+        ]}
+      >
+        <View style={styles.cardContent}>{children}</View>
+        <View style={styles.foot}>
+          <ReedText tone="muted" variant="caption">
+            {hint}
+          </ReedText>
+        </View>
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    minHeight: 0,
+    position: 'relative',
+  },
+  underlay: {
+    alignItems: 'center',
+    borderRadius: 34,
+    bottom: 0,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 0,
+    width: '100%',
+  },
+  leftUnderlay: {
+    alignItems: 'flex-end',
+    paddingRight: 28,
+  },
+  rightUnderlay: {
+    alignItems: 'flex-start',
+    paddingLeft: 28,
+  },
+  underlayCopy: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  underlayText: {
+    color: '#ffffff',
+    letterSpacing: 1.6,
+  },
+  card: {
+    borderRadius: 34,
+    borderWidth: 1.5,
+    flex: 1,
+    overflow: 'hidden',
+  },
+  cardContent: {
+    flex: 1,
+    paddingBottom: 10,
+    paddingHorizontal: 22,
+    paddingTop: 24,
+  },
+  foot: {
+    alignItems: 'center',
+    paddingBottom: 20,
+    paddingHorizontal: 16,
+  },
+});

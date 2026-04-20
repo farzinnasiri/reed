@@ -3,7 +3,7 @@ ENV ?= dev
 ENV_FILE := .env.$(ENV)
 CONVEX_TARGET := $(if $(filter prod production,$(ENV)),prod,dev)
 
-.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push env-check env-show
+.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push catalog-import env-check env-show
 
 help:
 	@echo "make install           # npm install"
@@ -14,6 +14,7 @@ help:
 	@echo "make convex-codegen ENV=dev|prod"
 	@echo "make convex-deploy     # deploy Convex backend to production using .env.prod"
 	@echo "make convex-env-push ENV=dev|prod"
+	@echo "make catalog-import ENV=dev|prod"
 	@echo "make env-show ENV=dev|prod"
 
 env-check:
@@ -55,3 +56,6 @@ convex-env-push: env-check
 	if [ -n "$$GOOGLE_CLIENT_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_CLIENT_SECRET "$$GOOGLE_CLIENT_SECRET"; fi; \
 	if [ -n "$$SITE_URL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" SITE_URL "$$SITE_URL"; fi; \
 	if [ -n "$$BETTER_AUTH_TRUSTED_ORIGINS" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_TRUSTED_ORIGINS "$$BETTER_AUTH_TRUSTED_ORIGINS"; fi
+
+catalog-import:
+	npm run catalog:import -- --deployment "$(CONVEX_TARGET)"

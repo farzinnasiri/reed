@@ -19,6 +19,8 @@ The role of this file is to describe common mistakes and confusion points that a
 5. Keep UI/UX responsive and mobile-safe, with Android as the primary target.
 6. Do not move legacy prototype code back into the active Expo app by accident.
 7. Design philosophy: less is more, always elegant, every element intentional. Avoid repetitive page-chrome formulas such as eyebrow + oversized title + subtitle unless the user explicitly asks for them.
+8. Do not wrap every control or list row in pills/cards by default; use minimal chrome and add containers only when they carry clear UX meaning.
+9. Do not persist empty workout sessions: if a session is finished with zero exercises, delete it instead of storing it.
 
 ## Operational Rules
 
@@ -32,6 +34,7 @@ The role of this file is to describe common mistakes and confusion points that a
 2. The root TypeScript config excludes `convex/` because Convex auth plumbing references generated types that are only available after codegen. Do not treat this as permission to ignore backend correctness; run Convex codegen before finalizing backend work.
 3. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
 4. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
+5. For the workout tab, `legacy/2/` is not only a visual reference. Its swipe-card, wheel-picker, and rest-loop interaction model is the intended baseline unless the developer explicitly says otherwise; do not reinterpret it as a conventional tap-to-log form flow.
 
 ## Required Validation Before Finalizing
 
