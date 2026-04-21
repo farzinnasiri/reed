@@ -7,9 +7,24 @@ export const recipeKeyValidator = v.union(
   v.literal('added_bodyweight'),
   v.literal('hold'),
   v.literal('weighted_hold'),
+  v.literal('unilateral_load_pair'),
+  v.literal('unilateral_reps_pair'),
+  v.literal('cardio_manual_duration_rpe'),
+  v.literal('cardio_manual_distance_time_rpe'),
+  v.literal('cardio_live_duration_distance'),
+  v.literal('cardio_live_duration_distance_pace'),
+  v.literal('cardio_live_duration_distance_load'),
+  v.literal('cardio_live_duration_floors'),
 );
 
 export const recipeKeyOrNullValidator = v.union(recipeKeyValidator, v.null());
+
+export const liveCardioRecipeKeyValidator = v.union(
+  v.literal('cardio_live_duration_distance'),
+  v.literal('cardio_live_duration_distance_pace'),
+  v.literal('cardio_live_duration_distance_load'),
+  v.literal('cardio_live_duration_floors'),
+);
 
 /**
  * Stores a set's raw metric values as a string→number map.
@@ -31,4 +46,15 @@ export const restProcessValidator = v.object({
   startedAt: v.union(v.number(), v.null()),
 });
 
-export const activeProcessValidator = v.union(v.null(), restProcessValidator);
+export const liveCardioProcessValidator = v.object({
+  elapsedSeconds: v.number(),
+  isRunning: v.boolean(),
+  kind: v.literal('live_cardio'),
+  lastResumedAt: v.union(v.number(), v.null()),
+  recipeKey: liveCardioRecipeKeyValidator,
+  sessionExerciseId: v.id('liveSessionExercises'),
+  startedAt: v.number(),
+  trackedMetrics: v.record(v.string(), v.number()),
+});
+
+export const activeProcessValidator = v.union(v.null(), restProcessValidator, liveCardioProcessValidator);

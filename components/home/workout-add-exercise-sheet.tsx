@@ -1,56 +1,107 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
+import { api } from '@/convex/_generated/api';
 import { ReedText } from '@/components/ui/reed-text';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
 import type { AddExerciseSheetData, CatalogItem } from './workout-surface.types';
 
 type AddExerciseSheetProps = {
-  data: AddExerciseSheetData | undefined;
   isOpen: boolean;
   isWorking: boolean;
   onAddBulk: (exerciseCatalogIds: Id<'exerciseCatalog'>[]) => void;
   onAddSingle: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
   onClose: () => void;
-  onSearchChange: (value: string) => void;
-  onSelectEquipment: (value: string | null) => void;
-  onSelectMuscleGroup: (value: string | null) => void;
   onToggleFavorite: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
-  searchText: string;
-  selectedEquipment: string | null;
-  selectedMuscleGroup: string | null;
 };
 
+type FilterSectionKey = 'muscles' | 'equipment';
+
 export function AddExerciseSheet({
-  data,
   isOpen,
   isWorking,
   onAddBulk,
   onAddSingle,
   onClose,
-  onSearchChange,
-  onSelectEquipment,
-  onSelectMuscleGroup,
   onToggleFavorite,
-  searchText,
-  selectedEquipment,
-  selectedMuscleGroup,
 }: AddExerciseSheetProps) {
   const { theme } = useReedTheme();
   const panelFill =
     theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.95)' : 'rgba(248, 250, 252, 0.94)';
+  const [searchText, setSearchText] = useState('');
+  const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<Id<'exerciseCatalog'>[]>([]);
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [muscleSearchText, setMuscleSearchText] = useState('');
+  const [equipmentSearchText, setEquipmentSearchText] = useState('');
+  const [activeFilterSection, setActiveFilterSection] = useState<FilterSectionKey>('muscles');
+  const data = useQuery(
+    api.exerciseCatalog.searchForAddSheet,
+    isOpen
+      ? {
+          equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
+          muscleGroups: selectedMuscleGroups.length > 0 ? selectedMuscleGroups : undefined,
+          query: searchText.trim() || undefined,
+        }
+      : 'skip',
+  );
+  // Keep the last successful payload while a follow-up query resolves so the
+  // sheet doesn't flicker to empty between keystrokes/filter changes.
+  const [stableData, setStableData] = useState<AddExerciseSheetData | undefined>(data);
+  const effectiveData = data ?? stableData;
   const selectedExerciseIdsSet = useMemo(() => new Set(selectedExerciseIds), [selectedExerciseIds]);
-
+  const hasSearchContext =
+    searchText.trim().length > 0 ||
+    selectedMuscleGroups.length > 0 ||
+    selectedEquipment.length > 0;
+  const activeFilterCount = selectedMuscleGroups.length + selectedEquipment.length;
+  const filteredMuscleOptions = useMemo(
+    () => filterOptions(effectiveData?.muscleGroupOptions ?? [], muscleSearchText),
+    [effectiveData?.muscleGroupOptions, muscleSearchText],
+  );
+  const filteredEquipmentOptions = useMemo(
+    () => filterOptions(effectiveData?.equipmentOptions ?? [], equipmentSearchText),
+    [effectiveData?.equipmentOptions, equipmentSearchText],
+  );
   const selectedCount = selectedExerciseIds.length;
+  const filterSectionOptions = useMemo(
+    () => [
+      {
+        label:
+          selectedMuscleGroups.length > 0 ? `Muscles (${selectedMuscleGroups.length})` : 'Muscles',
+        value: 'muscles' as const,
+      },
+      {
+        label: selectedEquipment.length > 0 ? `Equipment (${selectedEquipment.length})` : 'Equipment',
+        value: 'equipment' as const,
+      },
+    ],
+    [selectedEquipment.length, selectedMuscleGroups.length],
+  );
 
   useEffect(() => {
     if (!isOpen) {
+      setSearchText('');
+      setSelectedMuscleGroups([]);
+      setSelectedEquipment([]);
       setSelectedExerciseIds([]);
+      setIsFilterSheetOpen(false);
+      setMuscleSearchText('');
+      setEquipmentSearchText('');
+      setActiveFilterSection('muscles');
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (data) {
+      setStableData(current => (current === data ? current : data));
+    }
+  }, [data]);
 
   function toggleSelectedExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
     setSelectedExerciseIds(current =>
@@ -115,71 +166,58 @@ export function AddExerciseSheet({
               showsVerticalScrollIndicator={false}
               style={styles.sheetResultsScroll}
             >
-              <CatalogSection
-                isWorking={isWorking}
-                items={data?.recents ?? []}
-                onAddSingle={onAddSingle}
-                onToggleFavorite={onToggleFavorite}
-                onToggleSelected={toggleSelectedExercise}
-                selectedExerciseIds={selectedExerciseIdsSet}
-                title="Recents"
-              />
-              <CatalogSection
-                isWorking={isWorking}
-                items={data?.favorites ?? []}
-                onAddSingle={onAddSingle}
-                onToggleFavorite={onToggleFavorite}
-                onToggleSelected={toggleSelectedExercise}
-                selectedExerciseIds={selectedExerciseIdsSet}
-                title="Favorites"
-              />
-              <CatalogSection
-                isWorking={isWorking}
-                items={data?.results ?? []}
-                onAddSingle={onAddSingle}
-                onToggleFavorite={onToggleFavorite}
-                onToggleSelected={toggleSelectedExercise}
-                selectedExerciseIds={selectedExerciseIdsSet}
-                title="Results"
-              />
+              {hasSearchContext ? (
+                <CatalogSection
+                  isWorking={isWorking}
+                  items={effectiveData?.results ?? []}
+                  onAddSingle={onAddSingle}
+                  onToggleFavorite={onToggleFavorite}
+                  onToggleSelected={toggleSelectedExercise}
+                  selectedExerciseIds={selectedExerciseIdsSet}
+                  title="Results"
+                />
+              ) : (
+                <>
+                  <CatalogSection
+                    isWorking={isWorking}
+                    items={effectiveData?.recents ?? []}
+                    onAddSingle={onAddSingle}
+                    onToggleFavorite={onToggleFavorite}
+                    onToggleSelected={toggleSelectedExercise}
+                    selectedExerciseIds={selectedExerciseIdsSet}
+                    title="Recents"
+                  />
+                  <CatalogSection
+                    isWorking={isWorking}
+                    items={effectiveData?.favorites ?? []}
+                    onAddSingle={onAddSingle}
+                    onToggleFavorite={onToggleFavorite}
+                    onToggleSelected={toggleSelectedExercise}
+                    selectedExerciseIds={selectedExerciseIdsSet}
+                    title="Favorites"
+                  />
+                </>
+              )}
             </ScrollView>
 
             <View style={styles.sheetBottomDock}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
-                <View style={styles.filtersRow}>
-                  <FilterChip
-                    isActive={selectedMuscleGroup === null}
-                    label="All muscles"
-                    onPress={() => onSelectMuscleGroup(null)}
-                  />
-                  {data?.muscleGroupOptions.map(option => (
-                    <FilterChip
-                      isActive={selectedMuscleGroup === option}
-                      key={option}
-                      label={option}
-                      onPress={() => onSelectMuscleGroup(selectedMuscleGroup === option ? null : option)}
-                    />
-                  ))}
-                </View>
-              </ScrollView>
-
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filtersScroll}>
-                <View style={styles.filtersRow}>
-                  <FilterChip
-                    isActive={selectedEquipment === null}
-                    label="All equipment"
-                    onPress={() => onSelectEquipment(null)}
-                  />
-                  {data?.equipmentOptions.map(option => (
-                    <FilterChip
-                      isActive={selectedEquipment === option}
-                      key={option}
-                      label={option}
-                      onPress={() => onSelectEquipment(selectedEquipment === option ? null : option)}
-                    />
-                  ))}
-                </View>
-              </ScrollView>
+              <View style={styles.filterSummaryRow}>
+                <ReedText numberOfLines={1} style={styles.filterSummaryLine} tone="muted" variant="caption">
+                  {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
+                </ReedText>
+                <Pressable
+                  disabled={activeFilterCount === 0}
+                  onPress={() => {
+                    setSelectedMuscleGroups([]);
+                    setSelectedEquipment([]);
+                  }}
+                  style={styles.filterSummaryClear}
+                >
+                  <ReedText tone={activeFilterCount === 0 ? 'muted' : 'default'} variant="caption">
+                    Clear
+                  </ReedText>
+                </Pressable>
+              </View>
 
               <View
                 style={[
@@ -192,7 +230,7 @@ export function AddExerciseSheet({
               >
                 <Ionicons color={String(theme.colors.textMuted)} name="search" size={16} />
                 <TextInput
-                  onChangeText={onSearchChange}
+                  onChangeText={setSearchText}
                   placeholder="Search exercises"
                   placeholderTextColor={String(theme.colors.textMuted)}
                   style={[
@@ -204,9 +242,158 @@ export function AddExerciseSheet({
                   ]}
                   value={searchText}
                 />
+
+                <View
+                  style={[
+                    styles.searchFilterDivider,
+                    {
+                      backgroundColor: theme.colors.controlBorder,
+                    },
+                  ]}
+                />
+
+                <Pressable
+                  onPress={() => setIsFilterSheetOpen(true)}
+                  style={({ pressed }) => [
+                    styles.searchFilterButton,
+                    {
+                      opacity: pressed ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                  <Ionicons color={String(theme.colors.textMuted)} name="options-outline" size={18} />
+                  <ReedText variant="caption">Filters</ReedText>
+                  {activeFilterCount > 0 ? (
+                    <View
+                      style={[
+                        styles.searchFilterBadge,
+                        {
+                          backgroundColor: theme.colors.accentPrimary,
+                        },
+                      ]}
+                    >
+                      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
+                        {activeFilterCount}
+                      </ReedText>
+                    </View>
+                  ) : null}
+                </Pressable>
               </View>
             </View>
           </View>
+
+          {isFilterSheetOpen ? (
+            <View style={styles.filterSheetOverlay}>
+              <Pressable onPress={() => setIsFilterSheetOpen(false)} style={StyleSheet.absoluteFill} />
+              <View
+                style={[
+                  styles.filterSheetPanel,
+                  {
+                    backgroundColor: panelFill,
+                    borderColor: theme.colors.borderSoft,
+                  },
+                ]}
+              >
+                <View style={styles.filterSheetHeader}>
+                  <ReedText variant="section">Filters</ReedText>
+                  <Pressable onPress={() => setIsFilterSheetOpen(false)} style={styles.sheetClose}>
+                    <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.filterSheetTabs}>
+                  <SegmentedControl<FilterSectionKey>
+                    compact
+                    onChange={setActiveFilterSection}
+                    options={filterSectionOptions}
+                    value={activeFilterSection}
+                  />
+                </View>
+
+                <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  {activeFilterSection === 'muscles' ? (
+                    <FilterSection
+                      emptyLabel="No muscles found."
+                      onClear={() => setSelectedMuscleGroups([])}
+                      onSearchChange={setMuscleSearchText}
+                      onToggle={value => toggleFilterValue(value, setSelectedMuscleGroups)}
+                      options={filteredMuscleOptions}
+                      searchText={muscleSearchText}
+                      selectedCount={selectedMuscleGroups.length}
+                      subtitle="Pick one or more muscle groups."
+                      title="Muscles"
+                      valueIsSelected={value => selectedMuscleGroups.includes(value)}
+                    />
+                  ) : null}
+
+                  {activeFilterSection === 'equipment' ? (
+                    <FilterSection
+                      emptyLabel="No equipment found."
+                      onClear={() => setSelectedEquipment([])}
+                      onSearchChange={setEquipmentSearchText}
+                      onToggle={value => toggleFilterValue(value, setSelectedEquipment)}
+                      options={filteredEquipmentOptions}
+                      searchText={equipmentSearchText}
+                      selectedCount={selectedEquipment.length}
+                      subtitle="Pick one or more equipment options."
+                      title="Equipment"
+                      valueIsSelected={value => selectedEquipment.includes(value)}
+                    />
+                  ) : null}
+
+                </ScrollView>
+
+                <View
+                  style={[
+                    styles.filterSheetFooter,
+                    {
+                      borderTopColor: theme.colors.controlBorder,
+                    },
+                  ]}
+                >
+                  <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
+                    {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
+                  </ReedText>
+
+                  <View style={styles.filterSheetFooterActions}>
+                    <Pressable
+                      onPress={() => {
+                        setSelectedMuscleGroups([]);
+                        setSelectedEquipment([]);
+                        setMuscleSearchText('');
+                        setEquipmentSearchText('');
+                      }}
+                      style={({ pressed }) => [
+                        styles.filterFooterSecondaryButton,
+                        {
+                          backgroundColor: theme.colors.controlFill,
+                          borderColor: theme.colors.controlBorder,
+                          opacity: pressed ? 0.9 : 1,
+                        },
+                      ]}
+                    >
+                      <ReedText variant="caption">Reset</ReedText>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={() => setIsFilterSheetOpen(false)}
+                      style={({ pressed }) => [
+                        styles.filterFooterPrimaryButton,
+                        {
+                          backgroundColor: theme.colors.accentPrimary,
+                          opacity: pressed ? 0.9 : 1,
+                        },
+                      ]}
+                    >
+                      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
+                        Apply
+                      </ReedText>
+                    </Pressable>
+                  </View>
+                </View>
+              </View>
+            </View>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -290,30 +477,148 @@ function CatalogSection({
   );
 }
 
-function FilterChip({
-  isActive,
-  label,
-  onPress,
+function FilterSection({
+  emptyLabel,
+  onClear,
+  onSearchChange,
+  onToggle,
+  options,
+  searchText,
+  selectedCount,
+  subtitle,
+  title,
+  valueIsSelected,
 }: {
-  isActive: boolean;
-  label: string;
-  onPress: () => void;
+  emptyLabel: string;
+  onClear: () => void;
+  onSearchChange: (value: string) => void;
+  onToggle: (value: string) => void;
+  options: string[];
+  searchText: string;
+  selectedCount: number;
+  subtitle: string;
+  title: string;
+  valueIsSelected: (value: string) => boolean;
 }) {
   const { theme } = useReedTheme();
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.filterChip,
-        {
-          backgroundColor: isActive ? theme.colors.controlActiveFill : theme.colors.controlFill,
-          borderColor: isActive ? theme.colors.controlActiveBorder : theme.colors.controlBorder,
-          opacity: pressed ? 0.9 : 1,
-        },
-      ]}
-    >
-      <ReedText variant="caption">{label}</ReedText>
-    </Pressable>
+    <View style={styles.filterSectionBlock}>
+      <View style={styles.filterSectionHeaderRow}>
+        <View style={styles.filterSectionHeaderCopy}>
+          <ReedText variant="bodyStrong">{title}</ReedText>
+          <ReedText tone="muted" variant="caption">
+            {subtitle}
+          </ReedText>
+        </View>
+        <Pressable disabled={selectedCount === 0} onPress={onClear}>
+          <ReedText tone={selectedCount === 0 ? 'muted' : 'default'} variant="caption">
+            Clear
+          </ReedText>
+        </Pressable>
+      </View>
+
+      <View
+        style={[
+          styles.filterSearchShell,
+          {
+            backgroundColor: theme.colors.controlFill,
+            borderColor: theme.colors.controlBorder,
+          },
+        ]}
+      >
+        <Ionicons color={String(theme.colors.textMuted)} name="search" size={14} />
+        <TextInput
+          onChangeText={onSearchChange}
+          placeholder={`Find ${title.toLowerCase()}`}
+          placeholderTextColor={String(theme.colors.textMuted)}
+          style={[
+            styles.filterSearchInput,
+            {
+              color: theme.colors.textPrimary,
+              fontFamily: theme.typography.body.fontFamily,
+            },
+          ]}
+          value={searchText}
+        />
+      </View>
+
+      <View style={styles.filterOptionsList}>
+        {options.length === 0 ? (
+          <ReedText tone="muted" variant="caption">
+            {emptyLabel}
+          </ReedText>
+        ) : (
+          options.map(option => {
+            const isSelected = valueIsSelected(option);
+
+            return (
+              <Pressable
+                key={option}
+                onPress={() => onToggle(option)}
+                style={({ pressed }) => [
+                  styles.filterOptionRow,
+                  {
+                    backgroundColor: isSelected ? theme.colors.controlActiveFill : theme.colors.controlFill,
+                    borderColor: isSelected ? theme.colors.controlActiveBorder : theme.colors.controlBorder,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <ReedText numberOfLines={1} style={styles.filterOptionLabel} variant="body">
+                  {option}
+                </ReedText>
+                <Ionicons
+                  color={String(isSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
+                  name={isSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={18}
+                />
+              </Pressable>
+            );
+          })
+        )}
+      </View>
+    </View>
   );
+}
+
+function filterOptions(options: string[], query: string) {
+  const queryText = query.trim().toLowerCase();
+  if (!queryText) {
+    return options;
+  }
+
+  return options.filter(option => option.toLowerCase().includes(queryText));
+}
+
+function toggleFilterValue(
+  value: string,
+  setValues: (updater: (current: string[]) => string[]) => void,
+) {
+  setValues(current =>
+    current.includes(value) ? current.filter(existing => existing !== value) : [...current, value],
+  );
+}
+
+function buildFilterSummary({
+  selectedEquipment,
+  selectedMuscleGroups,
+}: {
+  selectedEquipment: string[];
+  selectedMuscleGroups: string[];
+}) {
+  const musclePart =
+    selectedMuscleGroups.length === 0
+      ? 'Any muscle'
+      : selectedMuscleGroups.length <= 2
+        ? selectedMuscleGroups.join(' + ')
+        : `${selectedMuscleGroups.length} muscles`;
+  const equipmentPart =
+    selectedEquipment.length === 0
+      ? 'Any equipment'
+      : selectedEquipment.length <= 2
+        ? selectedEquipment.join(' + ')
+        : `${selectedEquipment.length} equipment`;
+
+  return `${musclePart} • ${equipmentPart}`;
 }

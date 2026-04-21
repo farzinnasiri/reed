@@ -1,4 +1,4 @@
-import { mapCsvMetricRecipe } from './recipes';
+import { mapCatalogRecipeKey } from './recipes';
 
 export type RawCatalogCsvRow = {
   aliases: string;
@@ -31,13 +31,27 @@ export type RawCatalogCsvRow = {
 export type NormalizedCatalogRow = ReturnType<typeof normalizeCatalogRow>;
 
 export function normalizeCatalogRow(row: RawCatalogCsvRow) {
-  const recipeKey = mapCsvMetricRecipe(row.metric_recipe);
+  const recipeKey = mapCatalogRecipeKey({
+    exerciseClass: row.exercise_class.trim(),
+    isCardio: parseBooleanFlag(row.is_cardio),
+    isHold: parseBooleanFlag(row.is_hold),
+    laterality: normalizeOptionalString(row.laterality),
+    rawMetricRecipe: row.metric_recipe.trim(),
+    supportsLiveTracking: parseBooleanFlag(row.supports_live_tracking),
+  });
+
+  const skillTags = splitPipeList(row.skill_tags);
+  const contextTags = splitPipeList(row.context_tags);
+  const discoveryTags = Array.from(
+    new Set([...skillTags, ...contextTags].map(tag => tag.toLowerCase())),
+  );
 
   return {
     aliases: splitPipeList(row.aliases),
     bodyPosition: normalizeOptionalString(row.body_position),
     canonicalFamily: row.canonical_family.trim(),
-    contextTags: splitPipeList(row.context_tags),
+    contextTags,
+    discoveryTags,
     defaultSummaryFormat: normalizeOptionalString(row.default_summary_format),
     equipment: splitPipeList(row.equipment),
     exerciseClass: row.exercise_class.trim(),
@@ -58,7 +72,7 @@ export function normalizeCatalogRow(row: RawCatalogCsvRow) {
     recipeKey,
     searchText: row.search_text.trim(),
     secondaryMuscleGroups: splitPipeList(row.secondary_muscle_groups),
-    skillTags: splitPipeList(row.skill_tags),
+    skillTags,
     supportsLiveTracking: parseBooleanFlag(row.supports_live_tracking),
     usesBodyweight: parseBooleanFlag(row.uses_bodyweight),
   };

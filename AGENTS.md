@@ -21,6 +21,7 @@ The role of this file is to describe common mistakes and confusion points that a
 7. Design philosophy: less is more, always elegant, every element intentional. Avoid repetitive page-chrome formulas such as eyebrow + oversized title + subtitle unless the user explicitly asks for them.
 8. Do not wrap every control or list row in pills/cards by default; use minimal chrome and add containers only when they carry clear UX meaning.
 9. Do not persist empty workout sessions: if a session is finished with zero exercises, delete it instead of storing it.
+10. Glassmorphism tokens are single-source-of-truth in `components/ui/glass-material.ts`. Do not hardcode per-screen RGBA glass values for shells, segmented controls, or the tab pill.
 
 ## Operational Rules
 

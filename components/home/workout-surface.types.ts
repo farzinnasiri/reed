@@ -1,8 +1,9 @@
 import type { Id } from '@/convex/_generated/dataModel';
-import type { RecipeFieldDefinition, RecipeKey } from '@/domains/workout/recipes';
+import type { RecipeFieldDefinition, RecipeKey, RecipeLayoutKind, RecipeProcessKind } from '@/domains/workout/recipes';
 
 export type CatalogItem = {
   _id: Id<'exerciseCatalog'>;
+  discoveryTags: string[];
   equipment: string[];
   exerciseClass: string;
   isFavorite: boolean;
@@ -30,7 +31,7 @@ export type TimelineRow = {
   sessionExerciseId: Id<'liveSessionExercises'>;
   sets: TimelineSet[];
   setCount: number;
-  state: string;
+  state: 'idle' | 'capture' | 'rest' | 'logged' | 'live_tracking';
 };
 
 export type EditingSet = {
@@ -54,8 +55,10 @@ export type CaptureCard = {
   exerciseName: string;
   fields: RecipeFieldDefinition[];
   initialMetrics: MetricValues;
+  layoutKind: RecipeLayoutKind;
   previousMetrics: MetricValues | null;
   previousSetSummary: string | null;
+  processKind: RecipeProcessKind;
   recipeKey: RecipeKey;
   sessionExerciseId: Id<'liveSessionExercises'>;
 };
@@ -69,4 +72,26 @@ export type RestCard = {
   previousSetSummary: string | null;
   remainingSeconds: number;
   sessionExerciseId: Id<'liveSessionExercises'>;
+};
+
+export type LiveCardioCard = {
+  elapsedSeconds: number;
+  exerciseName: string;
+  isRunning: boolean;
+  layoutKind: RecipeLayoutKind;
+  nextSetNumber: number;
+  previousSetSummary: string | null;
+  processKind: RecipeProcessKind;
+  recipeKey: RecipeKey;
+  sessionExerciseId: Id<'liveSessionExercises'>;
+  startedAt: number;
+  trackedFields: RecipeFieldDefinition[];
+  trackedMetrics: MetricValues;
+};
+
+export type LiveCardioFinishSummary = {
+  elapsedSeconds: number;
+  exerciseName: string;
+  nextExerciseId: Id<'liveSessionExercises'> | null;
+  summary: string;
 };

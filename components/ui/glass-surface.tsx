@@ -1,6 +1,6 @@
 import { BlurView } from 'expo-blur';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Platform, StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
+import { canUseGlassBlur, getGlassPaneTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
 
 type GlassSurfaceTone = 'default' | 'danger';
@@ -19,28 +19,17 @@ export function GlassSurface({
   ...props
 }: GlassSurfaceProps) {
   const { theme } = useReedTheme();
-  const canUseBlur = Platform.OS === 'ios' || Platform.OS === 'web';
-  const palette =
-    tone === 'danger'
-      ? {
-          borderColor: theme.colors.dangerBorder,
-          fill: theme.colors.dangerFill,
-          gradient: theme.gradients.glassDanger,
-        }
-      : {
-          borderColor: theme.colors.borderSoft,
-          fill: theme.colors.glassFallback,
-          gradient: theme.gradients.glass,
-        };
+  const canUseBlur = canUseGlassBlur();
+  const pane = getGlassPaneTokens(theme, tone);
 
   return (
     <View
       style={[
         styles.shell,
-        theme.shadows.card,
+        pane.shadowStyle,
         {
-          backgroundColor: palette.fill,
-          borderColor: palette.borderColor,
+          backgroundColor: pane.backgroundColor,
+          borderColor: pane.borderColor,
         },
         style,
       ]}
@@ -48,19 +37,18 @@ export function GlassSurface({
     >
       {canUseBlur ? (
         <BlurView
-          intensity={theme.blur.intensity}
+          intensity={pane.blurIntensity}
           style={StyleSheet.absoluteFill}
           tint={theme.blur.tint}
         />
       ) : null}
-      <LinearGradient colors={palette.gradient} style={StyleSheet.absoluteFill} />
       <View
         style={[
           StyleSheet.absoluteFill,
           { pointerEvents: 'none' },
           {
-            backgroundColor: canUseBlur ? 'transparent' : palette.fill,
-            borderColor: theme.colors.glassHighlight,
+            backgroundColor: canUseBlur ? 'transparent' : pane.backgroundColor,
+            borderColor: pane.borderColor,
           },
           styles.highlight,
         ]}

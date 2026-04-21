@@ -32,6 +32,7 @@ export default defineSchema({
     jointsEmphasized: v.array(v.string()),
     skillTags: v.array(v.string()),
     contextTags: v.array(v.string()),
+    discoveryTags: v.optional(v.array(v.string())),
     isHold: v.boolean(),
     isCardio: v.boolean(),
     supportsLiveTracking: v.boolean(),
@@ -42,7 +43,11 @@ export default defineSchema({
   })
     .index('by_exercise_id', ['exerciseId'])
     .index('by_supported_in_live_session', ['isSupportedInLiveSession'])
-    .index('by_canonical_family', ['canonicalFamily']),
+    .index('by_canonical_family', ['canonicalFamily'])
+    .searchIndex('search_text', {
+      filterFields: ['isSupportedInLiveSession'],
+      searchField: 'searchText',
+    }),
   exerciseFavorites: defineTable({
     profileId: v.id('profiles'),
     exerciseCatalogId: v.id('exerciseCatalog'),
@@ -82,6 +87,7 @@ export default defineSchema({
     metrics: setMetricsValidator,
     restSeconds: v.optional(v.number()),
   })
+    .index('by_session_id_and_set_number', ['sessionId', 'setNumber'])
     .index('by_session_exercise_id_and_set_number', ['sessionExerciseId', 'setNumber'])
     .index('by_profile_id_and_logged_at', ['profileId', 'loggedAt']),
 });

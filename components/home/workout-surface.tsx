@@ -12,12 +12,16 @@ import { styles } from './workout-surface.styles';
 import type {
   CaptureCard,
   EditingSet,
+  LiveCardioCard,
+  LiveCardioFinishSummary,
   MetricValues,
   RestCard,
+  TimelineRow,
   TimelineSet,
   WorkoutPage,
 } from './workout-surface.types';
 import { TimelinePage } from './workout-timeline-page';
+import { useRunningTicker } from './use-running-ticker';
 import { clampSeconds, formatElapsed, getErrorMessage } from './workout-surface.utils';
 
 type WorkoutSurfaceProps = {
@@ -41,13 +45,15 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const finishSession = useMutation(api.liveSessions.finishSession);
   const endRest = useMutation(api.liveSessions.endRest);
   const updateRestProcess = useMutation(api.liveSessions.updateRestProcess);
+  const startLiveCardio = useMutation(api.liveSessions.startLiveCardio);
+  const pauseLiveCardio = useMutation(api.liveSessions.pauseLiveCardio);
+  const resumeLiveCardio = useMutation(api.liveSessions.resumeLiveCardio);
+  const adjustLiveCardioMetric = useMutation(api.liveSessions.adjustLiveCardioMetric);
+  const finishLiveCardio = useMutation(api.liveSessions.finishLiveCardio);
   const toggleFavorite = useMutation(api.exerciseCatalog.toggleFavorite);
 
   const [isWorking, setIsWorking] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
-  const [searchText, setSearchText] = useState('');
-  const [selectedMuscleGroup, setSelectedMuscleGroup] = useState<string | null>(null);
-  const [selectedEquipment, setSelectedEquipment] = useState<string | null>(null);
   const [warmup, setWarmup] = useState(false);
   const [metricValues, setMetricValues] = useState<MetricValues>({});
   const [restRemaining, setRestRemaining] = useState(0);
@@ -56,24 +62,16 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [page, setPage] = useState<WorkoutPage>('timeline');
   const [elapsedNow, setElapsedNow] = useState(() => Date.now());
+  const [liveElapsedSeconds, setLiveElapsedSeconds] = useState(0);
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
+  const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
   const pageTransition = useRef(new Animated.Value(1)).current;
   const lastAnimatedPageRef = useRef<WorkoutPage>('timeline');
 
-  const addSheet = useQuery(
-    api.exerciseCatalog.searchForAddSheet,
-    isAddSheetOpen
-      ? {
-          equipment: selectedEquipment,
-          muscleGroup: selectedMuscleGroup,
-          query: searchText.trim() || undefined,
-        }
-      : 'skip',
-  );
-
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
+  const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
   const activeSetEditor = useMemo(() => {
     if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
       return null;
@@ -136,10 +134,10 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
 
     const hasTimelineRows = session.timeline.length > 0;
-    if (page === 'exercise' && !captureCard && !restCard && !hasTimelineRows) {
+    if (page === 'exercise' && !captureCard && !restCard && !liveCardioCard && !hasTimelineRows) {
       setPage('timeline');
     }
-  }, [captureCard, page, restCard, session]);
+  }, [captureCard, liveCardioCard, page, restCard, session]);
 
   useEffect(() => {
     if (!session || !editingSet) {
@@ -168,6 +166,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
     return () => clearTimeout(timeout);
   }, [restRemaining, restRunning, session?.cardMode]);
+
+  useEffect(() => {
+    if (!liveCardioCard) {
+      setLiveElapsedSeconds(0);
+      return;
+    }
+
+    setLiveCardioFinishSummary(null);
+    setLiveElapsedSeconds(liveCardioCard.elapsedSeconds);
+  }, [liveCardioCard?.elapsedSeconds, liveCardioCard?.isRunning, liveCardioCard?.sessionExerciseId]);
+
+  useRunningTicker({
+    isRunning: Boolean(liveCardioCard?.isRunning),
+    onTick: () => {
+      setLiveElapsedSeconds(current => current + 1);
+    },
+  });
 
   useEffect(() => {
     if (restRemaining === 0) {
@@ -207,6 +222,12 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }).start();
   }, [page, pageTransition, theme.motion.regular]);
 
+  useEffect(() => {
+    if (page === 'timeline') {
+      setLiveCardioFinishSummary(null);
+    }
+  }, [page]);
+
   const elapsedLabel = useMemo(() => {
     if (!session?.session.startedAt) {
       return null;
@@ -217,19 +238,17 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   const closeAddSheet = () => {
     setIsAddSheetOpen(false);
-    setSearchText('');
-    setSelectedEquipment(null);
-    setSelectedMuscleGroup(null);
   };
 
-  async function runMutation(action: () => Promise<void>) {
+  async function runMutation<T>(action: () => Promise<T>) {
     setIsWorking(true);
     setErrorMessage(null);
 
     try {
-      await action();
+      return await action();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
+      return null;
     } finally {
       setIsWorking(false);
     }
@@ -246,6 +265,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       await selectExercise({ sessionExerciseId });
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
+      setLiveCardioFinishSummary(null);
       setPage('exercise');
     });
   }
@@ -261,6 +281,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         setNumber: setEntry.setNumber,
         warmup: setEntry.warmup,
       });
+      setLiveCardioFinishSummary(null);
       setPage('exercise');
     });
   }
@@ -320,6 +341,68 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         sessionExerciseId: captureCard.sessionExerciseId,
         warmup,
       });
+    });
+  }
+
+  async function handleStartLiveCardio(sessionExerciseId: Id<'liveSessionExercises'>) {
+    await runMutation(async () => {
+      await startLiveCardio({ sessionExerciseId });
+      setEditingSet(null);
+      setLiveCardioFinishSummary(null);
+    });
+  }
+
+  async function handleToggleLiveCardioRunning() {
+    if (!liveCardioCard) {
+      return;
+    }
+
+    await runMutation(async () => {
+      if (liveCardioCard.isRunning) {
+        await pauseLiveCardio({});
+      } else {
+        await resumeLiveCardio({});
+      }
+    });
+  }
+
+  async function handleAdjustLiveCardioMetric(key: string, delta: number) {
+    await runMutation(async () => {
+      await adjustLiveCardioMetric({ delta, key });
+    });
+  }
+
+  async function handleFinishLiveCardio() {
+    if (!liveCardioCard) {
+      return;
+    }
+
+    const nextExerciseId = getNextTimelineExerciseId(session?.timeline ?? [], liveCardioCard.sessionExerciseId);
+    const result = await runMutation(async () => finishLiveCardio({}));
+    if (!result) {
+      return;
+    }
+
+    setEditingSet(null);
+    setLiveCardioFinishSummary({
+      elapsedSeconds: liveElapsedSeconds,
+      exerciseName: liveCardioCard.exerciseName,
+      nextExerciseId,
+      summary: result.summary,
+    });
+  }
+
+  async function handleOpenNextExerciseAfterLiveCardio() {
+    const nextExerciseId = liveCardioFinishSummary?.nextExerciseId;
+    if (!nextExerciseId) {
+      return;
+    }
+
+    await runMutation(async () => {
+      await selectExercise({ sessionExerciseId: nextExerciseId });
+      setEditingSet(null);
+      setLiveCardioFinishSummary(null);
+      setPage('exercise');
     });
   }
 
@@ -521,55 +604,82 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           />
         ) : (
           <ExercisePage
-            captureCard={captureCard}
-            editingSetNumber={activeSetEditor?.setNumber ?? null}
-            errorMessage={errorMessage}
-            isEditingSet={Boolean(activeSetEditor)}
-            isPickerInteracting={isPickerInteracting}
-            isWorking={isWorking}
-            metricValues={metricValues}
-            onAdjustRest={handleAdjustRest}
-            onBackToTimeline={() => {
-              setEditingSet(null);
-              setPage('timeline');
+            capture={{
+              card: captureCard,
+              editingSetNumber: activeSetEditor?.setNumber ?? null,
+              errorMessage,
+              isEditingSet: Boolean(activeSetEditor),
+              isPickerInteracting,
+              isWorking,
+              metricValues,
+              onCaptureSwipeRight: handleCaptureSwipeRight,
+              onPickerInteractionEnd: () => setIsPickerInteracting(false),
+              onPickerInteractionStart: () => setIsPickerInteracting(true),
+              onUpdateMetric: (key, nextValue) =>
+                setMetricValues(current => ({
+                  ...current,
+                  [key]: nextValue,
+                })),
+              onWarmupToggle: () => setWarmup(current => !current),
+              warmup,
             }}
-            onCaptureSwipeRight={handleCaptureSwipeRight}
-            onPickerInteractionEnd={() => setIsPickerInteracting(false)}
-            onPickerInteractionStart={() => setIsPickerInteracting(true)}
-            onPresetRest={handlePresetRest}
-            onRestSwipeLeft={handleRestSwipeLeft}
-            onRestSwipeRight={handleRestSwipeRight}
-            onToggleRestRunning={handleToggleRestRunning}
-            onUpdateMetric={(key, nextValue) =>
-              setMetricValues(current => ({
-                ...current,
-                [key]: nextValue,
-              }))
-            }
-            onWarmupToggle={() => setWarmup(current => !current)}
-            restCard={restCard}
-            restRemaining={restRemaining}
-            restRunning={restRunning}
-            warmup={warmup}
+            liveCardio={{
+              card: liveCardioCard,
+              elapsedSeconds: liveElapsedSeconds,
+              errorMessage,
+              finishSummary: liveCardioFinishSummary,
+              isWorking,
+              onAdjustMetric: handleAdjustLiveCardioMetric,
+              onFinish: handleFinishLiveCardio,
+              onOpenNextExercise: handleOpenNextExerciseAfterLiveCardio,
+              onStart: handleStartLiveCardio,
+              onToggleRunning: handleToggleLiveCardioRunning,
+            }}
+            navigation={{
+              onBackToTimeline: () => {
+                setEditingSet(null);
+                setLiveCardioFinishSummary(null);
+                setPage('timeline');
+              },
+            }}
+            rest={{
+              card: restCard,
+              errorMessage,
+              isRunning: restRunning,
+              isWorking,
+              onAdjust: handleAdjustRest,
+              onPreset: handlePresetRest,
+              onSwipeLeft: handleRestSwipeLeft,
+              onSwipeRight: handleRestSwipeRight,
+              onToggleRunning: handleToggleRestRunning,
+              remaining: restRemaining,
+            }}
           />
         )}
       </Animated.View>
 
       <AddExerciseSheet
-        data={addSheet}
         isOpen={isAddSheetOpen}
         isWorking={isWorking}
         onAddBulk={handleAddExercisesBulk}
         onAddSingle={handleAddExercise}
         onClose={closeAddSheet}
-        onSearchChange={setSearchText}
-        onSelectEquipment={setSelectedEquipment}
-        onSelectMuscleGroup={setSelectedMuscleGroup}
         onToggleFavorite={handleToggleFavorite}
-        searchText={searchText}
-        selectedEquipment={selectedEquipment}
-        selectedMuscleGroup={selectedMuscleGroup}
       />
     </View>
   );
+}
+
+function getNextTimelineExerciseId(
+  timeline: TimelineRow[],
+  currentId: Id<'liveSessionExercises'>,
+): Id<'liveSessionExercises'> | null {
+  const currentIndex = timeline.findIndex(row => row.sessionExerciseId === currentId);
+
+  if (currentIndex < 0) {
+    return null;
+  }
+
+  const nextRow = timeline[currentIndex + 1];
+  return nextRow?.sessionExerciseId ?? null;
 }

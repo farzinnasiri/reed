@@ -3,10 +3,20 @@ import { mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
+import {
+  requireLiveCardioProcess,
+  requireRestProcess,
+  writeRestSecondsToCurrentSetLog,
+} from './liveSessionProcesses';
+import { getLiveCardioElapsedSeconds, getLiveCardioSnapshot } from '../domains/workout/liveCardio';
 import { getRestSnapshot, clampSeconds } from '../domains/workout/rest';
 import {
+  getLiveCardioTrackedFields,
+  getRecipeDefinition,
   getRecipeFieldDefinitions,
   getRecipeInitialMetrics,
+  isLiveCardioRecipeKey,
+  roundMetric,
   summarizeMetrics,
   validateRecipeMetrics,
 } from '../domains/workout/recipes';
@@ -18,7 +28,6 @@ type ActiveSession = Doc<'liveSessions'> & { status: 'active' };
 type SessionExerciseWithRecipe = Doc<'liveSessionExercises'> & {
   recipeKey: NonNullable<Doc<'liveSessionExercises'>['recipeKey']>;
 };
-type RestProcess = NonNullable<Doc<'liveSessions'>['activeProcess']>;
 
 export const getCurrent = query({
   args: {},
@@ -36,31 +45,39 @@ export const getCurrent = query({
       .collect()) as SessionExerciseWithRecipe[];
 
     const allLogs = await Promise.all(
-      sessionExercises.map(se =>
+      sessionExercises.map(sessionExercise =>
         ctx.db
           .query('liveSetLogs')
-          .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', se._id))
+          .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
           .collect(),
       ),
     );
     const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'liveSetLogs'>[]>(
-      sessionExercises.map((se, i) => [se._id, allLogs[i]]),
+      sessionExercises.map((sessionExercise, index) => [sessionExercise._id, allLogs[index]]),
     );
 
     const restProcess = session.activeProcess?.kind === 'rest' ? session.activeProcess : null;
+    const liveCardioProcess = session.activeProcess?.kind === 'live_cardio' ? session.activeProcess : null;
+    const processOwnedExerciseId =
+      liveCardioProcess?.sessionExerciseId ?? restProcess?.sessionExerciseId ?? null;
     const requestedActiveSessionExerciseId =
-      restProcess?.sessionExerciseId ?? session.activeSessionExerciseId ?? sessionExercises[0]?._id ?? null;
+      processOwnedExerciseId ?? session.activeSessionExerciseId ?? sessionExercises[0]?._id ?? null;
+
     const timeline = sessionExercises.map(sessionExercise => {
       const logs = logsByExercise.get(sessionExercise._id) ?? [];
       const lastLog = logs.at(-1);
-      const state =
-        restProcess?.sessionExerciseId === sessionExercise._id
-          ? 'resting'
-          : requestedActiveSessionExerciseId === sessionExercise._id
-            ? 'active'
-            : logs.length > 0
-              ? 'logged'
-              : 'idle';
+      const isLiveCardioRecipe = getRecipeDefinition(sessionExercise.recipeKey).processKind === 'live_cardio';
+      const state: 'idle' | 'capture' | 'rest' | 'logged' | 'live_tracking' =
+        liveCardioProcess?.sessionExerciseId === sessionExercise._id
+          ? 'live_tracking'
+          : restProcess?.sessionExerciseId === sessionExercise._id
+            ? 'rest'
+            : requestedActiveSessionExerciseId === sessionExercise._id &&
+                !(isLiveCardioRecipe && logs.length > 0)
+              ? 'capture'
+              : logs.length > 0
+                ? 'logged'
+                : 'idle';
 
       return {
         exerciseName: sessionExercise.exerciseName,
@@ -86,7 +103,7 @@ export const getCurrent = query({
 
     if (!activeSessionExercise) {
       return {
-        activeCard: { capture: null, rest: null },
+        activeCard: { capture: null, liveCardio: null, rest: null },
         cardMode: 'capture',
         session: {
           startedAt: session.startedAt,
@@ -98,13 +115,47 @@ export const getCurrent = query({
 
     const activeLogs = logsByExercise.get(activeSessionExercise._id) ?? [];
     const previousSet = activeLogs.at(-1);
+    const activeRecipeDefinition = getRecipeDefinition(activeSessionExercise.recipeKey);
+
+    if (liveCardioProcess && liveCardioProcess.sessionExerciseId === activeSessionExercise._id) {
+      const liveCardioSnapshot = getLiveCardioSnapshot(liveCardioProcess);
+      return {
+        activeCard: {
+          capture: null,
+          liveCardio: {
+            elapsedSeconds: liveCardioSnapshot.elapsedSeconds,
+            exerciseName: activeSessionExercise.exerciseName,
+            isRunning: liveCardioSnapshot.isRunning,
+            layoutKind: activeRecipeDefinition.layoutKind,
+            nextSetNumber: activeLogs.length + 1,
+            previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+            processKind: activeRecipeDefinition.processKind,
+            recipeKey: liveCardioProcess.recipeKey,
+            sessionExerciseId: activeSessionExercise._id,
+            startedAt: liveCardioProcess.startedAt,
+            trackedFields: getLiveCardioTrackedFields(liveCardioProcess.recipeKey),
+            trackedMetrics: liveCardioProcess.trackedMetrics,
+          },
+          rest: null,
+        },
+        cardMode: 'live_cardio',
+        session: {
+          startedAt: session.startedAt,
+          status: session.status,
+        },
+        timeline,
+      };
+    }
+
     const captureCard = {
       currentSetNumber: activeLogs.length + 1,
       exerciseName: activeSessionExercise.exerciseName,
       fields: getRecipeFieldDefinitions(activeSessionExercise.recipeKey),
       initialMetrics: getRecipeInitialMetrics(activeSessionExercise.recipeKey, previousSet?.metrics ?? null),
+      layoutKind: activeRecipeDefinition.layoutKind,
       previousMetrics: previousSet?.metrics ?? null,
       previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+      processKind: activeRecipeDefinition.processKind,
       recipeKey: activeSessionExercise.recipeKey,
       sessionExerciseId: activeSessionExercise._id,
     };
@@ -113,6 +164,7 @@ export const getCurrent = query({
       return {
         activeCard: {
           capture: captureCard,
+          liveCardio: null,
           rest: null,
         },
         cardMode: 'capture',
@@ -129,6 +181,7 @@ export const getCurrent = query({
     return {
       activeCard: {
         capture: null,
+        liveCardio: null,
         rest: {
           durationSeconds: restSnapshot.durationSeconds,
           exerciseName: activeSessionExercise.exerciseName,
@@ -234,16 +287,16 @@ export const removeExercise = mutation({
     }
 
     const activeProcess =
-      session.activeProcess?.kind === 'rest' && session.activeProcess.sessionExerciseId === sessionExercise._id
+      session.activeProcess &&
+      (session.activeProcess.kind === 'rest' || session.activeProcess.kind === 'live_cardio') &&
+      session.activeProcess.sessionExerciseId === sessionExercise._id
         ? null
         : session.activeProcess;
 
-    const patch: Partial<Doc<'liveSessions'>> = {
+    await ctx.db.patch(session._id, {
       activeProcess,
       activeSessionExerciseId: nextActiveSessionExerciseId,
-    };
-
-    await ctx.db.patch(session._id, patch);
+    });
     return { removedSessionExerciseId: sessionExercise._id };
   },
 });
@@ -284,12 +337,10 @@ export const finishSession = mutation({
       // through a race before the exercise row was removed.
       const orphanLogs = await ctx.db
         .query('liveSetLogs')
-        .withIndex('by_profile_id_and_logged_at', q => q.eq('profileId', profile._id))
+        .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id))
         .collect();
       for (const log of orphanLogs) {
-        if (log.sessionId === session._id) {
-          await ctx.db.delete(log._id);
-        }
+        await ctx.db.delete(log._id);
       }
       await ctx.db.delete(session._id);
       return { deletedEmptySession: true };
@@ -351,9 +402,15 @@ export const selectExercise = mutation({
       throw new ConvexError('That exercise is not part of the current session.');
     }
 
-    // Only update the active exercise pointer; never clear an in-flight rest
-    // so that the rest timer keeps running in the background while the user
-    // browses other exercises on the timeline.
+    if (
+      session.activeProcess?.kind === 'live_cardio' &&
+      session.activeProcess.sessionExerciseId !== sessionExercise._id
+    ) {
+      // Live cardio owns the active exercise while running/paused so the
+      // runtime card cannot be detached from its tracked exercise.
+      throw new ConvexError('Finish live cardio before switching to another exercise.');
+    }
+
     await ctx.db.patch(session._id, {
       activeSessionExerciseId: sessionExercise._id,
     });
@@ -372,23 +429,30 @@ export const logSet = mutation({
     const session = await requireActiveSession(ctx, profile._id);
 
     if (session.activeProcess) {
-      throw new ConvexError('Resolve the current rest card before logging another set.');
+      throw new ConvexError('Resolve the active runtime card before logging another set.');
     }
 
     const sessionExercise = await requireSessionExercise(ctx, session, profile._id, args.sessionExerciseId);
+    const recipeDefinition = getRecipeDefinition(sessionExercise.recipeKey);
+
+    if (recipeDefinition.processKind === 'live_cardio') {
+      throw new ConvexError('Use live cardio tracking for this exercise.');
+    }
+
     const normalizedMetrics = normalizeMetricsOrThrow(sessionExercise.recipeKey, args.metrics);
     const existingLogs = await ctx.db
       .query('liveSetLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
     const setNumber = existingLogs.length + 1;
+    const shouldOpenRest = recipeDefinition.processKind === 'rest_after_log';
 
     await ctx.db.insert('liveSetLogs', {
       loggedAt: Date.now(),
       metrics: normalizedMetrics,
       profileId: profile._id,
       recipeKey: sessionExercise.recipeKey,
-      restSeconds: DEFAULT_REST_SECONDS,
+      restSeconds: shouldOpenRest ? DEFAULT_REST_SECONDS : undefined,
       sessionExerciseId: sessionExercise._id,
       sessionId: session._id,
       setNumber,
@@ -396,19 +460,22 @@ export const logSet = mutation({
     });
 
     await ctx.db.patch(session._id, {
-      activeProcess: {
-        durationSeconds: DEFAULT_REST_SECONDS,
-        isRunning: false,
-        kind: 'rest',
-        nextSetNumber: setNumber + 1,
-        remainingSeconds: DEFAULT_REST_SECONDS,
-        sessionExerciseId: sessionExercise._id,
-        startedAt: null,
-      },
+      activeProcess: shouldOpenRest
+        ? {
+            durationSeconds: DEFAULT_REST_SECONDS,
+            isRunning: false,
+            kind: 'rest',
+            nextSetNumber: setNumber + 1,
+            remainingSeconds: DEFAULT_REST_SECONDS,
+            sessionExerciseId: sessionExercise._id,
+            startedAt: null,
+          }
+        : null,
       activeSessionExerciseId: sessionExercise._id,
     });
 
     return {
+      enteredRest: shouldOpenRest,
       nextSetNumber: setNumber + 1,
       summary: summarizeMetrics(sessionExercise.recipeKey, normalizedMetrics),
     };
@@ -426,7 +493,7 @@ export const updateSet = mutation({
     const session = await requireActiveSession(ctx, profile._id);
 
     if (session.activeProcess) {
-      throw new ConvexError('Finish the rest card before editing sets.');
+      throw new ConvexError('Finish the active runtime card before editing sets.');
     }
 
     const setLog = await ctx.db.get(args.setLogId);
@@ -462,7 +529,7 @@ export const deleteSet = mutation({
     const session = await requireActiveSession(ctx, profile._id);
 
     if (session.activeProcess) {
-      throw new ConvexError('Finish the rest card before deleting sets.');
+      throw new ConvexError('Finish the active runtime card before deleting sets.');
     }
 
     const setLog = await ctx.db.get(args.setLogId);
@@ -535,7 +602,8 @@ export const updateRestProcess = mutation({
     const restSnapshot = getRestSnapshot(restProcess);
 
     if (args.mode === 'toggleRunning') {
-      const nextRemaining = restSnapshot.remainingSeconds > 0 ? restSnapshot.remainingSeconds : restProcess.durationSeconds;
+      const nextRemaining =
+        restSnapshot.remainingSeconds > 0 ? restSnapshot.remainingSeconds : restProcess.durationSeconds;
 
       await ctx.db.patch(session._id, {
         activeProcess: restSnapshot.isRunning
@@ -561,16 +629,13 @@ export const updateRestProcess = mutation({
         throw new ConvexError('deltaSeconds is required for rest adjustments.');
       }
 
-      // Preserve how much time has already elapsed; only adjust the remaining
-      // seconds, NOT durationSeconds, so the preset highlight stays accurate.
       const nextRemaining = clampSeconds(restSnapshot.remainingSeconds + args.deltaSeconds, 15, 240);
 
       await ctx.db.patch(session._id, {
         activeProcess: {
           ...restProcess,
-          remainingSeconds: nextRemaining,
           isRunning: restSnapshot.isRunning,
-          // Reset startedAt so the server snapshot ticks from the new remaining
+          remainingSeconds: nextRemaining,
           startedAt: restSnapshot.isRunning ? Date.now() : null,
         },
       });
@@ -583,18 +648,194 @@ export const updateRestProcess = mutation({
     }
 
     const presetSeconds = clampSeconds(args.durationSeconds, 15, 240);
-    await patchCurrentRestDuration(ctx, restProcess, presetSeconds);
+    await writeRestSecondsToCurrentSetLog(ctx, restProcess, presetSeconds);
     await ctx.db.patch(session._id, {
       activeProcess: {
         ...restProcess,
         durationSeconds: presetSeconds,
-        remainingSeconds: presetSeconds,
         isRunning: restSnapshot.isRunning,
+        remainingSeconds: presetSeconds,
         startedAt: restSnapshot.isRunning ? Date.now() : null,
       },
     });
 
     return null;
+  },
+});
+
+export const startLiveCardio = mutation({
+  args: {
+    sessionExerciseId: v.id('liveSessionExercises'),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+
+    if (session.activeProcess) {
+      throw new ConvexError('Finish the active runtime card before starting live cardio.');
+    }
+
+    const sessionExercise = await requireSessionExercise(ctx, session, profile._id, args.sessionExerciseId);
+    const recipeDefinition = getRecipeDefinition(sessionExercise.recipeKey);
+
+    if (recipeDefinition.processKind !== 'live_cardio') {
+      throw new ConvexError('This exercise does not support live cardio tracking.');
+    }
+    if (!isLiveCardioRecipeKey(sessionExercise.recipeKey)) {
+      throw new ConvexError('This exercise does not support live cardio tracking.');
+    }
+
+    const trackedFields = getLiveCardioTrackedFields(sessionExercise.recipeKey);
+    if (trackedFields.length === 0) {
+      throw new ConvexError('Live cardio tracking fields are not configured for this exercise.');
+    }
+
+    const now = Date.now();
+    const initialMetrics = getRecipeInitialMetrics(sessionExercise.recipeKey);
+    const trackedMetrics = Object.fromEntries(
+      trackedFields.map(field => [field.key, initialMetrics[field.key] ?? field.defaultValue]),
+    );
+
+    await ctx.db.patch(session._id, {
+      activeProcess: {
+        elapsedSeconds: 0,
+        isRunning: true,
+        kind: 'live_cardio',
+        lastResumedAt: now,
+        recipeKey: sessionExercise.recipeKey,
+        sessionExerciseId: sessionExercise._id,
+        startedAt: now,
+        trackedMetrics,
+      },
+      activeSessionExerciseId: sessionExercise._id,
+    });
+
+    return null;
+  },
+});
+
+export const pauseLiveCardio = mutation({
+  args: {},
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const liveProcess = requireLiveCardioProcess(session);
+
+    if (!liveProcess.isRunning) {
+      return null;
+    }
+
+    const elapsedSeconds = getLiveCardioElapsedSeconds(liveProcess);
+    await ctx.db.patch(session._id, {
+      activeProcess: {
+        ...liveProcess,
+        elapsedSeconds,
+        isRunning: false,
+        lastResumedAt: null,
+      },
+    });
+
+    return null;
+  },
+});
+
+export const resumeLiveCardio = mutation({
+  args: {},
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const liveProcess = requireLiveCardioProcess(session);
+
+    if (liveProcess.isRunning) {
+      return null;
+    }
+
+    await ctx.db.patch(session._id, {
+      activeProcess: {
+        ...liveProcess,
+        isRunning: true,
+        lastResumedAt: Date.now(),
+      },
+    });
+
+    return null;
+  },
+});
+
+export const adjustLiveCardioMetric = mutation({
+  args: {
+    delta: v.number(),
+    key: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const liveProcess = requireLiveCardioProcess(session);
+    const trackedFields = getLiveCardioTrackedFields(liveProcess.recipeKey);
+    const targetField = trackedFields.find(field => field.key === args.key);
+
+    if (!targetField) {
+      throw new ConvexError('That metric is not adjustable in live tracking mode.');
+    }
+
+    const currentValue = liveProcess.trackedMetrics[args.key] ?? targetField.defaultValue;
+    const min = targetField.min ?? targetField.pickerMin;
+    const max = targetField.max ?? targetField.pickerMax;
+    const nextValue = roundMetric(Math.max(min, Math.min(max, currentValue + args.delta)));
+
+    await ctx.db.patch(session._id, {
+      activeProcess: {
+        ...liveProcess,
+        trackedMetrics: {
+          ...liveProcess.trackedMetrics,
+          [args.key]: nextValue,
+        },
+      },
+    });
+
+    return null;
+  },
+});
+
+export const finishLiveCardio = mutation({
+  args: {},
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const liveProcess = requireLiveCardioProcess(session);
+    const sessionExercise = await requireSessionExercise(ctx, session, profile._id, liveProcess.sessionExerciseId);
+    const elapsedSeconds = getLiveCardioElapsedSeconds(liveProcess);
+    const metrics = {
+      ...liveProcess.trackedMetrics,
+      duration: elapsedSeconds,
+    };
+    const normalizedMetrics = normalizeMetricsOrThrow(sessionExercise.recipeKey, metrics);
+    const existingLogs = await ctx.db
+      .query('liveSetLogs')
+      .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
+      .collect();
+    const setNumber = existingLogs.length + 1;
+
+    await ctx.db.insert('liveSetLogs', {
+      loggedAt: Date.now(),
+      metrics: normalizedMetrics,
+      profileId: profile._id,
+      recipeKey: sessionExercise.recipeKey,
+      sessionExerciseId: sessionExercise._id,
+      sessionId: session._id,
+      setNumber,
+      warmup: false,
+    });
+
+    await ctx.db.patch(session._id, {
+      activeProcess: null,
+      activeSessionExerciseId: sessionExercise._id,
+    });
+
+    return {
+      nextSetNumber: setNumber + 1,
+      summary: summarizeMetrics(sessionExercise.recipeKey, normalizedMetrics),
+    };
   },
 });
 
@@ -634,37 +875,11 @@ async function requireSessionExercise(
   return sessionExercise as SessionExerciseWithRecipe;
 }
 
-function requireRestProcess(session: ActiveSession) {
-  if (!session.activeProcess || session.activeProcess.kind !== 'rest') {
-    throw new ConvexError('No active rest card.');
-  }
-
-  return session.activeProcess as RestProcess;
-}
-
-function normalizeMetricsOrThrow(recipeKey: SessionExerciseWithRecipe['recipeKey'], metrics: Record<string, number>) {
+function normalizeMetricsOrThrow(
+  recipeKey: SessionExerciseWithRecipe['recipeKey'],
+  metrics: Record<string, number>,
+) {
   return validateRecipeMetrics(recipeKey, metrics);
-}
-
-async function patchCurrentRestDuration(ctx: MutationCtx, restProcess: RestProcess, restSeconds: number) {
-  const afterSetNumber = restProcess.nextSetNumber - 1;
-
-  if (afterSetNumber < 1) {
-    return;
-  }
-
-  const setLog = await ctx.db
-    .query('liveSetLogs')
-    .withIndex('by_session_exercise_id_and_set_number', q =>
-      q.eq('sessionExerciseId', restProcess.sessionExerciseId).eq('setNumber', afterSetNumber),
-    )
-    .unique();
-
-  if (!setLog) {
-    return;
-  }
-
-  await ctx.db.patch(setLog._id, { restSeconds });
 }
 
 async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessions'>) {
@@ -674,19 +889,19 @@ async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessio
     .collect()) as Doc<'liveSessionExercises'>[];
 
   const allLogs = await Promise.all(
-    sessionExercises.map(se =>
+    sessionExercises.map(sessionExercise =>
       ctx.db
         .query('liveSetLogs')
-        .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', se._id))
+        .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
         .collect(),
     ),
   );
 
-  const exercises = sessionExercises.map((se, i) => {
-    const logs = allLogs[i];
+  const exercises = sessionExercises.map((sessionExercise, index) => {
+    const logs = allLogs[index];
     const lastLog = logs.at(-1);
     return {
-      exerciseName: se.exerciseName,
+      exerciseName: sessionExercise.exerciseName,
       lastLoggedSummary: lastLog ? summarizeMetrics(lastLog.recipeKey, lastLog.metrics) : null,
       setCount: logs.length,
     };

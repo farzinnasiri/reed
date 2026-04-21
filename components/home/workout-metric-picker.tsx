@@ -1,8 +1,19 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import type { RecipeFieldDefinition } from '@/domains/workout/recipes';
+import { Ionicons } from '@expo/vector-icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { isDurationField, type RecipeFieldDefinition } from '@/domains/workout/recipes';
+import {
+  formatMetricLabel,
+  formatMetricValue,
+  normalizeMetricInput,
+  normalizeMetricValueForField,
+  normalizeMinutePart,
+  normalizeSecondPart,
+  roundMetricValue,
+} from '@/domains/workout/metric-formatting';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
+import { useRunningTicker } from './use-running-ticker';
 
 const ITEM_HEIGHT = 24;
 const VISIBLE_ROWS = 5;
@@ -30,21 +41,37 @@ export function WorkoutMetricPicker({
   const { theme } = useReedTheme();
   const { height, width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView | null>(null);
+  const isDurationMetric = isDurationField(field);
   const values = useMemo(
     () => buildRange(field.pickerMin, field.pickerMax, field.step),
     [field.pickerMax, field.pickerMin, field.step],
   );
-  const normalizedValue = normalizeValueForField(field, value);
+  const normalizedValue = normalizeMetricValueForField(field, value);
   const normalizedPreviousValue =
-    previousValue === undefined ? undefined : normalizeValueForField(field, previousValue);
+    previousValue === undefined ? undefined : normalizeMetricValueForField(field, previousValue);
   const lastOffsetYRef = useRef(0);
   const lastEmittedValueRef = useRef<number>(normalizedValue);
   const isInteractingRef = useRef(false);
-  const valueFontSize = Math.max(48, Math.min(68, Math.floor(width * 0.165)));
+  const valueFontSize = isDurationMetric
+    ? Math.max(42, Math.min(58, Math.floor(width * 0.15)))
+    : Math.max(48, Math.min(68, Math.floor(width * 0.165)));
   const rowMinHeight = compact
     ? Math.max(98, Math.min(124, Math.floor(height * 0.135)))
     : Math.max(132, Math.min(180, Math.floor(height * 0.19)));
   const accentColor = getMetricAccentColor(theme, field, normalizedValue);
+  const [isDurationRunning, setIsDurationRunning] = useState(false);
+  const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [durationMinutesDraft, setDurationMinutesDraft] = useState('');
+  const [durationSecondsDraft, setDurationSecondsDraft] = useState('');
+  const durationMinutesInputRef = useRef<TextInput | null>(null);
+  const durationSecondsInputRef = useRef<TextInput | null>(null);
+  const currentValueRef = useRef(normalizedValue);
+  const onChangeRef = useRef(onChange);
+  const minValue = field.min ?? field.pickerMin;
+  const maxValue = field.max ?? field.pickerMax;
+
+  currentValueRef.current = normalizedValue;
+  onChangeRef.current = onChange;
 
   // Clamp an out-of-range initial value a single time. Using a ref guard
   // prevents a re-render ping-pong when onChange causes the parent to re-render
@@ -65,11 +92,99 @@ export function WorkoutMetricPicker({
 
     requestAnimationFrame(() => {
       scrollRef.current?.scrollTo({
-        animated: false,
+        animated: !(isDurationMetric && isDurationRunning),
         y: index * ITEM_HEIGHT,
       });
     });
-  }, [normalizedValue, values]);
+  }, [isDurationMetric, isDurationRunning, normalizedValue, values]);
+
+  useEffect(() => {
+    setIsDurationRunning(false);
+    setIsEditingDuration(false);
+    setDurationMinutesDraft('');
+    setDurationSecondsDraft('');
+  }, [field.key]);
+
+  useRunningTicker({
+    isRunning: isDurationMetric && isDurationRunning,
+    onTick: () => {
+      const nextValue = normalizeMetric(currentValueRef.current + 1, minValue, maxValue);
+      if (nextValue === currentValueRef.current) {
+        setIsDurationRunning(false);
+        return;
+      }
+      onChangeRef.current(nextValue);
+    },
+  });
+
+  function toggleDurationRun() {
+    if (!isDurationMetric) {
+      return;
+    }
+    if (isEditingDuration) {
+      commitDurationEdit();
+    }
+    setIsDurationRunning(current => !current);
+  }
+
+  function beginDurationEdit() {
+    if (!isDurationMetric) {
+      return;
+    }
+    const totalSeconds = Math.round(normalizedValue);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    setIsDurationRunning(false);
+    setDurationMinutesDraft(String(minutes));
+    setDurationSecondsDraft(seconds.toString().padStart(2, '0'));
+    setIsEditingDuration(true);
+    onInteractionStart?.();
+  }
+
+  function commitDurationEdit() {
+    if (!isDurationMetric || !isEditingDuration) {
+      return;
+    }
+
+    const normalizedMinutes = normalizeMinutePart(durationMinutesDraft);
+    const normalizedSeconds = normalizeSecondPart(durationSecondsDraft);
+
+    if (normalizedMinutes.length > 0 || normalizedSeconds.length > 0) {
+      const minutes = normalizedMinutes.length > 0 ? Number.parseInt(normalizedMinutes, 10) : 0;
+      const seconds = normalizedSeconds.length > 0 ? Number.parseInt(normalizedSeconds, 10) : 0;
+      const parsed = minutes * 60 + Math.max(0, Math.min(59, seconds));
+      onChange(normalizeMetricInput(parsed, minValue, maxValue));
+    }
+
+    setIsEditingDuration(false);
+    setDurationMinutesDraft('');
+    setDurationSecondsDraft('');
+    onInteractionEnd?.();
+  }
+
+  function handleDurationMinutesChange(text: string) {
+    const normalized = normalizeMinutePart(text);
+    setDurationMinutesDraft(normalized);
+  }
+
+  function handleDurationSecondsChange(text: string) {
+    const normalized = normalizeSecondPart(text);
+    setDurationSecondsDraft(normalized);
+
+    if (normalized.length >= 2) {
+      durationSecondsInputRef.current?.blur();
+    }
+  }
+
+  function handleDurationEditorBlur() {
+    requestAnimationFrame(() => {
+      const minuteInputFocused = durationMinutesInputRef.current?.isFocused() ?? false;
+      const secondInputFocused = durationSecondsInputRef.current?.isFocused() ?? false;
+      if (!minuteInputFocused && !secondInputFocused) {
+        commitDurationEdit();
+      }
+    });
+  }
 
   function settle(offsetY: number, source: 'touch' | 'momentum') {
     lastOffsetYRef.current = offsetY;
@@ -107,23 +222,104 @@ export function WorkoutMetricPicker({
   return (
     <View style={[styles.row, { minHeight: rowMinHeight }]}>
       <View style={styles.copy}>
-        <ReedText style={{ color: theme.colors.textMuted }} variant="label">
-          {formatMetricLabel(field)}
-          {normalizedPreviousValue !== undefined
-            ? ` · PREV ${formatMetricValue(field, normalizedPreviousValue, 'label')}`
-            : ''}
-        </ReedText>
-        <ReedText
-          style={{
-            color: accentColor,
-            fontSize: valueFontSize,
-            letterSpacing: -1.8,
-            lineHeight: Math.floor(valueFontSize * 0.9),
-          }}
-          variant="display"
-        >
-          {formatMetricValue(field, normalizedValue, 'value')}
-        </ReedText>
+        <View style={styles.metricHeaderRow}>
+          <ReedText style={{ color: theme.colors.textMuted }} variant="label">
+            {formatMetricLabel(field)}
+            {normalizedPreviousValue !== undefined
+              ? ` · PREV ${formatMetricValue(field, normalizedPreviousValue)}`
+              : ''}
+          </ReedText>
+        </View>
+        {isDurationMetric && isEditingDuration ? (
+          <View style={styles.durationEditRow}>
+            <TextInput
+              autoFocus
+              keyboardType="number-pad"
+              maxLength={3}
+              onBlur={handleDurationEditorBlur}
+              onChangeText={handleDurationMinutesChange}
+              onSubmitEditing={() => durationSecondsInputRef.current?.focus()}
+              ref={durationMinutesInputRef}
+              returnKeyType="next"
+              style={[
+                styles.durationInput,
+                styles.durationMinutesInput,
+                {
+                  color: accentColor,
+                  fontSize: valueFontSize,
+                  lineHeight: Math.floor(valueFontSize * 0.9),
+                },
+              ]}
+              value={durationMinutesDraft}
+            />
+            <ReedText
+              style={{
+                color: accentColor,
+                fontSize: valueFontSize,
+                lineHeight: Math.floor(valueFontSize * 0.9),
+              }}
+              variant="display"
+            >
+              :
+            </ReedText>
+            <TextInput
+              keyboardType="number-pad"
+              maxLength={2}
+              onBlur={handleDurationEditorBlur}
+              onChangeText={handleDurationSecondsChange}
+              onSubmitEditing={commitDurationEdit}
+              ref={durationSecondsInputRef}
+              returnKeyType="done"
+              style={[
+                styles.durationInput,
+                styles.durationSecondsInput,
+                {
+                  color: accentColor,
+                  fontSize: valueFontSize,
+                  lineHeight: Math.floor(valueFontSize * 0.9),
+                },
+              ]}
+              value={durationSecondsDraft}
+            />
+          </View>
+        ) : (
+          <Pressable
+            disabled={!isDurationMetric}
+            onPress={beginDurationEdit}
+            style={({ pressed }) => [{ opacity: pressed && isDurationMetric ? 0.88 : 1 }]}
+          >
+            <ReedText
+              style={{
+                color: accentColor,
+                fontSize: valueFontSize,
+                letterSpacing: isDurationMetric ? -1.2 : -1.8,
+                lineHeight: Math.floor(valueFontSize * 0.9),
+              }}
+              variant="display"
+            >
+              {formatMetricValue(field, normalizedValue)}
+            </ReedText>
+          </Pressable>
+        )}
+        {isDurationMetric ? (
+          <Pressable
+            onPress={toggleDurationRun}
+            style={({ pressed }) => [
+              styles.durationRunButton,
+              {
+                backgroundColor: theme.colors.controlFill,
+                borderColor: theme.colors.controlBorder,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <Ionicons
+              color={String(theme.colors.textPrimary)}
+              name={isDurationRunning ? 'pause' : 'play'}
+              size={14}
+            />
+          </Pressable>
+        ) : null}
       </View>
 
       <View style={styles.pickerShell}>
@@ -145,6 +341,9 @@ export function WorkoutMetricPicker({
           }}
           onScrollEndDrag={event => settle(event.nativeEvent.contentOffset.y, 'touch')}
           onScrollBeginDrag={() => {
+            if (isDurationRunning) {
+              setIsDurationRunning(false);
+            }
             isInteractingRef.current = true;
             onInteractionStart?.();
           }}
@@ -156,6 +355,9 @@ export function WorkoutMetricPicker({
             }
           }}
           onTouchStart={() => {
+            if (isDurationRunning) {
+              setIsDurationRunning(false);
+            }
             isInteractingRef.current = true;
             onInteractionStart?.();
           }}
@@ -199,7 +401,7 @@ function buildRange(min: number, max: number, step: number) {
   const values: number[] = [];
 
   for (let current = min; current <= max + step / 10; current += step) {
-    values.push(roundMetric(current));
+    values.push(roundMetricValue(current));
   }
 
   return values;
@@ -224,50 +426,6 @@ function findNearestIndex(values: number[], target: number) {
 function getNearestValue(values: number[], offsetY: number) {
   const index = Math.max(0, Math.min(values.length - 1, Math.round(offsetY / ITEM_HEIGHT)));
   return values[index];
-}
-
-function formatMetricValue(field: RecipeFieldDefinition, value: number, mode: 'value' | 'label') {
-  const rounded = roundMetric(value);
-
-  if (field.key === 'reps') {
-    return `${Math.round(rounded)}`;
-  }
-
-  if (field.key === 'rpe') {
-    return rounded.toFixed(1);
-  }
-
-  if (field.key === 'load' || field.key === 'assistLoad' || field.key === 'addedLoad') {
-    return rounded.toFixed(1);
-  }
-
-  if (field.key === 'duration') {
-    return mode === 'value' ? `${Math.round(rounded)}` : `${Math.round(rounded)}s`;
-  }
-
-  return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
-}
-
-function formatMetricLabel(field: RecipeFieldDefinition) {
-  if (field.key === 'load') {
-    return 'LOAD (KG)';
-  }
-  if (field.key === 'assistLoad') {
-    return 'ASSIST (KG)';
-  }
-  if (field.key === 'addedLoad') {
-    return 'ADDED LOAD (KG)';
-  }
-  if (field.key === 'reps') {
-    return 'REPS';
-  }
-  if (field.key === 'rpe') {
-    return 'TARGET RPE';
-  }
-  if (field.key === 'duration') {
-    return 'DURATION (S)';
-  }
-  return field.label.toUpperCase();
 }
 
 function getMetricAccentColor(
@@ -315,14 +473,8 @@ function parseHexColor(hex: string) {
   };
 }
 
-function roundMetric(value: number) {
-  return Number.isInteger(value) ? value : Number(value.toFixed(1));
-}
-
-function normalizeValueForField(field: RecipeFieldDefinition, value: number) {
-  const min = field.min ?? field.pickerMin;
-  const max = field.max ?? field.pickerMax;
-  return roundMetric(Math.max(min, Math.min(max, value)));
+function normalizeMetric(value: number, min: number, max: number) {
+  return normalizeMetricInput(value, min, max);
 }
 
 const styles = StyleSheet.create({
@@ -336,6 +488,42 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 8,
     justifyContent: 'center',
+    position: 'relative',
+  },
+  metricHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    gap: 10,
+  },
+  durationRunButton: {
+    alignItems: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: [{ translateY: -14 }],
+    width: 28,
+  },
+  durationInput: {
+    fontFamily: 'Outfit_800ExtraBold',
+    letterSpacing: -1.2,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  durationEditRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  durationMinutesInput: {
+    minWidth: 54,
+    textAlign: 'right',
+  },
+  durationSecondsInput: {
+    minWidth: 42,
   },
   pickerShell: {
     height: ITEM_HEIGHT * VISIBLE_ROWS,

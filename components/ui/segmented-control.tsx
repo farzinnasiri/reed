@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 
@@ -30,9 +31,11 @@ export function SegmentedControl<T extends string>({
   value,
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
+  const control = getGlassControlTokens(theme);
   const [shellWidth, setShellWidth] = useState(0);
   const progress = useRef(new Animated.Value(Math.max(0, options.findIndex(option => option.value === value)))).current;
   const optionIndex = Math.max(0, options.findIndex(option => option.value === value));
+  const shouldStackItems = !iconOnly && options.length > 0 && options.every(option => Boolean(option.icon && option.label));
   const itemWidth = Math.max(0, (shellWidth - SHELL_PADDING * 2) / Math.max(1, options.length));
   const indicatorTranslateX = useMemo(
     () => Animated.multiply(progress, itemWidth || 0),
@@ -54,8 +57,8 @@ export function SegmentedControl<T extends string>({
       style={[
         styles.shell,
         {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
+          backgroundColor: control.shellBackgroundColor,
+          borderColor: control.shellBorderColor,
         },
       ]}
     >
@@ -63,11 +66,11 @@ export function SegmentedControl<T extends string>({
         <Animated.View
           style={[
             styles.indicator,
-            theme.shadows.controlActive,
+            control.shadowStyle,
             { pointerEvents: 'none' },
             {
-              backgroundColor: theme.colors.controlActiveFill,
-              borderColor: theme.colors.controlActiveBorder,
+              backgroundColor: control.activeBackgroundColor,
+              borderColor: control.activeBorderColor,
               transform: [{ translateX: indicatorTranslateX }],
               width: itemWidth,
             },
@@ -77,6 +80,7 @@ export function SegmentedControl<T extends string>({
 
       {options.map(option => {
         const isActive = option.value === value;
+        const hasIconAndLabel = Boolean(option.icon && option.label);
 
         return (
           <Pressable
@@ -86,13 +90,17 @@ export function SegmentedControl<T extends string>({
             style={[
               styles.item,
               compact ? styles.itemCompact : null,
+              shouldStackItems ? styles.itemStacked : null,
             ]}
           >
-            {option.icon ? <View style={styles.iconWrap}>{option.icon}</View> : null}
+            {option.icon ? <View style={styles.iconWrap}>{option.icon}</View> : shouldStackItems ? <View style={styles.iconSpacer} /> : null}
             {iconOnly ? null : option.label ? (
               <ReedText
-                style={{ color: isActive ? theme.colors.pillActiveText : theme.colors.textMuted }}
-                variant="bodyStrong"
+                style={[
+                  shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
+                  { color: isActive ? theme.colors.pillActiveText : theme.colors.textMuted },
+                ]}
+                variant={shouldStackItems ? 'caption' : 'bodyStrong'}
               >
                 {option.label}
               </ReedText>
@@ -134,8 +142,20 @@ const styles = StyleSheet.create({
   itemCompact: {
     minHeight: 40,
   },
+  itemStacked: {
+    gap: 4,
+    minHeight: 58,
+    paddingBottom: 8,
+    paddingTop: 8,
+  },
+  stackedLabel: {
+    lineHeight: 16,
+  },
   iconWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  iconSpacer: {
+    height: 18,
   },
 });

@@ -1,7 +1,7 @@
+import { useLocalSearchParams } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useMutation, useQuery } from 'convex/react';
 import { authClient } from '@/lib/auth-client';
 import { api } from '@/convex/_generated/api';
@@ -14,11 +14,11 @@ import { useReedTheme } from '@/design/provider';
 import type { AuthMode, AppMode } from '@/components/home/types';
 
 export default function HomeScreen() {
+  const params = useLocalSearchParams<{ mode?: string }>();
   const { data: session, isPending } = authClient.useSession();
   const viewerProfile = useQuery(api.profiles.viewer, session ? {} : 'skip');
   const ensureViewerProfile = useMutation(api.profiles.ensureViewerProfile);
   const { theme } = useReedTheme();
-  const router = useRouter();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [appMode, setAppMode] = useState<AppMode>('workout');
   const [name, setName] = useState('');
@@ -39,6 +39,16 @@ export default function HomeScreen() {
       setErrorMessage(getErrorMessage(error));
     });
   }, [ensureViewerProfile, session?.user.id]);
+
+  useEffect(() => {
+    if (!session || typeof params.mode !== 'string') {
+      return;
+    }
+
+    if (params.mode === 'home' || params.mode === 'workout' || params.mode === 'chat' || params.mode === 'settings') {
+      setAppMode(params.mode);
+    }
+  }, [params.mode, session]);
 
   async function runAuthAction(action: () => Promise<void>) {
     setIsWorking(true);
@@ -175,7 +185,6 @@ export default function HomeScreen() {
           appMode={appMode}
           displayName={viewerProfile?.displayName ?? session.user.name ?? 'there'}
           onChangeMode={setAppMode}
-          onOpenSettings={() => router.push('/settings')}
         />
       ) : (
         <KeyboardAvoidingView

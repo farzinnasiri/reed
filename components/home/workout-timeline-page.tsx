@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, ScrollView, View } from 'react-native';
@@ -66,11 +67,11 @@ export function TimelinePage({
           const hasNewSet = item.setCount > previousCount;
           next[key] = hasNewSet
             ? true
-            : current[key] || item.state === 'active' || item.state === 'resting';
+            : current[key] || item.state === 'capture' || item.state === 'rest';
           continue;
         }
 
-        next[key] = item.setCount > 0 || item.state === 'active' || item.state === 'resting';
+        next[key] = item.setCount > 0 || item.state === 'capture' || item.state === 'rest';
       }
 
       previousSetCountsRef.current = nextSetCounts;
@@ -98,69 +99,29 @@ export function TimelinePage({
           <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
         </Pressable>
         <View style={styles.metaChip}>
-          <Ionicons color={String(theme.colors.textMuted)} name="time-outline" size={14} />
-          <ReedText tone="muted" variant="caption">
+          <Ionicons color={String(theme.colors.textMuted)} name="time-outline" size={16} />
+          <ReedText tone="muted" variant="body">
             {elapsedLabel ?? 'Live session'}
           </ReedText>
         </View>
-        <View style={styles.timelineTopActions}>
-          <Pressable
-            accessibilityLabel={isConfirmingFinishSession ? 'Confirm finish workout' : 'Finish workout'}
-            disabled={isWorking}
-            onPress={() => {
-              if (isConfirmingFinishSession) {
-                onFinishSession();
-                return;
-              }
-              onToggleFinishSessionConfirm();
-            }}
-            style={({ pressed }) => [{ opacity: isWorking ? 0.45 : pressed ? 0.86 : 1 }]}
-          >
-            <ReedText tone={isConfirmingFinishSession ? 'danger' : 'muted'} variant="caption">
-              {isConfirmingFinishSession ? 'Confirm' : 'Finish'}
-            </ReedText>
-          </Pressable>
-          <Pressable
-            accessibilityLabel="Add exercise"
-            onPress={() => {
-              onClearFinishSessionConfirm();
-              onAddExercise();
-            }}
-            style={({ pressed }) => [styles.navButton, { opacity: pressed ? 0.9 : 1 }]}
-          >
-            <Ionicons color={String(theme.colors.textPrimary)} name="add" size={18} />
-          </Pressable>
-        </View>
+        <View style={styles.navButtonSpacer} />
       </View>
 
       <View style={styles.timelineHeader}>
-        <ReedText variant="bodyStrong">Timeline</ReedText>
-        <ReedText tone="muted" variant="caption">
+        <ReedText variant="section">Timeline</ReedText>
+        <ReedText tone="muted" variant="body">
           {timeline.length} {timeline.length === 1 ? 'exercise' : 'exercises'}
         </ReedText>
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.timelineRailContent}
+        contentContainerStyle={styles.timelineRailContentDocked}
         showsVerticalScrollIndicator={false}
         style={styles.timelineRailScroll}
       >
         {timeline.length === 0 ? (
           <View style={styles.timelineEmpty}>
             <ReedText tone="muted">Timeline is empty.</ReedText>
-            <Pressable
-              onPress={onAddExercise}
-              style={({ pressed }) => [
-                styles.secondaryAction,
-                {
-                  backgroundColor: theme.colors.controlActiveFill,
-                  borderColor: theme.colors.controlActiveBorder,
-                  opacity: pressed ? 0.9 : 1,
-                },
-              ]}
-            >
-              <ReedText variant="bodyStrong">Add exercise</ReedText>
-            </Pressable>
           </View>
         ) : (
           timeline.map((item, index) => {
@@ -169,9 +130,9 @@ export function TimelinePage({
             const exerciseKey = item.sessionExerciseId as string;
             const isExpanded =
               expandedExercises[exerciseKey] ??
-              (item.setCount > 0 || item.state === 'active' || item.state === 'resting');
+              (item.setCount > 0 || item.state === 'capture' || item.state === 'rest');
             const isRestingForRow =
-              item.state === 'resting' &&
+              item.state === 'rest' &&
               activeRestExerciseId === item.sessionExerciseId &&
               typeof activeRestSeconds === 'number';
             const hasTimelineStem = !isLast || isExpanded;
@@ -202,17 +163,17 @@ export function TimelinePage({
                       styles.timelineNodeMarkerFixed,
                       {
                         backgroundColor:
-                          item.state === 'active'
+                          item.state === 'capture'
                             ? theme.colors.accentPrimary
-                            : item.state === 'resting'
+                            : item.state === 'rest'
                               ? theme.colors.dangerText
-                              : theme.colors.canvasSecondary,
+                            : theme.colors.canvasSecondary,
                         borderColor:
                           item.state === 'idle'
                             ? theme.colors.controlBorder
-                            : item.state === 'active'
+                            : item.state === 'capture'
                               ? theme.colors.accentPrimary
-                              : item.state === 'resting'
+                              : item.state === 'rest'
                                 ? theme.colors.dangerText
                                 : theme.colors.textPrimary,
                       },
@@ -222,13 +183,15 @@ export function TimelinePage({
                       color={
                         item.state === 'idle'
                           ? String(theme.colors.textMuted)
-                          : item.state === 'active'
+                          : item.state === 'capture'
                             ? '#ffffff'
                             : String(theme.colors.canvasSecondary)
                       }
                       name={
-                        item.state === 'resting'
+                        item.state === 'rest'
                           ? 'timer-outline'
+                          : item.state === 'live_tracking'
+                            ? 'pulse'
                           : item.state === 'logged'
                             ? 'checkmark'
                             : 'ellipse'
@@ -252,7 +215,8 @@ export function TimelinePage({
                   style={[
                     styles.timelineLineCopy,
                     {
-                      borderBottomColor: isLast ? 'transparent' : theme.colors.controlBorder,
+                      backgroundColor: theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.48)' : 'rgba(255, 255, 255, 0.56)',
+                      borderColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.72)',
                     },
                   ]}
                 >
@@ -266,7 +230,7 @@ export function TimelinePage({
                     style={({ pressed }) => [{ opacity: isWorking ? 0.45 : pressed ? 0.86 : 1 }]}
                   >
                     <View style={styles.timelineLineHeader}>
-                      <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="bodyStrong">
+                      <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
                         {item.exerciseName}
                       </ReedText>
                       <View style={styles.timelineRowActions}>
@@ -290,7 +254,7 @@ export function TimelinePage({
                           <Ionicons
                             color={String(theme.colors.textMuted)}
                             name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={14}
+                            size={18}
                           />
                         </Pressable>
                         <Pressable
@@ -325,7 +289,7 @@ export function TimelinePage({
                                 : theme.colors.textMuted,
                             )}
                             name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
-                            size={14}
+                            size={18}
                           />
                         </Pressable>
                       </View>
@@ -333,16 +297,16 @@ export function TimelinePage({
                   </Pressable>
                   <View style={styles.timelineBadgeRow}>
                     <View style={styles.timelineSetCountInline}>
-                      <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={12} />
-                      <ReedText tone="muted" variant="caption">
+                      <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={14} />
+                      <ReedText tone="muted" variant="body">
                         {item.setCount} {item.setCount === 1 ? 'set' : 'sets'}
                       </ReedText>
                     </View>
 
                     {isRestingForRow ? (
                       <View style={styles.timelineSetCountInline}>
-                        <Ionicons color={String(theme.colors.dangerText)} name="time-outline" size={12} />
-                        <ReedText tone="danger" variant="caption">
+                        <Ionicons color={String(theme.colors.dangerText)} name="time-outline" size={14} />
+                        <ReedText tone="danger" variant="body">
                           Rest {formatClock(activeRestSeconds)}
                         </ReedText>
                       </View>
@@ -352,7 +316,7 @@ export function TimelinePage({
                   <AnimatedSetList expanded={isExpanded}>
                     <View style={styles.timelineSetList}>
                       {item.sets.length === 0 ? (
-                        <ReedText tone="muted" variant="caption">
+                        <ReedText tone="muted" variant="body">
                           No sets logged yet.
                         </ReedText>
                       ) : (
@@ -386,22 +350,117 @@ export function TimelinePage({
         )}
       </ScrollView>
 
-      {timeline.length > 0 ? (
-        <Pressable
-          onPress={onAddExercise}
-          style={({ pressed }) => [
-            styles.timelineBottomAdd,
-            styles.secondaryAction,
+      <View pointerEvents="box-none" style={styles.timelineBottomDockWrap}>
+        <View
+          style={[
+            styles.timelineBottomDockPanel,
             {
-              backgroundColor: theme.colors.controlActiveFill,
-              borderColor: theme.colors.controlActiveBorder,
-              opacity: pressed || isWorking ? 0.9 : 1,
+              backgroundColor:
+                theme.mode === 'dark' ? 'rgba(13, 18, 27, 0.82)' : 'rgba(248, 250, 255, 0.94)',
+              borderColor:
+                theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.76)',
             },
           ]}
         >
-          <Ionicons color={String(theme.colors.textPrimary)} name="add" size={16} />
-          <ReedText variant="bodyStrong">Add exercise</ReedText>
-        </Pressable>
+          <View style={styles.timelineBottomDockContent}>
+            <Pressable
+              accessibilityLabel="Finish workout"
+              disabled={isWorking || timeline.length === 0}
+              onPress={onToggleFinishSessionConfirm}
+              style={({ pressed }) => [
+                styles.timelineBottomPrimaryPressable,
+                {
+                  opacity: isWorking || timeline.length === 0 ? 0.5 : pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <LinearGradient
+                colors={['#4f8df6', '#7a67f2', '#c15db8']}
+                end={{ x: 1, y: 0.5 }}
+                start={{ x: 0, y: 0.5 }}
+                style={styles.timelineBottomPrimaryGradient}
+              >
+                <Ionicons color="#ffffff" name="flag-outline" size={16} />
+                <ReedText style={{ color: '#ffffff' }} variant="bodyStrong">
+                  Finish workout
+                </ReedText>
+              </LinearGradient>
+            </Pressable>
+
+            <Pressable
+              accessibilityLabel="Add exercise"
+              disabled={isWorking}
+              onPress={() => {
+                onClearFinishSessionConfirm();
+                onAddExercise();
+              }}
+              style={({ pressed }) => [
+                styles.timelineBottomSecondaryButton,
+                {
+                  backgroundColor: theme.colors.controlActiveFill,
+                  borderColor: theme.colors.controlActiveBorder,
+                  opacity: isWorking ? 0.5 : pressed ? 0.92 : 1,
+                },
+              ]}
+            >
+              <Ionicons color={String(theme.colors.textPrimary)} name="add" size={18} />
+              <ReedText variant="bodyStrong">Add exercise</ReedText>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+
+      {isConfirmingFinishSession ? (
+        <View style={styles.timelineFinishModalOverlay}>
+          <Pressable onPress={onClearFinishSessionConfirm} style={styles.timelineFinishModalBackdrop} />
+          <View
+            style={[
+              styles.timelineFinishModalCard,
+              {
+                backgroundColor: theme.colors.canvasSecondary,
+                borderColor: theme.colors.controlBorder,
+              },
+            ]}
+          >
+            <ReedText style={styles.timelineFinishModalTitle} variant="section">
+              Finish workout?
+            </ReedText>
+            <ReedText style={styles.timelineFinishModalSummary} tone="muted" variant="body">
+              {getFinishSummaryLabel(timeline.length, elapsedLabel)}
+            </ReedText>
+            <View style={styles.timelineFinishModalActions}>
+              <Pressable
+                onPress={onClearFinishSessionConfirm}
+                style={({ pressed }) => [
+                  styles.timelineFinishModalButton,
+                  {
+                    backgroundColor: theme.colors.controlFill,
+                    borderColor: theme.colors.controlBorder,
+                    opacity: pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <ReedText variant="bodyStrong">Cancel</ReedText>
+              </Pressable>
+              <Pressable
+                disabled={isWorking}
+                onPress={onFinishSession}
+                style={({ pressed }) => [
+                  styles.timelineFinishModalButton,
+                  {
+                    backgroundColor: theme.colors.accentPrimary,
+                    borderColor: theme.colors.accentPrimary,
+                    opacity: isWorking ? 0.5 : pressed ? 0.9 : 1,
+                  },
+                ]}
+              >
+                <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
+                  Finish
+                </ReedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
       ) : null}
 
       {errorMessage ? (
@@ -411,6 +470,29 @@ export function TimelinePage({
       ) : null}
     </View>
   );
+}
+
+function getFinishSummaryLabel(exerciseCount: number, elapsedLabel: string | null) {
+  const exercisesPart = `${exerciseCount} ${exerciseCount === 1 ? 'exercise' : 'exercises'}`;
+  const minutesPart = formatElapsedAsMinutes(elapsedLabel);
+  return `${exercisesPart} • ${minutesPart}`;
+}
+
+function formatElapsedAsMinutes(elapsedLabel: string | null) {
+  if (!elapsedLabel) {
+    return '0 min';
+  }
+
+  const hoursMatch = elapsedLabel.match(/(\d+)h/);
+  const minutesMatch = elapsedLabel.match(/(\d+)m/);
+  const secondsMatch = elapsedLabel.match(/(\d+)s/);
+
+  const hours = hoursMatch ? Number.parseInt(hoursMatch[1], 10) : 0;
+  const minutes = minutesMatch ? Number.parseInt(minutesMatch[1], 10) : 0;
+  const seconds = secondsMatch ? Number.parseInt(secondsMatch[1], 10) : 0;
+  const totalMinutes = hours * 60 + minutes + (seconds >= 30 ? 1 : 0);
+
+  return `${totalMinutes} min`;
 }
 
 function AnimatedSetList({
@@ -512,7 +594,7 @@ function TimelineSetRow({
               },
             ]}
           />
-          <ReedText numberOfLines={1} variant="caption">
+          <ReedText numberOfLines={1} variant="body">
             Set {setEntry.setNumber} · {setEntry.summary}
           </ReedText>
         </Pressable>
@@ -537,7 +619,7 @@ function TimelineSetRow({
           <Ionicons
             color={String(isConfirmingDelete ? theme.colors.dangerText : theme.colors.textMuted)}
             name={isConfirmingDelete ? 'checkmark' : 'trash-outline'}
-            size={14}
+            size={16}
           />
         </Pressable>
       </View>
@@ -546,9 +628,9 @@ function TimelineSetRow({
           <Ionicons
             color={String(showRestAsActive ? theme.colors.dangerText : theme.colors.textMuted)}
             name="time-outline"
-            size={12}
+            size={14}
           />
-          <ReedText tone={showRestAsActive ? 'danger' : 'muted'} variant="caption">
+          <ReedText tone={showRestAsActive ? 'danger' : 'muted'} variant="body">
             {restLabel}
           </ReedText>
         </View>

@@ -1,12 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { ReedIconButton } from '@/components/ui/reed-icon-button';
+import { GlassTabPill } from '@/components/ui/glass-tab-pill';
+import {
+  TAB_DOCK_BASE_BOTTOM_OFFSET,
+  TAB_DOCK_HORIZONTAL_MARGIN,
+  TAB_PILL_MIN_HEIGHT,
+} from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useReedTheme } from '@/design/provider';
+import { SettingsSurface } from './settings-surface';
 import { WorkoutSurface } from './workout-surface';
 import type { AppMode } from './types';
 
@@ -17,6 +24,12 @@ type ChatMessage = {
 };
 
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
+const MODE_INDEX: Record<AppMode, number> = {
+  chat: 2,
+  home: 0,
+  settings: 3,
+  workout: 1,
+};
 
 const INITIAL_MESSAGES: ChatMessage[] = [
   {
@@ -35,77 +48,107 @@ type SignedInShellProps = {
   appMode: AppMode;
   displayName: string;
   onChangeMode: (mode: AppMode) => void;
-  onOpenSettings: () => void;
 };
 
 export function SignedInShell({
   appMode,
   displayName,
   onChangeMode,
-  onOpenSettings,
 }: SignedInShellProps) {
   const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   // Query used only to decide dock visibility; WorkoutSurface has its own
   // subscription and is the canonical owner of session state.
   const currentWorkoutSession = useQuery(api.liveSessions.getCurrent, {});
   const hasActiveWorkoutSession = currentWorkoutSession !== null && currentWorkoutSession !== undefined;
 
-  // Animate the crossfade between tabs. Both surfaces remain mounted so
-  // WorkoutSurface internal state (editing sets, rest timer, page) is
-  // preserved while the user briefly checks the Coach tab.
-  const tabTransition = useRef(new Animated.Value(appMode === 'workout' ? 1 : 0)).current;
+  // Preserve state for visited surfaces while still lazy-mounting settings/home
+  // on first open to avoid unnecessary work on initial render.
+  const tabTransition = useRef(new Animated.Value(MODE_INDEX[appMode])).current;
+  const [visitedModes, setVisitedModes] = useState<Record<AppMode, boolean>>({
+    chat: appMode === 'chat',
+    home: appMode === 'home',
+    settings: appMode === 'settings',
+    workout: true,
+  });
+  const [dockHeight, setDockHeight] = useState(TAB_PILL_MIN_HEIGHT);
 
   useEffect(() => {
+    setVisitedModes(current =>
+      current[appMode]
+        ? current
+        : {
+            ...current,
+            [appMode]: true,
+          },
+    );
+
     Animated.timing(tabTransition, {
       duration: theme.motion.regular + 40,
       easing: Easing.out(Easing.cubic),
-      toValue: appMode === 'workout' ? 1 : 0,
+      toValue: MODE_INDEX[appMode],
       useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
     }).start();
   }, [appMode, tabTransition, theme.motion.regular]);
 
-  const coachOpacity = tabTransition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 0],
-  });
+  const homeLayerStyle = useMemo(() => getLayerStyle(tabTransition, MODE_INDEX.home), [tabTransition]);
+  const workoutLayerStyle = useMemo(() => getLayerStyle(tabTransition, MODE_INDEX.workout), [tabTransition]);
+  const chatLayerStyle = useMemo(() => getLayerStyle(tabTransition, MODE_INDEX.chat), [tabTransition]);
+  const settingsLayerStyle = useMemo(() => getLayerStyle(tabTransition, MODE_INDEX.settings), [tabTransition]);
 
-  const coachTranslateY = tabTransition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -6],
-  });
-
-  const workoutOpacity = tabTransition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-
-  const workoutTranslateY = tabTransition.interpolate({
-    inputRange: [0, 1],
-    outputRange: [6, 0],
-  });
-
-  const appOptions = [
+  const tabItems: Array<{
+    accessibilityLabel: string;
+    icon: ReactNode;
+    id: AppMode;
+    isActive: boolean;
+  }> = [
+    {
+      accessibilityLabel: 'Home',
+      icon: (
+        <Ionicons
+          color={String(appMode === 'home' ? theme.colors.accentPrimary : theme.colors.textMuted)}
+          name={appMode === 'home' ? 'home' : 'home-outline'}
+          size={22}
+        />
+      ),
+      id: 'home',
+      isActive: appMode === 'home',
+    },
     {
       accessibilityLabel: 'Workout',
       icon: (
         <Ionicons
-          color={String(appMode === 'workout' ? theme.colors.pillActiveText : theme.colors.textMuted)}
-          name="barbell-outline"
-          size={20}
+          color={String(appMode === 'workout' ? theme.colors.accentPrimary : theme.colors.textMuted)}
+          name={appMode === 'workout' ? 'barbell' : 'barbell-outline'}
+          size={22}
         />
       ),
-      value: 'workout' as const,
+      id: 'workout',
+      isActive: appMode === 'workout',
     },
     {
-      accessibilityLabel: 'Coach',
+      accessibilityLabel: 'Chat',
       icon: (
         <Ionicons
-          color={String(appMode === 'coach' ? theme.colors.pillActiveText : theme.colors.textMuted)}
-          name="chatbubble-ellipses-outline"
-          size={20}
+          color={String(appMode === 'chat' ? theme.colors.accentPrimary : theme.colors.textMuted)}
+          name={appMode === 'chat' ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+          size={22}
         />
       ),
-      value: 'coach' as const,
+      id: 'chat',
+      isActive: appMode === 'chat',
+    },
+    {
+      accessibilityLabel: 'Settings',
+      icon: (
+        <Ionicons
+          color={String(appMode === 'settings' ? theme.colors.accentPrimary : theme.colors.textMuted)}
+          name={appMode === 'settings' ? 'settings' : 'settings-outline'}
+          size={22}
+        />
+      ),
+      id: 'settings',
+      isActive: appMode === 'settings',
     },
   ];
 
@@ -113,6 +156,9 @@ export function SignedInShell({
   // full-screen room. The WorkoutSurface owns exit/back navigation in that
   // state via its own nav button.
   const showDock = !(appMode === 'workout' && hasActiveWorkoutSession);
+  const isFullscreenWorkout = appMode === 'workout' && hasActiveWorkoutSession;
+  const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
+  const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
 
   return (
     <View
@@ -121,66 +167,85 @@ export function SignedInShell({
         {
           paddingHorizontal: theme.spacing.lg,
           paddingTop: theme.spacing.xl,
-          paddingBottom: theme.spacing.lg,
+          paddingBottom: isFullscreenWorkout ? 0 : theme.spacing.lg,
         },
       ]}
     >
-      {/* Settings button — only visible on the Coach tab */}
-      {appMode === 'coach' ? (
-        <View style={styles.shellHeaderFloating}>
-          <ReedIconButton accessibilityLabel="Open settings" onPress={onOpenSettings}>
-            <Ionicons color={String(theme.colors.textPrimary)} name="settings-outline" size={19} />
-          </ReedIconButton>
-        </View>
-      ) : null}
-
       <View style={styles.shellContentStack}>
-        {/*
-          Both surfaces stay mounted so internal state (chat draft, workout
-          metrics, rest timer) is not lost when switching tabs.
-          We switch hit-testing with pointerEvents and visibility with opacity
-          instead of display:'none' (which would stop layout but not effects).
-        */}
-        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'coach' ? 'auto' : 'none' }]}>
-          <Animated.View
-            style={[
-              StyleSheet.absoluteFillObject,
-              {
-                opacity: coachOpacity,
-                transform: [{ translateY: coachTranslateY }],
-              },
-            ]}
-          >
-            <CoachSurface displayName={displayName} />
-          </Animated.View>
+        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'home' ? 'auto' : 'none' }]}>
+          {visitedModes.home || appMode === 'home' ? (
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFillObject,
+                homeLayerStyle,
+              ]}
+            >
+              <HomeSurface />
+            </Animated.View>
+          ) : null}
         </View>
 
         <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'workout' ? 'auto' : 'none' }]}>
           <Animated.View
             style={[
               StyleSheet.absoluteFillObject,
-              {
-                opacity: workoutOpacity,
-                transform: [{ translateY: workoutTranslateY }],
-              },
+              workoutLayerStyle,
             ]}
           >
             <WorkoutSurface
-              onExitWorkout={() => onChangeMode('coach')}
+              onExitWorkout={() => onChangeMode('chat')}
               showStartBackButton={false}
             />
           </Animated.View>
         </View>
+
+        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'chat' ? 'auto' : 'none' }]}>
+          {visitedModes.chat || appMode === 'chat' ? (
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFillObject,
+                chatLayerStyle,
+              ]}
+            >
+              <CoachSurface displayName={displayName} dockReservedSpace={dockReservedSpace} />
+            </Animated.View>
+          ) : null}
+        </View>
+
+        <View style={[styles.shellContentLayer, { pointerEvents: appMode === 'settings' ? 'auto' : 'none' }]}>
+          {appMode === 'settings' ? (
+            <Animated.View
+              style={[
+                StyleSheet.absoluteFillObject,
+                settingsLayerStyle,
+              ]}
+            >
+              <SettingsSurface />
+            </Animated.View>
+          ) : null}
+        </View>
       </View>
 
       {showDock ? (
-        <View style={styles.bottomDockFloating}>
-          <SegmentedControl<AppMode>
-            compact
-            iconOnly
-            onChange={onChangeMode}
-            options={appOptions}
-            value={appMode}
+        <View
+          onLayout={event => {
+            const nextHeight = Math.round(event.nativeEvent.layout.height);
+            if (nextHeight > 0 && nextHeight !== dockHeight) {
+              setDockHeight(nextHeight);
+            }
+          }}
+          style={[
+            styles.bottomDockFloating,
+            {
+              bottom: dockBottom,
+              left: TAB_DOCK_HORIZONTAL_MARGIN,
+              right: TAB_DOCK_HORIZONTAL_MARGIN,
+            },
+          ]}
+        >
+          <GlassTabPill
+            items={tabItems}
+            onPress={onChangeMode}
           />
         </View>
       ) : null}
@@ -188,7 +253,34 @@ export function SignedInShell({
   );
 }
 
-function CoachSurface({ displayName }: { displayName: string }) {
+function HomeSurface() {
+  const { theme } = useReedTheme();
+
+  return (
+    <View style={styles.homeSurface}>
+      <View
+        style={[
+          styles.homeStateCard,
+          {
+            backgroundColor: theme.colors.controlFill,
+            borderColor: theme.colors.controlBorder,
+          },
+        ]}
+      >
+        <ReedText variant="section">Home is coming next.</ReedText>
+        <ReedText tone="muted">Use the workout tab to continue your active session.</ReedText>
+      </View>
+    </View>
+  );
+}
+
+function CoachSurface({
+  displayName,
+  dockReservedSpace,
+}: {
+  displayName: string;
+  dockReservedSpace: number;
+}) {
   const { theme } = useReedTheme();
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [draft, setDraft] = useState('');
@@ -291,7 +383,7 @@ function CoachSurface({ displayName }: { displayName: string }) {
   return (
     <View style={styles.chatSurface}>
       <ScrollView
-        contentContainerStyle={styles.chatScrollContent}
+        contentContainerStyle={[styles.chatScrollContent, { paddingBottom: dockReservedSpace + 108 }]}
         ref={scrollRef}
         showsVerticalScrollIndicator={false}
         style={styles.chatScroll}
@@ -307,6 +399,7 @@ function CoachSurface({ displayName }: { displayName: string }) {
           styles.composerShell,
           {
             backgroundColor: theme.colors.controlFill,
+            bottom: dockReservedSpace + 12,
             borderColor: theme.colors.controlBorder,
           },
         ]}
@@ -523,6 +616,25 @@ function buildCoachReply(message: string, displayName: string) {
   return `I’ve got that. For now this is a local mock reply, but this thread will become Reed’s real coaching conversation surface.`;
 }
 
+function getLayerStyle(transition: Animated.Value, index: number) {
+  return {
+    opacity: transition.interpolate({
+      extrapolate: 'clamp',
+      inputRange: [index - 0.45, index, index + 0.45],
+      outputRange: [0, 1, 0],
+    }),
+    transform: [
+      {
+        translateY: transition.interpolate({
+          extrapolate: 'clamp',
+          inputRange: [index - 0.45, index, index + 0.45],
+          outputRange: [6, 0, -6],
+        }),
+      },
+    ],
+  };
+}
+
 const styles = StyleSheet.create({
   shellRoot: {
     flex: 1,
@@ -536,11 +648,17 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
   },
-  shellHeaderFloating: {
-    position: 'absolute',
-    right: 20,
-    top: 28,
-    zIndex: 30,
+  homeSurface: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  homeStateCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 8,
+    marginHorizontal: 2,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
   chatSurface: {
     flex: 1,
@@ -551,8 +669,7 @@ const styles = StyleSheet.create({
   },
   chatScrollContent: {
     gap: 14,
-    paddingBottom: 208,
-    paddingTop: 78,
+    paddingTop: 10,
   },
   messageRow: {
     alignItems: 'flex-end',
@@ -597,7 +714,6 @@ const styles = StyleSheet.create({
   composerShell: {
     borderRadius: 30,
     borderWidth: 1,
-    bottom: 74,
     left: 0,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -645,10 +761,7 @@ const styles = StyleSheet.create({
     width: 28,
   },
   bottomDockFloating: {
-    bottom: 20,
-    left: 20,
     position: 'absolute',
-    right: 20,
     zIndex: 25,
   },
 });
