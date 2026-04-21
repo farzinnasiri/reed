@@ -23,6 +23,17 @@ The role of this file is to describe common mistakes and confusion points that a
 9. Do not persist empty workout sessions: if a session is finished with zero exercises, delete it instead of storing it.
 10. Glassmorphism tokens are single-source-of-truth in `components/ui/glass-material.ts`. Do not hardcode per-screen RGBA glass values for shells, segmented controls, or the tab pill.
 
+## 20/80 Guardrails
+
+1. No orphan code: routes, mutations, and components must be wired to a live call path in the same change.
+2. No unbounded scans on growth tables: avoid `collect()` + JS filtering when an index/search-index path exists.
+3. Keep ownership local: feature-internal state stays in the feature component (for example, sheet filters/search stay in the sheet).
+4. Keep interfaces small: if a component exceeds roughly `12 props`, split/group before adding more.
+5. No speculative persisted fields: every new stored field must be read by shipped behavior in the same PR.
+6. Validator/runtime parity: validators must be at least as strict as runtime guards.
+7. API contract changes need explicit callout and approval (especially default-result behavior).
+8. Never commit local scratch/planning artifacts (for example `.kilo/`).
+
 ## Operational Rules
 
 1. Prefer `npm` scripts for install, Expo, and Convex workflows.
@@ -46,7 +57,7 @@ The role of this file is to describe common mistakes and confusion points that a
 
 ## Development Phase and Collaboration
 
-This project is still greenfield and actively evolving. It is acceptable to re-architect, redesign, repurpose, or replace existing patterns when there is a better approach.
+This project is still greenfield and actively evolving. Default to minimal-diff changes; do broader re-architecture only when explicitly requested or required to remove a blocker.
 
 Strict collaboration rule:
 1. If something looks messy, fragile, or suboptimal, tell the developer explicitly.
