@@ -6,6 +6,9 @@ import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
+import {
+  cancelRestTimerBackgroundAlertsAsync,
+} from '@/lib/rest-timer-alerts';
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
 import { styles } from './workout-surface.styles';
@@ -21,8 +24,9 @@ import type {
   WorkoutPage,
 } from './workout-surface.types';
 import { TimelinePage } from './workout-timeline-page';
+import { useRestBackgroundAlerts } from './use-rest-background-alerts';
 import { useRunningTicker } from './use-running-ticker';
-import { clampSeconds, formatElapsed, getErrorMessage } from './workout-surface.utils';
+import { formatElapsed, getErrorMessage } from './workout-surface.utils';
 
 type WorkoutSurfaceProps = {
   onExitWorkout: () => void;
@@ -189,6 +193,20 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       setRestRunning(false);
     }
   }, [restRemaining]);
+
+  useRestBackgroundAlerts({
+    cardMode:
+      session?.cardMode === 'rest'
+        ? 'rest'
+        : session?.cardMode === 'live_cardio'
+          ? 'live_cardio'
+          : 'capture',
+    onPermissionDenied: () => {
+      setErrorMessage('Enable notifications to get rest alerts when the app is in the background.');
+    },
+    restCard,
+    restRemaining,
+  });
 
   useEffect(() => {
     if (!session?.session.startedAt) {
@@ -417,6 +435,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   async function handleFinishSession() {
     await runMutation(async () => {
+      await cancelRestTimerBackgroundAlertsAsync();
       await finishSession({});
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
@@ -426,6 +445,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   async function handleRestSwipeRight() {
     await runMutation(async () => {
+      await cancelRestTimerBackgroundAlertsAsync();
       await endRest({});
       // Stay on the exercise page; next-set capture card appears via getCurrent.
     });
@@ -433,6 +453,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   async function handleRestSwipeLeft() {
     await runMutation(async () => {
+      await cancelRestTimerBackgroundAlertsAsync();
       await endRest({});
       // Return to the timeline so the user can pick a different exercise.
       setPage('timeline');
@@ -444,30 +465,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return;
     }
 
-    setRestRunning(current => !current);
-
-    if (!restRunning && restRemaining === 0) {
-      setRestRemaining(restCard.durationSeconds);
-    }
-
     await runMutation(async () => {
       await updateRestProcess({ mode: 'toggleRunning' });
+      return true;
     });
   }
 
   async function handleAdjustRest(deltaSeconds: number) {
-    setRestRemaining(current => clampSeconds(current + deltaSeconds, 15, 240));
-
     await runMutation(async () => {
       await updateRestProcess({ deltaSeconds, mode: 'adjustBy' });
+      return true;
     });
   }
 
   async function handlePresetRest(durationSeconds: number) {
-    setRestRemaining(durationSeconds);
-
     await runMutation(async () => {
       await updateRestProcess({ durationSeconds, mode: 'setDuration' });
+      return true;
     });
   }
 

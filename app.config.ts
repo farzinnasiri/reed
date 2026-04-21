@@ -48,7 +48,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     output: 'static',
     favicon: './assets/images/favicon.png',
   },
-  plugins: ['expo-router'],
+  plugins: [
+    'expo-router',
+    [
+      'expo-notifications',
+      {
+        defaultChannel: 'rest-timer',
+      },
+    ],
+  ],
   experiments: {
     typedRoutes: true,
   },

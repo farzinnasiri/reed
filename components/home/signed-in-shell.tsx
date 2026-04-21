@@ -15,6 +15,7 @@ import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 import { SettingsSurface } from './settings-surface';
 import { WorkoutSurface } from './workout-surface';
+import { HomeSurface } from './home-surface';
 import type { AppMode } from './types';
 
 type ChatMessage = {
@@ -180,7 +181,10 @@ export function SignedInShell({
                 homeLayerStyle,
               ]}
             >
-              <HomeSurface />
+              <HomeSurface
+                hasActiveSession={hasActiveWorkoutSession}
+                onOpenWorkout={() => onChangeMode('workout')}
+              />
             </Animated.View>
           ) : null}
         </View>
@@ -249,27 +253,6 @@ export function SignedInShell({
           />
         </View>
       ) : null}
-    </View>
-  );
-}
-
-function HomeSurface() {
-  const { theme } = useReedTheme();
-
-  return (
-    <View style={styles.homeSurface}>
-      <View
-        style={[
-          styles.homeStateCard,
-          {
-            backgroundColor: theme.colors.controlFill,
-            borderColor: theme.colors.controlBorder,
-          },
-        ]}
-      >
-        <ReedText variant="section">Home is coming next.</ReedText>
-        <ReedText tone="muted">Use the workout tab to continue your active session.</ReedText>
-      </View>
     </View>
   );
 }
@@ -647,18 +630,6 @@ const styles = StyleSheet.create({
   shellContentLayer: {
     ...StyleSheet.absoluteFillObject,
     overflow: 'hidden',
-  },
-  homeSurface: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  homeStateCard: {
-    borderRadius: 24,
-    borderWidth: 1,
-    gap: 8,
-    marginHorizontal: 2,
-    paddingHorizontal: 18,
-    paddingVertical: 16,
   },
   chatSurface: {
     flex: 1,
