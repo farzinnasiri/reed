@@ -1,9 +1,20 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, ScrollView, View } from 'react-native';
+import { BlurView } from 'expo-blur';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, PanResponder, Pressable, ScrollView, View } from 'react-native';
 import type { Id } from '@/convex/_generated/dataModel';
+import { GlassSurface } from '@/components/ui/glass-surface';
+import { canUseGlassBlur, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
+import {
+  createTiming,
+  getTapScaleStyle,
+  reedEasing,
+  reedMotion,
+  runReedLayoutAnimation,
+  shouldUseNativeDriver,
+} from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
 import type { TimelineRow, TimelineSet } from './workout-surface.types';
@@ -24,10 +35,13 @@ type TimelinePageProps = {
   onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;
+  onReorderTimeline: (orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) => Promise<boolean>;
   onRemoveExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onToggleFinishSessionConfirm: () => void;
   timeline: TimelineRow[];
 };
+
+const TIMELINE_ROW_GAP = 10;
 
 export function TimelinePage({
   activeRestAfterSetNumber,
@@ -44,27 +58,87 @@ export function TimelinePage({
   onFinishSession,
   onOpenExercise,
   onOpenSet,
+  onReorderTimeline,
   onRemoveExercise,
   onToggleFinishSessionConfirm,
   timeline,
 }: TimelinePageProps) {
   const { theme } = useReedTheme();
+  const scrim = getGlassScrimTokens(theme);
+  const canUseBlur = canUseGlassBlur();
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
   const [confirmExerciseDeleteId, setConfirmExerciseDeleteId] = useState<Id<'liveSessionExercises'> | null>(null);
+  const [displayTimeline, setDisplayTimeline] = useState(timeline);
+  const [draggingExerciseId, setDraggingExerciseId] = useState<Id<'liveSessionExercises'> | null>(null);
+  const [dragOriginIndex, setDragOriginIndex] = useState<number | null>(null);
+  const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
+  const [highlightedSetIds, setHighlightedSetIds] = useState<Record<string, boolean>>({});
+  const [insertedExerciseIds, setInsertedExerciseIds] = useState<Record<string, boolean>>({});
+  const pendingOrderRef = useRef<string | null>(null);
+  const rowLayoutsRef = useRef<Record<string, { height: number; y: number }>>({});
+  const dragTranslationY = useRef(new Animated.Value(0)).current;
+  const previousExerciseIdsRef = useRef<string[]>([]);
   const previousSetCountsRef = useRef<Record<string, number>>({});
+  const draggingRowHeight = useMemo(() => {
+    if (!draggingExerciseId) {
+      return 0;
+    }
+
+    return rowLayoutsRef.current[draggingExerciseId as string]?.height ?? 0;
+  }, [draggingExerciseId]);
+  const draggingRowSize = draggingRowHeight > 0 ? draggingRowHeight + TIMELINE_ROW_GAP : 0;
 
   useEffect(() => {
+    const timelineSignature = timeline.map(item => item.sessionExerciseId).join('|');
+
+    if (pendingOrderRef.current) {
+      if (timelineSignature === pendingOrderRef.current) {
+        pendingOrderRef.current = null;
+        setDisplayTimeline(timeline);
+      }
+      return;
+    }
+
+    if (!draggingExerciseId) {
+      setDisplayTimeline(timeline);
+    }
+  }, [draggingExerciseId, timeline]);
+
+  useEffect(() => {
+    const previousExerciseIds = previousExerciseIdsRef.current;
+    const nextExerciseIds = timeline.map(item => item.sessionExerciseId as string);
+    const nextInsertedExerciseIds = nextExerciseIds.filter(id => !previousExerciseIds.includes(id));
+    previousExerciseIdsRef.current = nextExerciseIds;
+
+    if (nextInsertedExerciseIds.length > 0) {
+      runReedLayoutAnimation();
+      setInsertedExerciseIds(current => ({
+        ...current,
+        ...Object.fromEntries(nextInsertedExerciseIds.map(id => [id, true])),
+      }));
+    }
+
+    let hasLayoutChange = false;
+    const nextHighlightedSetIds: string[] = [];
+
     setExpandedExercises(current => {
       const next: Record<string, boolean> = {};
       const nextSetCounts: Record<string, number> = {};
 
-      for (const item of timeline) {
+      for (const item of displayTimeline) {
         const key = item.sessionExerciseId as string;
         nextSetCounts[key] = item.setCount;
 
         if (key in current) {
           const previousCount = previousSetCountsRef.current[key] ?? 0;
           const hasNewSet = item.setCount > previousCount;
+          if (hasNewSet) {
+            hasLayoutChange = true;
+            const newestSet = item.sets[item.sets.length - 1];
+            if (newestSet) {
+              nextHighlightedSetIds.push(newestSet.setLogId as string);
+            }
+          }
           next[key] = hasNewSet
             ? true
             : current[key] || item.state === 'capture' || item.state === 'rest';
@@ -78,24 +152,134 @@ export function TimelinePage({
 
       return next;
     });
-  }, [timeline]);
+
+    if (hasLayoutChange) {
+      runReedLayoutAnimation();
+    }
+
+    if (nextHighlightedSetIds.length > 0) {
+      setHighlightedSetIds(current => ({
+        ...current,
+        ...Object.fromEntries(nextHighlightedSetIds.map(id => [id, true])),
+      }));
+    }
+  }, [displayTimeline, timeline]);
+
+  useEffect(() => {
+    if (Object.keys(highlightedSetIds).length === 0) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setHighlightedSetIds({});
+    }, reedMotion.durations.standard + 40);
+
+    return () => clearTimeout(timeout);
+  }, [highlightedSetIds]);
 
   useEffect(() => {
     if (!confirmExerciseDeleteId) {
       return;
     }
 
-    const stillExists = timeline.some(item => item.sessionExerciseId === confirmExerciseDeleteId);
+    const stillExists = displayTimeline.some(item => item.sessionExerciseId === confirmExerciseDeleteId);
 
     if (!stillExists) {
       setConfirmExerciseDeleteId(null);
     }
-  }, [confirmExerciseDeleteId, timeline]);
+  }, [confirmExerciseDeleteId, displayTimeline]);
+
+  function handleRowLayout(sessionExerciseId: Id<'liveSessionExercises'>, y: number, height: number) {
+    rowLayoutsRef.current[sessionExerciseId as string] = { height, y };
+  }
+
+  function handleDragStart(sessionExerciseId: Id<'liveSessionExercises'>) {
+    const nextIndex = displayTimeline.findIndex(item => item.sessionExerciseId === sessionExerciseId);
+    if (nextIndex < 0) {
+      return;
+    }
+
+    setConfirmExerciseDeleteId(null);
+    setDraggingExerciseId(sessionExerciseId);
+    setDragOriginIndex(nextIndex);
+    setDragTargetIndex(nextIndex);
+    dragTranslationY.setValue(0);
+  }
+
+  function handleDragMove(deltaY: number) {
+    if (!draggingExerciseId || dragOriginIndex === null) {
+      return;
+    }
+
+    dragTranslationY.setValue(deltaY);
+
+    const activeLayout = rowLayoutsRef.current[draggingExerciseId as string];
+    if (!activeLayout) {
+      return;
+    }
+
+    const activeCenterY = activeLayout.y + deltaY + activeLayout.height / 2;
+    let nextTargetIndex = dragOriginIndex;
+
+    for (let index = 0; index < displayTimeline.length; index += 1) {
+      const candidate = displayTimeline[index];
+      const layout = rowLayoutsRef.current[candidate.sessionExerciseId as string];
+
+      if (!layout || candidate.sessionExerciseId === draggingExerciseId) {
+        continue;
+      }
+
+      if (activeCenterY >= layout.y + layout.height / 2) {
+        nextTargetIndex = index;
+      }
+    }
+
+    if (nextTargetIndex !== dragTargetIndex) {
+      setDragTargetIndex(nextTargetIndex);
+    }
+  }
+
+  async function handleDragEnd() {
+    if (!draggingExerciseId || dragOriginIndex === null || dragTargetIndex === null) {
+      setDraggingExerciseId(null);
+      setDragOriginIndex(null);
+      setDragTargetIndex(null);
+      dragTranslationY.setValue(0);
+      return;
+    }
+
+    const didMove = dragOriginIndex !== dragTargetIndex;
+    const reorderedTimeline = didMove
+      ? moveTimelineItem(displayTimeline, dragOriginIndex, dragTargetIndex)
+      : displayTimeline;
+
+    setDraggingExerciseId(null);
+    setDragOriginIndex(null);
+    setDragTargetIndex(null);
+    dragTranslationY.setValue(0);
+
+    if (!didMove) {
+      return;
+    }
+
+    runReedLayoutAnimation();
+    setDisplayTimeline(reorderedTimeline);
+    const orderedSessionExerciseIds = reorderedTimeline.map(item => item.sessionExerciseId);
+    pendingOrderRef.current = orderedSessionExerciseIds.join('|');
+
+    const didPersist = await onReorderTimeline(orderedSessionExerciseIds);
+
+    if (!didPersist) {
+      pendingOrderRef.current = null;
+      runReedLayoutAnimation();
+      setDisplayTimeline(timeline);
+    }
+  }
 
   return (
     <View style={styles.timelinePage}>
       <View style={styles.timelineTopRow}>
-        <Pressable onPress={onExitWorkout} style={styles.navButton}>
+        <Pressable onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
           <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
         </Pressable>
         <View style={styles.metaChip}>
@@ -110,23 +294,24 @@ export function TimelinePage({
       <View style={styles.timelineHeader}>
         <ReedText variant="section">Timeline</ReedText>
         <ReedText tone="muted" variant="body">
-          {timeline.length} {timeline.length === 1 ? 'exercise' : 'exercises'}
+          {displayTimeline.length} {displayTimeline.length === 1 ? 'exercise' : 'exercises'}
         </ReedText>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.timelineRailContentDocked}
+        scrollEnabled={!draggingExerciseId}
         showsVerticalScrollIndicator={false}
         style={styles.timelineRailScroll}
       >
-        {timeline.length === 0 ? (
+        {displayTimeline.length === 0 ? (
           <View style={styles.timelineEmpty}>
             <ReedText tone="muted">Timeline is empty.</ReedText>
           </View>
         ) : (
-          timeline.map((item, index) => {
+          displayTimeline.map((item, index) => {
             const isFirst = index === 0;
-            const isLast = index === timeline.length - 1;
+            const isLast = index === displayTimeline.length - 1;
             const exerciseKey = item.sessionExerciseId as string;
             const isExpanded =
               expandedExercises[exerciseKey] ??
@@ -136,17 +321,38 @@ export function TimelinePage({
               activeRestExerciseId === item.sessionExerciseId &&
               typeof activeRestSeconds === 'number';
             const hasTimelineStem = !isLast || isExpanded;
+            const isDraggingRow = draggingExerciseId === item.sessionExerciseId;
+            const dragOffsetY = getTimelineRowShift({
+              draggedRowSize: draggingRowSize,
+              draggingExerciseId,
+              dragOriginIndex,
+              dragTargetIndex,
+              dragTranslationY,
+              index,
+              sessionExerciseId: item.sessionExerciseId,
+            });
 
             return (
               <View
                 key={item.sessionExerciseId}
-                style={[
-                  styles.timelineLineItem,
-                  {
-                    opacity: isWorking ? 0.88 : 1,
-                  },
-                ]}
+                onLayout={event => {
+                  const { height, y } = event.nativeEvent.layout;
+                  handleRowLayout(item.sessionExerciseId, y, height);
+                }}
               >
+                <AnimatedTimelineRow
+                  animateIn={Boolean(insertedExerciseIds[exerciseKey])}
+                  dragOffsetY={dragOffsetY}
+                  isDragging={isDraggingRow}
+                >
+                  <View
+                    style={[
+                      styles.timelineLineItem,
+                      {
+                        opacity: isWorking ? 0.88 : 1,
+                      },
+                    ]}
+                  >
                 <View style={styles.timelineRailColumn}>
                   {!isFirst ? (
                     <View
@@ -227,7 +433,7 @@ export function TimelinePage({
                       setConfirmExerciseDeleteId(null);
                       onOpenExercise(item.sessionExerciseId);
                     }}
-                    style={({ pressed }) => [{ opacity: isWorking ? 0.45 : pressed ? 0.86 : 1 }]}
+                    style={({ pressed }) => [getTapScaleStyle(pressed, isWorking)]}
                   >
                     <View style={styles.timelineLineHeader}>
                       <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
@@ -239,17 +445,13 @@ export function TimelinePage({
                           disabled={isWorking}
                           onPress={event => {
                             event.stopPropagation();
+                            runReedLayoutAnimation();
                             setExpandedExercises(current => ({
                               ...current,
                               [exerciseKey]: !isExpanded,
                             }));
                           }}
-                          style={({ pressed }) => [
-                            styles.timelineActionButton,
-                            {
-                              opacity: isWorking ? 0.45 : pressed ? 0.86 : 1,
-                            },
-                          ]}
+                          style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
                         >
                           <Ionicons
                             color={String(theme.colors.textMuted)}
@@ -257,6 +459,15 @@ export function TimelinePage({
                             size={18}
                           />
                         </Pressable>
+                        <TimelineDragHandle
+                          disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
+                          isDragging={isDraggingRow}
+                          onDragEnd={() => {
+                            void handleDragEnd();
+                          }}
+                          onDragMove={handleDragMove}
+                          onDragStart={() => handleDragStart(item.sessionExerciseId)}
+                        />
                         <Pressable
                           accessibilityLabel={
                             confirmExerciseDeleteId === item.sessionExerciseId
@@ -275,12 +486,7 @@ export function TimelinePage({
 
                             setConfirmExerciseDeleteId(item.sessionExerciseId);
                           }}
-                          style={({ pressed }) => [
-                            styles.timelineActionButton,
-                            {
-                              opacity: isWorking ? 0.45 : pressed ? 0.86 : 1,
-                            },
-                          ]}
+                          style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
                         >
                           <Ionicons
                             color={String(
@@ -331,6 +537,7 @@ export function TimelinePage({
                             <TimelineSetRow
                               canDelete={!isWorking}
                               canOpen
+                              highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
                               key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
                               onDelete={() => onDeleteSet(setEntry.setLogId)}
                               onOpen={() => onOpenSet(item.sessionExerciseId, setEntry)}
@@ -344,13 +551,15 @@ export function TimelinePage({
                     </View>
                   </AnimatedSetList>
                 </View>
+                  </View>
+                </AnimatedTimelineRow>
               </View>
             );
           })
         )}
       </ScrollView>
 
-      <View pointerEvents="box-none" style={styles.timelineBottomDockWrap}>
+      <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
         <View
           style={[
             styles.timelineBottomDockPanel,
@@ -365,31 +574,29 @@ export function TimelinePage({
           <View style={styles.timelineBottomDockContent}>
             <Pressable
               accessibilityLabel="Finish workout"
-              disabled={isWorking || timeline.length === 0}
+              disabled={isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)}
               onPress={onToggleFinishSessionConfirm}
               style={({ pressed }) => [
                 styles.timelineBottomPrimaryPressable,
-                {
-                  opacity: isWorking || timeline.length === 0 ? 0.5 : pressed ? 0.92 : 1,
-                },
+                getTapScaleStyle(pressed, isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)),
               ]}
             >
-              <LinearGradient
-                colors={['#4f8df6', '#7a67f2', '#c15db8']}
-                end={{ x: 1, y: 0.5 }}
-                start={{ x: 0, y: 0.5 }}
-                style={styles.timelineBottomPrimaryGradient}
+              <View
+                style={[
+                  styles.timelineBottomPrimaryGradient,
+                  { backgroundColor: theme.colors.accentPrimary },
+                ]}
               >
                 <Ionicons color="#ffffff" name="flag-outline" size={16} />
                 <ReedText style={{ color: '#ffffff' }} variant="bodyStrong">
                   Finish workout
                 </ReedText>
-              </LinearGradient>
+              </View>
             </Pressable>
 
             <Pressable
               accessibilityLabel="Add exercise"
-              disabled={isWorking}
+              disabled={isWorking || Boolean(draggingExerciseId)}
               onPress={() => {
                 onClearFinishSessionConfirm();
                 onAddExercise();
@@ -399,7 +606,7 @@ export function TimelinePage({
                 {
                   backgroundColor: theme.colors.controlActiveFill,
                   borderColor: theme.colors.controlActiveBorder,
-                  opacity: isWorking ? 0.5 : pressed ? 0.92 : 1,
+                  ...getTapScaleStyle(pressed, isWorking),
                 },
               ]}
             >
@@ -411,22 +618,32 @@ export function TimelinePage({
       </View>
 
       {isConfirmingFinishSession ? (
-        <View style={styles.timelineFinishModalOverlay}>
-          <Pressable onPress={onClearFinishSessionConfirm} style={styles.timelineFinishModalBackdrop} />
-          <View
-            style={[
-              styles.timelineFinishModalCard,
-              {
-                backgroundColor: theme.colors.canvasSecondary,
-                borderColor: theme.colors.controlBorder,
-              },
-            ]}
-          >
+        <View
+          style={[
+            styles.timelineFinishModalOverlay,
+            {
+              left: -theme.spacing.lg,
+              right: -theme.spacing.lg,
+            },
+          ]}
+        >
+          <Pressable onPress={onClearFinishSessionConfirm} style={styles.timelineFinishModalBackdrop}>
+            {canUseBlur ? (
+              <BlurView intensity={scrim.blurIntensity} style={styles.timelineFinishModalBackdropBlur} tint={theme.blur.tint} />
+            ) : null}
+            <View
+              style={[
+                styles.timelineFinishModalBackdropTint,
+                { backgroundColor: scrim.backgroundColor },
+              ]}
+            />
+          </Pressable>
+          <GlassSurface contentStyle={styles.timelineFinishModalCardContent} style={styles.timelineFinishModalCard}>
             <ReedText style={styles.timelineFinishModalTitle} variant="section">
               Finish workout?
             </ReedText>
             <ReedText style={styles.timelineFinishModalSummary} tone="muted" variant="body">
-              {getFinishSummaryLabel(timeline.length, elapsedLabel)}
+              {getFinishSummaryLabel(displayTimeline.length, elapsedLabel)}
             </ReedText>
             <View style={styles.timelineFinishModalActions}>
               <Pressable
@@ -436,7 +653,7 @@ export function TimelinePage({
                   {
                     backgroundColor: theme.colors.controlFill,
                     borderColor: theme.colors.controlBorder,
-                    opacity: pressed ? 0.9 : 1,
+                    ...getTapScaleStyle(pressed),
                   },
                 ]}
               >
@@ -450,7 +667,7 @@ export function TimelinePage({
                   {
                     backgroundColor: theme.colors.accentPrimary,
                     borderColor: theme.colors.accentPrimary,
-                    opacity: isWorking ? 0.5 : pressed ? 0.9 : 1,
+                    ...getTapScaleStyle(pressed, isWorking),
                   },
                 ]}
               >
@@ -459,7 +676,7 @@ export function TimelinePage({
                 </ReedText>
               </Pressable>
             </View>
-          </View>
+          </GlassSurface>
         </View>
       ) : null}
 
@@ -503,59 +720,241 @@ function AnimatedSetList({
   expanded: boolean;
 }) {
   const progress = useRef(new Animated.Value(expanded ? 1 : 0)).current;
-  const [contentHeight, setContentHeight] = useState(0);
+  const [shouldRender, setShouldRender] = useState(expanded);
 
   useEffect(() => {
-    // useNativeDriver: false is required because we animate `height` which
-    // is a layout property. On Android with many exercises this may cause
-    // jank; if observed, consider replacing with LayoutAnimation.easeInEaseOut()
-    // for the expand/collapse transition instead.
-    Animated.timing(progress, {
-      duration: expanded ? 340 : 280,
-      easing: expanded ? Easing.bezier(0.22, 1, 0.36, 1) : Easing.inOut(Easing.cubic),
-      toValue: expanded ? 1 : 0,
-      useNativeDriver: false,
-    }).start();
+    if (expanded) {
+      setShouldRender(true);
+      requestAnimationFrame(() => {
+        createTiming(progress, 1, reedMotion.durations.standard, reedEasing.easeOut).start();
+      });
+      return;
+    }
+
+    createTiming(progress, 0, reedMotion.durations.standard, reedEasing.easeInOut).start(({ finished }) => {
+      if (finished) {
+        setShouldRender(false);
+      }
+    });
   }, [expanded, progress]);
 
-  const animatedHeight = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, Math.max(1, contentHeight)],
-  });
   const animatedOpacity = progress.interpolate({
-    inputRange: [0, 0.15, 1],
-    outputRange: [0, 0.12, 1],
+    inputRange: [0, 1],
+    outputRange: [0, 1],
   });
   const animatedTranslateY = progress.interpolate({
     inputRange: [0, 1],
-    outputRange: [-6, 0],
+    outputRange: [reedMotion.distances.expandContentY, 0],
+  });
+
+  if (!shouldRender) {
+    return null;
+  }
+
+  return (
+    <Animated.View
+      style={{
+        opacity: animatedOpacity,
+        transform: [{ translateY: animatedTranslateY }],
+      }}
+    >
+      <View>{children}</View>
+    </Animated.View>
+  );
+}
+
+function AnimatedTimelineRow({
+  animateIn,
+  children,
+  dragOffsetY,
+  isDragging,
+}: {
+  animateIn: boolean;
+  children: React.ReactNode;
+  dragOffsetY: number | Animated.Value;
+  isDragging: boolean;
+}) {
+  const insertProgress = useRef(new Animated.Value(animateIn ? 0 : 1)).current;
+
+  useEffect(() => {
+    if (!animateIn) {
+      insertProgress.setValue(1);
+      return;
+    }
+
+    createTiming(insertProgress, 1, reedMotion.durations.standard, reedEasing.easeOut).start();
+  }, [animateIn, insertProgress]);
+  const opacity = insertProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const translateY = insertProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [reedMotion.distances.listInsertY, 0],
   });
 
   return (
     <Animated.View
       style={{
-        height: animatedHeight,
-        opacity: animatedOpacity,
-        overflow: 'hidden',
-        transform: [{ translateY: animatedTranslateY }],
+        opacity,
+        transform: [{ translateY }, { translateY: dragOffsetY }],
+        zIndex: isDragging ? 30 : 1,
       }}
     >
-      <View
-        onLayout={event => {
-          const nextHeight = event.nativeEvent.layout.height;
-          if (Math.abs(nextHeight - contentHeight) > 0.5) {
-            setContentHeight(nextHeight);
-          }
-        }}
-      >
-        {children}
-      </View>
+      {children}
     </Animated.View>
   );
 }
 
+function TimelineDragHandle({
+  disabled,
+  isDragging,
+  onDragEnd,
+  onDragMove,
+  onDragStart,
+}: {
+  disabled: boolean;
+  isDragging: boolean;
+  onDragEnd: () => void;
+  onDragMove: (deltaY: number) => void;
+  onDragStart: () => void;
+}) {
+  const { theme } = useReedTheme();
+  const activationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isActiveRef = useRef(false);
+  const startPageYRef = useRef(0);
+
+  function clearActivationTimeout() {
+    if (activationTimeoutRef.current) {
+      clearTimeout(activationTimeoutRef.current);
+      activationTimeoutRef.current = null;
+    }
+  }
+
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: () => false,
+        onPanResponderGrant: (_, gestureState) => {
+          if (disabled) {
+            return;
+          }
+
+          startPageYRef.current = gestureState.y0;
+          clearActivationTimeout();
+          activationTimeoutRef.current = setTimeout(() => {
+            isActiveRef.current = true;
+            onDragStart();
+          }, reedMotion.durations.standard);
+        },
+        onPanResponderMove: (_, gestureState) => {
+          if (disabled) {
+            return;
+          }
+
+          if (!isActiveRef.current) {
+            if (Math.abs(gestureState.dy) > 8 || Math.abs(gestureState.dx) > 8) {
+              clearActivationTimeout();
+            }
+            return;
+          }
+
+          onDragMove(gestureState.moveY - startPageYRef.current);
+        },
+        onPanResponderRelease: () => {
+          clearActivationTimeout();
+          if (isActiveRef.current) {
+            onDragEnd();
+          }
+          isActiveRef.current = false;
+        },
+        onPanResponderTerminate: () => {
+          clearActivationTimeout();
+          if (isActiveRef.current) {
+            onDragEnd();
+          }
+          isActiveRef.current = false;
+        },
+        onStartShouldSetPanResponder: () => !disabled,
+        onStartShouldSetPanResponderCapture: () => !disabled,
+      }),
+    [disabled, onDragEnd, onDragMove, onDragStart],
+  );
+
+  useEffect(
+    () => () => {
+      clearActivationTimeout();
+    },
+    [],
+  );
+
+  return (
+    <View
+      {...panResponder.panHandlers}
+      accessibilityLabel="Hold and drag to reorder exercise"
+      style={[
+        styles.timelineActionButton,
+        {
+          opacity: disabled ? reedMotion.opacity.disabled : 1,
+          transform: [{ scale: isDragging ? reedMotion.scale.activeTab : 1 }],
+        },
+      ]}
+    >
+      <Ionicons
+        color={String(isDragging ? theme.colors.accentPrimary : theme.colors.textMuted)}
+        name="reorder-three-outline"
+        size={18}
+      />
+    </View>
+  );
+}
+
+function getTimelineRowShift({
+  draggedRowSize,
+  draggingExerciseId,
+  dragOriginIndex,
+  dragTargetIndex,
+  dragTranslationY,
+  index,
+  sessionExerciseId,
+}: {
+  draggedRowSize: number;
+  draggingExerciseId: Id<'liveSessionExercises'> | null;
+  dragOriginIndex: number | null;
+  dragTargetIndex: number | null;
+  dragTranslationY: Animated.Value;
+  index: number;
+  sessionExerciseId: Id<'liveSessionExercises'>;
+}) {
+  if (!draggingExerciseId || dragOriginIndex === null || dragTargetIndex === null) {
+    return 0;
+  }
+
+  if (sessionExerciseId === draggingExerciseId) {
+    return dragTranslationY;
+  }
+
+  if (dragOriginIndex < dragTargetIndex && index > dragOriginIndex && index <= dragTargetIndex) {
+    return -draggedRowSize;
+  }
+
+  if (dragOriginIndex > dragTargetIndex && index >= dragTargetIndex && index < dragOriginIndex) {
+    return draggedRowSize;
+  }
+
+  return 0;
+}
+
+function moveTimelineItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
+}
+
 function TimelineSetRow({
   canDelete,
+  highlightOnChange,
   canOpen,
   onDelete,
   onOpen,
@@ -565,6 +964,7 @@ function TimelineSetRow({
 }: {
   canDelete: boolean;
   canOpen: boolean;
+  highlightOnChange: boolean;
   onDelete: () => void;
   onOpen: () => void;
   restLabel: string | null;
@@ -573,9 +973,41 @@ function TimelineSetRow({
 }) {
   const { theme } = useReedTheme();
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const tickProgress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (!highlightOnChange) {
+      tickProgress.setValue(0);
+      return;
+    }
+
+    tickProgress.setValue(0);
+    Animated.sequence([
+      createTiming(tickProgress, 1, reedMotion.durations.micro, reedEasing.easeOut, shouldUseNativeDriver),
+      createTiming(tickProgress, 0, reedMotion.durations.micro, reedEasing.easeInOut, shouldUseNativeDriver),
+    ]).start();
+  }, [highlightOnChange, tickProgress]);
+
+  const translateY = tickProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, reedMotion.distances.setTickY],
+  });
+  const flashOpacity = tickProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, reedMotion.opacity.flash],
+  });
 
   return (
-    <View style={styles.timelineSetBlock}>
+    <Animated.View style={[styles.timelineSetBlock, { transform: [{ translateY }] }]}>
+      <Animated.View
+        style={[
+          styles.timelineSetFlash,
+          {
+            backgroundColor: theme.colors.accentPrimary,
+            opacity: flashOpacity,
+          },
+        ]}
+      />
       <View style={styles.timelineSetRowContainer}>
         <Pressable
           disabled={!canOpen}
@@ -583,7 +1015,7 @@ function TimelineSetRow({
             setIsConfirmingDelete(false);
             onOpen();
           }}
-          style={({ pressed }) => [styles.timelineSetPressable, { opacity: canOpen ? (pressed ? 0.82 : 1) : 0.5 }]}
+          style={({ pressed }) => [styles.timelineSetPressable, getTapScaleStyle(pressed, !canOpen)]}
         >
           <View style={[styles.timelineSetBranch, { backgroundColor: theme.colors.controlBorder }]} />
           <View
@@ -611,9 +1043,7 @@ function TimelineSetRow({
           }}
           style={({ pressed }) => [
             styles.timelineSetDeleteButton,
-            {
-              opacity: canDelete ? (pressed ? 0.82 : 1) : 0.5,
-            },
+            getTapScaleStyle(pressed, !canDelete),
           ]}
         >
           <Ionicons
@@ -635,6 +1065,6 @@ function TimelineSetRow({
           </ReedText>
         </View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }

@@ -22,6 +22,8 @@ The role of this file is to describe common mistakes and confusion points that a
 8. Do not wrap every control or list row in pills/cards by default; use minimal chrome and add containers only when they carry clear UX meaning.
 9. Do not persist empty workout sessions: if a session is finished with zero exercises, delete it instead of storing it.
 10. Glassmorphism tokens are single-source-of-truth in `components/ui/glass-material.ts`. Do not hardcode per-screen RGBA glass values for shells, segmented controls, or the tab pill.
+11. Motion tokens and interaction primitives are single-source-of-truth in `design/motion.ts`. Do not add per-screen springs, custom easing curves, raw `LayoutAnimation.configureNext`, or ad hoc press-feedback patterns.
+12. Do not hand-roll overlapping full-screen scene transitions in `SignedInShell` or `WorkoutSurface`. Keep one visible scene per level unless a real navigator/scene system replaces it.
 
 ## 20/80 Guardrails
 
@@ -47,6 +49,7 @@ The role of this file is to describe common mistakes and confusion points that a
 3. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
 4. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
 5. For the workout tab, `legacy/2/` is not only a visual reference. Its swipe-card, wheel-picker, and rest-loop interaction model is the intended baseline unless the developer explicitly says otherwise; do not reinterpret it as a conventional tap-to-log form flow.
+6. React Native Web in this project warns on deprecated `pointerEvents` props and `shadow*` style props. Use `style.pointerEvents` and `boxShadow` on web-facing style helpers instead of emitting legacy paths.
 
 ## Required Validation Before Finalizing
 

@@ -1,5 +1,6 @@
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { WorkoutRestRing } from './workout-rest-ring';
 import { styles } from './workout-surface.styles';
@@ -59,7 +60,7 @@ export function WorkoutExerciseRestView({
       <View style={styles.restBody}>
         <View style={styles.restMainGroup}>
           <View style={styles.restTopRow}>
-            <Pressable onPress={onToggleRestRunning} style={styles.timerButton}>
+            <Pressable onPress={onToggleRestRunning} style={({ pressed }) => [styles.timerButton, getTapScaleStyle(pressed, isWorking)]}>
               <WorkoutRestRing
                 durationSeconds={restCard.durationSeconds}
                 isRunning={restRunning}
@@ -78,7 +79,7 @@ export function WorkoutExerciseRestView({
                     {
                       backgroundColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.42)',
                       borderColor: theme.colors.controlBorder,
-                      opacity: pressed ? 0.9 : 1,
+                      ...getTapScaleStyle(pressed, isWorking),
                     },
                   ]}
                 >
@@ -105,7 +106,7 @@ export function WorkoutExerciseRestView({
                       : 'transparent',
                   borderColor: restCard.durationSeconds === seconds ? theme.colors.accentPrimary : 'transparent',
                   borderWidth: restCard.durationSeconds === seconds ? 3 : 1,
-                  opacity: pressed ? 0.9 : 1,
+                  ...getTapScaleStyle(pressed, isWorking),
                 },
               ]}
             >

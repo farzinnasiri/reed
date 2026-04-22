@@ -2,6 +2,7 @@ import { BlurView } from 'expo-blur';
 import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
 import { canUseGlassBlur, getGlassPaneTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type GlassSurfaceTone = 'default' | 'danger';
 
@@ -60,7 +61,7 @@ export function GlassSurface({
 
 const styles = StyleSheet.create({
   shell: {
-    borderRadius: 30,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',

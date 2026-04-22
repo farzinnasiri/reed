@@ -1,6 +1,7 @@
 import { StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type ReedInputProps = TextInputProps & {
   containerStyle?: StyleProp<ViewStyle>;
@@ -36,7 +37,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   input: {
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     fontSize: 15,
     minHeight: 56,

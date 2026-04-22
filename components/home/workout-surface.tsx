@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Easing, Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { ReedText } from '@/components/ui/reed-text';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import {
   cancelRestTimerBackgroundAlertsAsync,
@@ -33,14 +34,13 @@ type WorkoutSurfaceProps = {
   showStartBackButton?: boolean;
 };
 
-const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
-
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
   const session = useQuery(api.liveSessions.getCurrent, {});
   const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
   const startSession = useMutation(api.liveSessions.start);
   const addExercise = useMutation(api.liveSessions.addExercise);
+  const reorderExercises = useMutation(api.liveSessions.reorderExercises);
   const removeExercise = useMutation(api.liveSessions.removeExercise);
   const selectExercise = useMutation(api.liveSessions.selectExercise);
   const logSet = useMutation(api.liveSessions.logSet);
@@ -70,9 +70,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
-  const pageTransition = useRef(new Animated.Value(1)).current;
-  const lastAnimatedPageRef = useRef<WorkoutPage>('timeline');
-
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
   const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
@@ -225,22 +222,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }, [session?.session.startedAt]);
 
   useEffect(() => {
-    if (lastAnimatedPageRef.current === page) {
-      return;
-    }
-    lastAnimatedPageRef.current = page;
-
-    pageTransition.stopAnimation();
-    pageTransition.setValue(0);
-    Animated.timing(pageTransition, {
-      duration: theme.motion.regular + 60,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-    }).start();
-  }, [page, pageTransition, theme.motion.regular]);
-
-  useEffect(() => {
     if (page === 'timeline') {
       setLiveCardioFinishSummary(null);
     }
@@ -330,6 +311,15 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     await runMutation(async () => {
       await removeExercise({ sessionExerciseId });
     });
+  }
+
+  async function handleReorderTimeline(orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) {
+    const result = await runMutation(async () => {
+      await reorderExercises({ orderedSessionExerciseIds });
+      return true;
+    });
+
+    return Boolean(result);
   }
 
   async function handleToggleFavorite(exerciseCatalogId: Id<'exerciseCatalog'>) {
@@ -500,7 +490,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       <View style={styles.startState}>
         {showStartBackButton ? (
           <View style={styles.startTopRow}>
-            <Pressable onPress={onExitWorkout} style={styles.navButton}>
+            <Pressable onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
               <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
             </Pressable>
           </View>
@@ -529,7 +519,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
               theme.shadows.controlActive,
               {
                 backgroundColor: theme.colors.accentPrimary,
-                opacity: pressed || isWorking ? 0.9 : 1,
+                ...getTapScaleStyle(pressed, isWorking),
               },
             ]}
           >
@@ -577,100 +567,89 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     );
   }
 
+  const renderWorkoutPage = (targetPage: WorkoutPage) =>
+    targetPage === 'timeline' ? (
+      <TimelinePage
+        activeRestAfterSetNumber={session.activeCard.rest ? session.activeCard.rest.nextSetNumber - 1 : null}
+        activeRestExerciseId={session.activeCard.rest?.sessionExerciseId ?? null}
+        activeRestSeconds={session.activeCard.rest?.remainingSeconds ?? null}
+        elapsedLabel={elapsedLabel}
+        errorMessage={errorMessage}
+        isConfirmingFinishSession={isConfirmingFinishSession}
+        isWorking={isWorking}
+        onAddExercise={() => {
+          setIsConfirmingFinishSession(false);
+          setIsAddSheetOpen(true);
+        }}
+        onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
+        onDeleteSet={handleDeleteSet}
+        onExitWorkout={onExitWorkout}
+        onFinishSession={handleFinishSession}
+        onOpenExercise={handleSelectExercise}
+        onOpenSet={handleOpenSet}
+        onReorderTimeline={handleReorderTimeline}
+        onRemoveExercise={handleRemoveExercise}
+        onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
+        timeline={session.timeline}
+      />
+    ) : (
+      <ExercisePage
+        capture={{
+          card: captureCard,
+          editingSetNumber: activeSetEditor?.setNumber ?? null,
+          errorMessage,
+          isEditingSet: Boolean(activeSetEditor),
+          isPickerInteracting,
+          isWorking,
+          metricValues,
+          onCaptureSwipeRight: handleCaptureSwipeRight,
+          onPickerInteractionEnd: () => setIsPickerInteracting(false),
+          onPickerInteractionStart: () => setIsPickerInteracting(true),
+          onUpdateMetric: (key, nextValue) =>
+            setMetricValues(current => ({
+              ...current,
+              [key]: nextValue,
+            })),
+          onWarmupToggle: () => setWarmup(current => !current),
+          warmup,
+        }}
+        liveCardio={{
+          card: liveCardioCard,
+          elapsedSeconds: liveElapsedSeconds,
+          errorMessage,
+          finishSummary: liveCardioFinishSummary,
+          isWorking,
+          onAdjustMetric: handleAdjustLiveCardioMetric,
+          onFinish: handleFinishLiveCardio,
+          onOpenNextExercise: handleOpenNextExerciseAfterLiveCardio,
+          onStart: handleStartLiveCardio,
+          onToggleRunning: handleToggleLiveCardioRunning,
+        }}
+        navigation={{
+          onBackToTimeline: () => {
+            setEditingSet(null);
+            setLiveCardioFinishSummary(null);
+            setPage('timeline');
+          },
+        }}
+        rest={{
+          card: restCard,
+          errorMessage,
+          isRunning: restRunning,
+          isWorking,
+          onAdjust: handleAdjustRest,
+          onPreset: handlePresetRest,
+          onSwipeLeft: handleRestSwipeLeft,
+          onSwipeRight: handleRestSwipeRight,
+          onToggleRunning: handleToggleRestRunning,
+          remaining: restRemaining,
+        }}
+      />
+    );
+
   return (
     <View style={styles.root}>
-      <Animated.View
-        style={{
-          flex: 1,
-          opacity: pageTransition,
-          transform: [
-            {
-              translateY: pageTransition.interpolate({
-                inputRange: [0, 1],
-                outputRange: [12, 0],
-              }),
-            },
-          ],
-        }}
-      >
-        {page === 'timeline' ? (
-          <TimelinePage
-            activeRestAfterSetNumber={session.activeCard.rest ? session.activeCard.rest.nextSetNumber - 1 : null}
-            activeRestExerciseId={session.activeCard.rest?.sessionExerciseId ?? null}
-            activeRestSeconds={session.activeCard.rest?.remainingSeconds ?? null}
-            elapsedLabel={elapsedLabel}
-            errorMessage={errorMessage}
-            isConfirmingFinishSession={isConfirmingFinishSession}
-            isWorking={isWorking}
-            onAddExercise={() => {
-              setIsConfirmingFinishSession(false);
-              setIsAddSheetOpen(true);
-            }}
-            onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
-            onDeleteSet={handleDeleteSet}
-            onExitWorkout={onExitWorkout}
-            onFinishSession={handleFinishSession}
-            onOpenExercise={handleSelectExercise}
-            onOpenSet={handleOpenSet}
-            onRemoveExercise={handleRemoveExercise}
-            onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
-            timeline={session.timeline}
-          />
-        ) : (
-          <ExercisePage
-            capture={{
-              card: captureCard,
-              editingSetNumber: activeSetEditor?.setNumber ?? null,
-              errorMessage,
-              isEditingSet: Boolean(activeSetEditor),
-              isPickerInteracting,
-              isWorking,
-              metricValues,
-              onCaptureSwipeRight: handleCaptureSwipeRight,
-              onPickerInteractionEnd: () => setIsPickerInteracting(false),
-              onPickerInteractionStart: () => setIsPickerInteracting(true),
-              onUpdateMetric: (key, nextValue) =>
-                setMetricValues(current => ({
-                  ...current,
-                  [key]: nextValue,
-                })),
-              onWarmupToggle: () => setWarmup(current => !current),
-              warmup,
-            }}
-            liveCardio={{
-              card: liveCardioCard,
-              elapsedSeconds: liveElapsedSeconds,
-              errorMessage,
-              finishSummary: liveCardioFinishSummary,
-              isWorking,
-              onAdjustMetric: handleAdjustLiveCardioMetric,
-              onFinish: handleFinishLiveCardio,
-              onOpenNextExercise: handleOpenNextExerciseAfterLiveCardio,
-              onStart: handleStartLiveCardio,
-              onToggleRunning: handleToggleLiveCardioRunning,
-            }}
-            navigation={{
-              onBackToTimeline: () => {
-                setEditingSet(null);
-                setLiveCardioFinishSummary(null);
-                setPage('timeline');
-              },
-            }}
-            rest={{
-              card: restCard,
-              errorMessage,
-              isRunning: restRunning,
-              isWorking,
-              onAdjust: handleAdjustRest,
-              onPreset: handlePresetRest,
-              onSwipeLeft: handleRestSwipeLeft,
-              onSwipeRight: handleRestSwipeRight,
-              onToggleRunning: handleToggleRestRunning,
-              remaining: restRemaining,
-            }}
-          />
-        )}
-      </Animated.View>
+      {renderWorkoutPage(page)}
 
       <AddExerciseSheet
         isOpen={isAddSheetOpen}

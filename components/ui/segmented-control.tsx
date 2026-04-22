@@ -1,9 +1,11 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
+import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type SegmentedOption<T extends string> = {
   accessibilityLabel?: string;
@@ -43,12 +45,7 @@ export function SegmentedControl<T extends string>({
   );
 
   useEffect(() => {
-    Animated.timing(progress, {
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      toValue: optionIndex,
-      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-    }).start();
+    createTiming(progress, optionIndex, reedMotion.durations.standard, undefined, SHOULD_USE_NATIVE_DRIVER).start();
   }, [optionIndex, progress]);
 
   return (
@@ -87,10 +84,11 @@ export function SegmentedControl<T extends string>({
             accessibilityLabel={option.accessibilityLabel ?? option.label}
             key={option.value}
             onPress={() => onChange(option.value)}
-            style={[
+            style={({ pressed }) => [
               styles.item,
               compact ? styles.itemCompact : null,
               shouldStackItems ? styles.itemStacked : null,
+              getTapScaleStyle(pressed),
             ]}
           >
             {option.icon ? <View style={styles.iconWrap}>{option.icon}</View> : shouldStackItems ? <View style={styles.iconSpacer} /> : null}
@@ -114,14 +112,14 @@ export function SegmentedControl<T extends string>({
 
 const styles = StyleSheet.create({
   shell: {
-    borderRadius: 22,
+    borderRadius: reedRadii.lg,
     borderWidth: 1,
     flexDirection: 'row',
     padding: SHELL_PADDING,
     position: 'relative',
   },
   indicator: {
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     bottom: SHELL_PADDING,
     left: SHELL_PADDING,
@@ -130,7 +128,7 @@ const styles = StyleSheet.create({
   },
   item: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     flex: 1,
     gap: 6,
     justifyContent: 'center',

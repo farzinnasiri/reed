@@ -1,28 +1,39 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
+import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
-
-const VISIBLE_GROUP_LIMIT = 6;
+import { getFirstName, pickHomeGreeting } from './home-greetings';
 
 type HomeSurfaceProps = {
+  displayName: string;
   hasActiveSession: boolean;
   onOpenWorkout: () => void;
 };
 
 export function HomeSurface({
+  displayName,
   hasActiveSession,
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
   const startSession = useMutation(api.liveSessions.start);
+  const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [headline] = useState(() => pickHomeGreeting());
 
   const weekRange = getCurrentWeekRange();
   const weeklyStats = useQuery(api.homeStats.getWeeklyMuscleStats, {
@@ -30,13 +41,17 @@ export function HomeSurface({
     weekStartAt: weekRange.weekStartAt,
   });
 
-  const visibleGroups = (weeklyStats?.groups ?? []).slice(0, VISIBLE_GROUP_LIMIT);
-  const maxSetCount = Math.max(1, ...visibleGroups.map(group => group.setCount));
-  const overflowCount = Math.max(0, (weeklyStats?.groups.length ?? 0) - visibleGroups.length);
+  const firstName = getFirstName(displayName);
   const weekLabel = formatWeekRange(
     weeklyStats?.weekStartAt ?? weekRange.weekStartAt,
     weeklyStats?.weekEndAt ?? weekRange.weekEndAt,
   );
+  const breakdownGroups = weeklyStats?.groups ?? [];
+
+  function toggleBreakdown() {
+    runReedLayoutAnimation();
+    setIsBreakdownExpanded(current => !current);
+  }
 
   async function handleStartSession() {
     setStartError(null);
@@ -67,9 +82,10 @@ export function HomeSurface({
       style={styles.root}
     >
       <View style={styles.header}>
-        <ReedText variant="label">This Week</ReedText>
-        <ReedText variant="title">Weekly Muscle Load</ReedText>
-        <ReedText tone="muted">{weekLabel}</ReedText>
+        <ReedText tone="muted" variant="bodyStrong">
+          Hey, {firstName}
+        </ReedText>
+        <ReedText variant="title">{headline}</ReedText>
       </View>
 
       <GlassSurface style={styles.card}>
@@ -90,37 +106,49 @@ export function HomeSurface({
             styles.startButtonShell,
             {
               opacity: isStarting ? 0.7 : 1,
-              transform: [{ scale: pressed ? 0.985 : 1 }],
+              ...getTapScaleStyle(pressed, isStarting),
             },
           ]}
         >
-          <LinearGradient
-            colors={[
-              'rgba(66, 188, 255, 0.96)',
-              'rgba(26, 132, 255, 0.96)',
+          <View
+            style={[
+              styles.startButtonFill,
+              { backgroundColor: theme.colors.accentPrimary },
             ]}
-            end={{ x: 1, y: 1 }}
-            start={{ x: 0, y: 0 }}
-            style={styles.startButtonFill}
           >
-            <ReedText
-              style={styles.startButtonLabel}
-              variant="section"
-            >
+            <ReedText style={styles.startButtonLabel} variant="section">
               {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Session'}
             </ReedText>
-          </LinearGradient>
+          </View>
         </Pressable>
 
-        {startError ? (
-          <ReedText tone="danger">{startError}</ReedText>
-        ) : null}
+        {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
       </GlassSurface>
 
       <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>
-          <ReedText variant="section">Muscle Group Totals</ReedText>
-          <ReedText tone="muted">Sets, reps, and load volume aggregated from Monday to Sunday.</ReedText>
+          <View style={styles.weeklyHeaderCopy}>
+            <ReedText variant="section">Weekly load</ReedText>
+            <ReedText tone="muted">{weekLabel}</ReedText>
+          </View>
+          <Pressable
+            accessibilityLabel={isBreakdownExpanded ? 'Hide muscle load breakdown' : 'Show muscle load breakdown'}
+            onPress={toggleBreakdown}
+            style={({ pressed }) => [
+              styles.expandButton,
+              {
+                backgroundColor: theme.colors.controlFill,
+                borderColor: theme.colors.controlBorder,
+                ...getTapScaleStyle(pressed),
+              },
+            ]}
+          >
+            <Ionicons
+              color={String(theme.colors.textPrimary)}
+              name={isBreakdownExpanded ? 'chevron-up' : 'chevron-down'}
+              size={16}
+            />
+          </Pressable>
         </View>
 
         {weeklyStats === undefined ? (
@@ -130,66 +158,91 @@ export function HomeSurface({
           </View>
         ) : (
           <>
-            <View style={styles.totalsRow}>
-              <MetricChip
+            <View
+              style={[
+                styles.summaryStrip,
+                {
+                  backgroundColor: theme.colors.controlFill,
+                  borderColor: theme.colors.controlBorder,
+                },
+              ]}
+            >
+              <SummaryMetric
                 label="Sets"
-                value={formatWholeNumber(weeklyStats.totalSets)}
+                showDivider
+                value={{ value: formatWholeNumber(weeklyStats.totalSets) }}
               />
-              <MetricChip
+              <SummaryMetric
                 label="Reps"
-                value={formatWholeNumber(weeklyStats.totalReps)}
+                showDivider
+                value={{ value: formatWholeNumber(weeklyStats.totalReps) }}
               />
-              <MetricChip
+              <SummaryMetric
                 label="Volume"
-                value={formatWeeklyVolume(weeklyStats.totalVolume)}
+                value={formatVolumeDisplay(weeklyStats.totalVolume)}
               />
             </View>
 
-            {visibleGroups.length === 0 ? (
-              <View style={styles.emptyState}>
-                <ReedText tone="muted">
-                  No sets logged this week yet. Start a session to populate your muscle board.
-                </ReedText>
-              </View>
-            ) : (
-              <View style={styles.groupList}>
-                {visibleGroups.map(group => {
-                  const ratio = Math.max(0.08, group.setCount / maxSetCount);
-                  return (
-                    <View key={group.groupId} style={styles.groupRow}>
-                      <View style={styles.groupRowHeader}>
-                        <ReedText variant="bodyStrong">{group.label}</ReedText>
-                        <ReedText tone="muted">{group.setCount} sets</ReedText>
-                      </View>
-                      <View style={styles.groupDetailRow}>
-                        <ReedText tone="muted">{formatWholeNumber(group.reps)} reps</ReedText>
-                        <ReedText tone="muted">{formatWeeklyVolume(group.volume)}</ReedText>
-                      </View>
-                      <View
-                        style={[
-                          styles.groupTrack,
-                          { backgroundColor: theme.colors.controlFill, borderColor: theme.colors.controlBorder },
-                        ]}
-                      >
-                        <LinearGradient
-                          colors={[
-                            'rgba(56, 189, 248, 0.95)',
-                            'rgba(14, 165, 233, 0.95)',
+            {isBreakdownExpanded ? (
+              breakdownGroups.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <ReedText tone="muted">
+                    No sets logged this week yet. Start a session to populate your muscle board.
+                  </ReedText>
+                </View>
+              ) : (
+                <View
+                  style={[
+                    styles.breakdownList,
+                    {
+                      borderColor: theme.colors.controlBorder,
+                    },
+                  ]}
+                >
+                  {breakdownGroups.map((group, index) => (
+                    <View
+                      key={group.groupId}
+                      style={[
+                        styles.breakdownRow,
+                        index < breakdownGroups.length - 1
+                          ? {
+                              borderBottomColor: theme.colors.controlBorder,
+                            }
+                          : null,
+                      ]}
+                    >
+                      <View style={styles.breakdownRowContent}>
+                        <View
+                          style={[
+                            styles.breakdownIconShell,
+                            {
+                              backgroundColor: theme.colors.controlFill,
+                              borderColor: theme.colors.controlBorder,
+                            },
                           ]}
-                          end={{ x: 1, y: 0.5 }}
-                          start={{ x: 0, y: 0.5 }}
-                          style={[styles.groupFill, { width: `${Math.round(ratio * 100)}%` }]}
-                        />
+                        >
+                          <Ionicons
+                            color={String(theme.colors.accentPrimary)}
+                            name={getMuscleGroupIconName(group.groupId)}
+                            size={20}
+                          />
+                        </View>
+                        <View style={styles.breakdownCopy}>
+                          <ReedText variant="bodyStrong">{group.label}</ReedText>
+                          <ReedText tone="muted">
+                            {formatWholeNumber(group.reps)} reps
+                            {'  •  '}
+                            {formatWeeklyVolume(group.volume)}
+                            {'  •  '}
+                            {formatSetCount(group.setCount)}
+                          </ReedText>
+                        </View>
                       </View>
                     </View>
-                  );
-                })}
-
-                {overflowCount > 0 ? (
-                  <ReedText tone="muted">+{overflowCount} more groups logged this week.</ReedText>
-                ) : null}
-              </View>
-            )}
+                  ))}
+                </View>
+              )
+            ) : null}
           </>
         )}
       </GlassSurface>
@@ -197,25 +250,79 @@ export function HomeSurface({
   );
 }
 
-function MetricChip({ label, value }: { label: string; value: string }) {
+function SummaryMetric({
+  label,
+  showDivider = false,
+  value,
+}: {
+  label: string;
+  showDivider?: boolean;
+  value: MetricDisplay;
+}) {
   const { theme } = useReedTheme();
 
   return (
-    <View
-      style={[
-        styles.metricChip,
-        {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
-        },
-      ]}
-    >
+    <View style={styles.summaryMetric}>
+      <View style={styles.summaryValueRow}>
+        <ReedText style={styles.summaryValue} variant="title">
+          {value.value}
+        </ReedText>
+        {value.unit ? (
+          <ReedText style={styles.summaryValueUnit} tone="muted" variant="bodyStrong">
+            {value.unit}
+          </ReedText>
+        ) : null}
+      </View>
       <ReedText tone="muted" variant="label">
         {label}
       </ReedText>
-      <ReedText variant="bodyStrong">{value}</ReedText>
+      {showDivider ? (
+        <View
+          style={[
+            styles.summaryDivider,
+            { backgroundColor: theme.colors.controlBorder },
+          ]}
+        />
+      ) : null}
     </View>
   );
+}
+
+type MetricDisplay = {
+  unit?: string;
+  value: string;
+};
+
+function getMuscleGroupIconName(groupId: string): React.ComponentProps<typeof Ionicons>['name'] {
+  if (groupId === 'arms') {
+    return 'barbell-outline';
+  }
+
+  if (groupId === 'shoulders') {
+    return 'triangle-outline';
+  }
+
+  if (groupId === 'chest') {
+    return 'body-outline';
+  }
+
+  if (groupId === 'back') {
+    return 'shirt-outline';
+  }
+
+  if (groupId === 'cardio') {
+    return 'heart-outline';
+  }
+
+  if (groupId === 'legs') {
+    return 'walk-outline';
+  }
+
+  if (groupId === 'core') {
+    return 'ellipse-outline';
+  }
+
+  return 'fitness-outline';
 }
 
 function getCurrentWeekRange() {
@@ -250,6 +357,20 @@ function formatWholeNumber(value: number) {
   return Math.round(value).toLocaleString('en');
 }
 
+function formatVolumeDisplay(value: number): MetricDisplay {
+  const formatted = formatWeeklyVolume(value);
+  const [amount, unit] = formatted.split(' ');
+
+  return {
+    unit,
+    value: amount ?? formatted,
+  };
+}
+
+function formatSetCount(value: number) {
+  return `${value} ${value === 1 ? 'set' : 'sets'}`;
+}
+
 function getErrorMessage(error: unknown) {
   if (typeof error === 'object' && error !== null && 'message' in error) {
     const message = (error as { message?: string }).message;
@@ -273,19 +394,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   card: {
-    borderRadius: 30,
+    borderRadius: reedRadii.xl,
     marginHorizontal: 2,
   },
   cardHeader: {
-    gap: 4,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  weeklyHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  expandButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.sm,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 34,
+    width: 42,
   },
   startButtonShell: {
-    borderRadius: 999,
+    borderRadius: reedRadii.lg,
     overflow: 'hidden',
   },
   startButtonFill: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.lg,
     justifyContent: 'center',
     minHeight: 62,
     paddingHorizontal: 20,
@@ -297,49 +433,74 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    minHeight: 80,
+    minHeight: 72,
   },
-  totalsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  metricChip: {
-    borderRadius: 18,
+  summaryStrip: {
+    borderRadius: reedRadii.lg,
     borderWidth: 1,
-    flex: 1,
-    gap: 1,
-    minHeight: 74,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  emptyState: {
-    minHeight: 92,
-    justifyContent: 'center',
-  },
-  groupList: {
-    gap: 12,
-  },
-  groupRow: {
-    gap: 5,
-  },
-  groupRowHeader: {
-    alignItems: 'center',
     flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  groupDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  groupTrack: {
-    borderRadius: 999,
-    borderWidth: 1,
-    height: 10,
     overflow: 'hidden',
   },
-  groupFill: {
-    borderRadius: 999,
-    height: '100%',
-    minWidth: 8,
+  summaryMetric: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 2,
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    position: 'relative',
+  },
+  summaryValueRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  summaryValue: {
+    textAlign: 'center',
+  },
+  summaryValueUnit: {
+    fontSize: 22,
+    lineHeight: 28,
+    marginBottom: 2,
+  },
+  summaryDivider: {
+    bottom: 16,
+    position: 'absolute',
+    right: 0,
+    top: 16,
+    width: 1,
+  },
+  breakdownList: {
+    borderTopWidth: 1,
+    gap: 0,
+    paddingTop: 8,
+  },
+  breakdownRow: {
+    borderBottomWidth: 1,
+    gap: 3,
+    minHeight: 60,
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  breakdownRowContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  breakdownIconShell: {
+    alignItems: 'center',
+    borderRadius: reedRadii.md,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  breakdownCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  emptyState: {
+    minHeight: 80,
+    justifyContent: 'center',
   },
 });

@@ -8,6 +8,7 @@ import {
   getSetVolume,
   resolveWeeklyMuscleGroups,
   weeklyMuscleGroupLabels,
+  weeklyPrimaryMuscleGroupOrder,
   type WeeklyMuscleGroupId,
 } from '../domains/workout/weekly-muscle-stats';
 import { roundMetric } from '../domains/workout/recipes';
@@ -90,20 +91,24 @@ export const getWeeklyMuscleStats = query({
       }
     }
 
-    const groups = Array.from(totalsByGroup.values())
-      .sort((left, right) => {
-        if (right.setCount !== left.setCount) {
-          return right.setCount - left.setCount;
-        }
-        if (right.reps !== left.reps) {
-          return right.reps - left.reps;
-        }
-        return right.volume - left.volume;
-      })
-      .map(group => ({
-        ...group,
-        label: weeklyMuscleGroupLabels[group.groupId],
-      }));
+    const groups = [
+      ...weeklyPrimaryMuscleGroupOrder.map(groupId => {
+        const group = totalsByGroup.get(groupId);
+        return {
+          groupId,
+          label: weeklyMuscleGroupLabels[groupId],
+          reps: group?.reps ?? 0,
+          setCount: group?.setCount ?? 0,
+          volume: group?.volume ?? 0,
+        };
+      }),
+      ...Array.from(totalsByGroup.values())
+        .filter(group => !weeklyPrimaryMuscleGroupOrder.includes(group.groupId))
+        .map(group => ({
+          ...group,
+          label: weeklyMuscleGroupLabels[group.groupId],
+        })),
+    ];
 
     return {
       groups,

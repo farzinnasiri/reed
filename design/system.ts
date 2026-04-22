@@ -14,13 +14,15 @@ const spacing = {
   xxxl: 48,
 } as const;
 
-const radii = {
-  sm: 14,
-  md: 20,
-  lg: 28,
-  xl: 36,
+export const reedRadii = {
+  sm: 12,
+  md: 16,
+  lg: 20,
+  xl: 24,
   pill: 999,
 } as const;
+
+const radii = reedRadii;
 
 const typography = {
   display: {
@@ -162,15 +164,15 @@ export const lightTheme: ReedTheme = {
   radii,
   typography,
   colors: {
-    canvas: '#e2e8f0',
-    canvasSecondary: '#f8fafc',
+    canvas: '#f7f7f4',
+    canvasSecondary: '#ffffff',
     glowPrimary: 'rgba(14, 165, 233, 0.16)',
     glowSecondary: 'rgba(244, 63, 94, 0.14)',
     textPrimary: '#0f172a',
     textSecondary: '#334155',
     textMuted: '#64748b',
-    accentPrimary: '#0ea5e9',
-    accentPrimaryText: '#082f49',
+    accentPrimary: '#2455e6',
+    accentPrimaryText: '#f8fafc',
     accentSecondary: '#f43f5e',
     borderSoft: 'rgba(148, 163, 184, 0.22)',
     borderStrong: 'rgba(100, 116, 139, 0.22)',
@@ -193,7 +195,7 @@ export const lightTheme: ReedTheme = {
     dangerBorder: 'rgba(248, 113, 113, 0.24)',
   },
   gradients: {
-    background: ['#edf3f9', '#e2e8f0', '#dce4ee'],
+    background: ['#ffffff', '#f7f7f4', '#f7f7f4'],
     glass: ['rgba(255, 255, 255, 0.72)', 'rgba(255, 255, 255, 0.16)'],
     glassDanger: ['rgba(255, 255, 255, 0.66)', 'rgba(254, 226, 226, 0.56)'],
   },
@@ -229,9 +231,9 @@ export const lightTheme: ReedTheme = {
     tint: 'light',
   },
   motion: {
-    quick: 120,
-    regular: 220,
-    slow: 360,
+    quick: 100,
+    regular: 180,
+    slow: 240,
   },
 };
 
@@ -241,15 +243,15 @@ export const darkTheme: ReedTheme = {
   radii,
   typography,
   colors: {
-    canvas: '#05070b',
-    canvasSecondary: '#101319',
+    canvas: '#040404',
+    canvasSecondary: '#0a0a0a',
     glowPrimary: 'rgba(56, 189, 248, 0.16)',
     glowSecondary: 'rgba(251, 113, 133, 0.14)',
     textPrimary: '#f8fafc',
     textSecondary: '#d4d4d8',
     textMuted: '#a1a1aa',
-    accentPrimary: '#38bdf8',
-    accentPrimaryText: '#082f49',
+    accentPrimary: '#2455e6',
+    accentPrimaryText: '#f8fafc',
     accentSecondary: '#fb7185',
     borderSoft: 'rgba(255, 255, 255, 0.09)',
     borderStrong: 'rgba(255, 255, 255, 0.16)',
@@ -272,7 +274,7 @@ export const darkTheme: ReedTheme = {
     dangerBorder: 'rgba(248, 113, 113, 0.18)',
   },
   gradients: {
-    background: ['#05070b', '#090d12', '#10151d'],
+    background: ['#040404', '#040404', '#0a0a0a'],
     glass: ['rgba(39, 39, 42, 0.76)', 'rgba(24, 24, 27, 0.34)'],
     glassDanger: ['rgba(69, 10, 10, 0.58)', 'rgba(24, 24, 27, 0.4)'],
   },
@@ -308,9 +310,9 @@ export const darkTheme: ReedTheme = {
     tint: 'dark',
   },
   motion: {
-    quick: 120,
-    regular: 220,
-    slow: 360,
+    quick: 100,
+    regular: 180,
+    slow: 240,
   },
 };
 

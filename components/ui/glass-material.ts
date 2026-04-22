@@ -21,6 +21,11 @@ type GlassControlTokens = {
   shadowStyle: ViewStyle;
 };
 
+type GlassScrimTokens = {
+  backgroundColor: string;
+  blurIntensity: number;
+};
+
 type BackdropDiffusionTokens = {
   cool: readonly [string, string, string];
   coolOpacity: number;
@@ -64,6 +69,20 @@ export function getGlassControlTokens(theme: ReedTheme): GlassControlTokens {
   };
 }
 
+export function getGlassScrimTokens(theme: ReedTheme): GlassScrimTokens {
+  if (theme.mode === 'dark') {
+    return {
+      backgroundColor: 'rgba(2, 6, 23, 0.18)',
+      blurIntensity: 18,
+    };
+  }
+
+  return {
+    backgroundColor: 'rgba(248, 250, 255, 0.12)',
+    blurIntensity: 18,
+  };
+}
+
 export function getBackdropDiffusionTokens(theme: ReedTheme): BackdropDiffusionTokens {
   if (theme.mode === 'dark') {
     return {
@@ -90,8 +109,13 @@ function createGlassShadowStyle(): ViewStyle {
     return {};
   }
 
+  if (Platform.OS === 'web') {
+    return {
+      boxShadow: '0px 8px 16px rgba(15, 23, 42, 0.08)',
+    } as ViewStyle;
+  }
+
   return {
-    elevation: 5,
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.08,

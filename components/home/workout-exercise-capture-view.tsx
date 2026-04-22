@@ -2,6 +2,7 @@ import { Pressable, View } from 'react-native';
 import type { RecipeFieldDefinition } from '@/domains/workout/recipes';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { WorkoutMetricPicker } from './workout-metric-picker';
 import { styles } from './workout-surface.styles';
@@ -88,7 +89,7 @@ export function WorkoutExerciseCaptureView({
               {
                 backgroundColor: warmup ? warmupActiveFill : theme.colors.controlFill,
                 borderColor: warmup ? warmupActiveBorder : theme.colors.controlBorder,
-                opacity: pressed ? 0.9 : 1,
+                ...getTapScaleStyle(pressed, isWorking),
               },
             ]}
           >

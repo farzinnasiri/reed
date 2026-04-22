@@ -1,13 +1,14 @@
 import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import {
   TAB_PILL_MIN_HEIGHT,
   canUseGlassBlur,
   getGlassControlTokens,
   getGlassPaneTokens,
 } from '@/components/ui/glass-material';
+import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 
 type GlassTabPillItem<T extends string> = {
@@ -41,13 +42,8 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
   );
 
   useEffect(() => {
-    Animated.timing(progress, {
-      duration: theme.motion.regular,
-      easing: Easing.out(Easing.cubic),
-      toValue: activeIndex,
-      useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-    }).start();
-  }, [activeIndex, progress, theme.motion.regular]);
+    createTiming(progress, activeIndex, reedMotion.durations.standard, undefined, SHOULD_USE_NATIVE_DRIVER).start();
+  }, [activeIndex, progress]);
 
   return (
     <View
@@ -85,25 +81,52 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
 
       <View style={styles.row}>
         {items.map(item => (
-          <Pressable
+          <GlassTabPillButton
             accessibilityLabel={item.accessibilityLabel}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: item.isActive }}
+            icon={item.icon}
+            index={items.findIndex(candidate => candidate.id === item.id)}
+            isActive={item.isActive}
             key={item.id}
             onPress={() => onPress(item.id)}
-            style={({ pressed }) => [
-              styles.item,
-              {
-                opacity: pressed ? 0.9 : 1,
-                transform: [{ scale: pressed ? 0.97 : 1 }],
-              },
-            ]}
-          >
-            {item.icon}
-          </Pressable>
+            progress={progress}
+          />
         ))}
       </View>
     </View>
+  );
+}
+
+function GlassTabPillButton({
+  accessibilityLabel,
+  icon,
+  index,
+  isActive,
+  onPress,
+  progress,
+}: {
+  accessibilityLabel: string;
+  icon: ReactNode;
+  index: number;
+  isActive: boolean;
+  onPress: () => void;
+  progress: Animated.Value;
+}) {
+  const iconScale = progress.interpolate({
+    extrapolate: 'clamp',
+    inputRange: [index - 1, index, index + 1],
+    outputRange: [1, reedMotion.scale.activeTab, 1],
+  });
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isActive }}
+      onPress={onPress}
+      style={({ pressed }) => [styles.item, getTapScaleStyle(pressed)]}
+    >
+      <Animated.View style={{ transform: [{ scale: iconScale }] }}>{icon}</Animated.View>
+    </Pressable>
   );
 }
 

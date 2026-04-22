@@ -12,6 +12,7 @@ import {
   roundMetricValue,
 } from '@/domains/workout/metric-formatting';
 import { ReedText } from '@/components/ui/reed-text';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { useRunningTicker } from './use-running-ticker';
 
@@ -286,7 +287,7 @@ export function WorkoutMetricPicker({
           <Pressable
             disabled={!isDurationMetric}
             onPress={beginDurationEdit}
-            style={({ pressed }) => [{ opacity: pressed && isDurationMetric ? 0.88 : 1 }]}
+            style={({ pressed }) => (isDurationMetric ? [getTapScaleStyle(pressed)] : undefined)}
           >
             <ReedText
               style={{
@@ -309,7 +310,7 @@ export function WorkoutMetricPicker({
               {
                 backgroundColor: theme.colors.controlFill,
                 borderColor: theme.colors.controlBorder,
-                opacity: pressed ? 0.9 : 1,
+                ...getTapScaleStyle(pressed),
               },
             ]}
           >

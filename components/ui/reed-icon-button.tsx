@@ -1,5 +1,7 @@
 import { Pressable, StyleSheet, type PressableProps } from 'react-native';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type ReedIconButtonProps = Omit<PressableProps, 'style'> & {
   children: React.ReactNode;
@@ -23,8 +25,7 @@ export function ReedIconButton({
         {
           backgroundColor: variant === 'ghost' ? 'transparent' : theme.colors.controlFill,
           borderColor: variant === 'ghost' ? 'transparent' : theme.colors.controlBorder,
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed ? 0.97 : 1 }],
+          ...getTapScaleStyle(pressed, disabled),
         },
       ]}
       {...props}
@@ -37,7 +38,7 @@ export function ReedIconButton({
 const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     height: 44,
     justifyContent: 'center',

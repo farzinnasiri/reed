@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useRef } from 'react';
-import { Animated, Easing, PanResponder, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Animated, PanResponder, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
+import { createTiming, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -138,12 +140,7 @@ export function WorkoutSwipeCard({
     const completedLeft = deltaX < -SWIPE_THRESHOLD && onSwipeLeft;
 
     if (!completedRight && !completedLeft) {
-      Animated.spring(translateX, {
-        bounciness: 8,
-        speed: 18,
-        toValue: 0,
-        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-      }).start();
+      createTiming(translateX, 0, reedMotion.durations.micro, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER).start();
       return;
     }
 
@@ -151,12 +148,13 @@ export function WorkoutSwipeCard({
     const target = completedRight ? flyoutDistance : -flyoutDistance;
 
     await new Promise<void>(resolve => {
-      Animated.timing(translateX, {
-        duration: 320,
-        easing: Easing.out(Easing.cubic),
-        toValue: target,
-        useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-      }).start(() => resolve());
+      createTiming(
+        translateX,
+        target,
+        reedMotion.durations.standard,
+        reedEasing.easeOut,
+        SHOULD_USE_NATIVE_DRIVER,
+      ).start(() => resolve());
     });
 
     try {
@@ -167,21 +165,11 @@ export function WorkoutSwipeCard({
       }
     } finally {
       translateX.setValue(0);
-      entryScale.setValue(0.9);
-      entryTranslateY.setValue(36);
+      entryScale.setValue(0.98);
+      entryTranslateY.setValue(8);
       Animated.parallel([
-        Animated.timing(entryScale, {
-          duration: 350,
-          easing: Easing.bezier(0.175, 0.885, 0.32, 1.275),
-          toValue: 1,
-          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-        }),
-        Animated.timing(entryTranslateY, {
-          duration: 350,
-          easing: Easing.out(Easing.cubic),
-          toValue: 0,
-          useNativeDriver: SHOULD_USE_NATIVE_DRIVER,
-        }),
+        createTiming(entryScale, 1, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER),
+        createTiming(entryTranslateY, 0, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER),
       ]).start();
       isHandlingSwipe.current = false;
     }
@@ -273,7 +261,7 @@ const styles = StyleSheet.create({
   },
   underlay: {
     alignItems: 'center',
-    borderRadius: 34,
+    borderRadius: reedRadii.xl,
     bottom: 0,
     justifyContent: 'center',
     overflow: 'hidden',
@@ -298,7 +286,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1.6,
   },
   card: {
-    borderRadius: 34,
+    borderRadius: reedRadii.xl,
     borderWidth: 1.5,
     flex: 1,
     overflow: 'hidden',

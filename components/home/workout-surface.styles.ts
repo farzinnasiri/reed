@@ -1,4 +1,5 @@
 import { StyleSheet } from 'react-native';
+import { reedRadii } from '@/design/system';
 
 export const styles = StyleSheet.create({
   root: {
@@ -149,7 +150,7 @@ export const styles = StyleSheet.create({
     zIndex: 2,
   },
   timelineLineCopy: {
-    borderRadius: 24,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     flex: 1,
     gap: 8,
@@ -198,6 +199,13 @@ export const styles = StyleSheet.create({
   },
   timelineSetBlock: {
     gap: 4,
+    overflow: 'hidden',
+    position: 'relative',
+    borderRadius: reedRadii.sm,
+  },
+  timelineSetFlash: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: reedRadii.sm,
   },
   timelineSetRowContainer: {
     alignItems: 'center',
@@ -323,7 +331,7 @@ export const styles = StyleSheet.create({
     maxWidth: 230,
   },
   liveCardShell: {
-    borderRadius: 34,
+    borderRadius: reedRadii.xl,
     borderWidth: 1.5,
     flex: 1,
     minHeight: 0,
@@ -403,7 +411,7 @@ export const styles = StyleSheet.create({
   },
   livePrimaryButton: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.sm,
     justifyContent: 'center',
     minHeight: 46,
     minWidth: 116,
@@ -412,7 +420,7 @@ export const styles = StyleSheet.create({
   },
   liveFinishButton: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 46,
@@ -475,7 +483,7 @@ export const styles = StyleSheet.create({
   },
   restStep: {
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: reedRadii.lg,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 60,
@@ -493,7 +501,7 @@ export const styles = StyleSheet.create({
   },
   presetChip: {
     alignItems: 'center',
-    borderRadius: 30,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 66,
@@ -502,14 +510,14 @@ export const styles = StyleSheet.create({
   },
   primaryAction: {
     alignItems: 'center',
-    borderRadius: 20,
+    borderRadius: reedRadii.sm,
     justifyContent: 'center',
     minHeight: 52,
     paddingHorizontal: 18,
   },
   secondaryAction: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
@@ -525,7 +533,7 @@ export const styles = StyleSheet.create({
     zIndex: 20,
   },
   timelineBottomDockPanel: {
-    borderRadius: 24,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     overflow: 'hidden',
   },
@@ -536,12 +544,12 @@ export const styles = StyleSheet.create({
     paddingTop: 12,
   },
   timelineBottomPrimaryPressable: {
-    borderRadius: 16,
+    borderRadius: reedRadii.sm,
     overflow: 'hidden',
   },
   timelineBottomPrimaryGradient: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: reedRadii.sm,
     flexDirection: 'row',
     gap: 8,
     justifyContent: 'center',
@@ -550,7 +558,7 @@ export const styles = StyleSheet.create({
   },
   timelineBottomSecondaryButton: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
@@ -565,17 +573,23 @@ export const styles = StyleSheet.create({
   },
   timelineFinishModalBackdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(2, 6, 23, 0.35)',
+  },
+  timelineFinishModalBackdropBlur: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  timelineFinishModalBackdropTint: {
+    ...StyleSheet.absoluteFillObject,
   },
   timelineFinishModalCard: {
-    borderRadius: 22,
-    borderWidth: 1,
-    gap: 14,
+    borderRadius: reedRadii.lg,
     maxWidth: 340,
+    width: '84%',
+  },
+  timelineFinishModalCardContent: {
+    gap: 14,
     paddingHorizontal: 18,
     paddingBottom: 18,
     paddingTop: 16,
-    width: '84%',
   },
   timelineFinishModalTitle: {
     textAlign: 'center',
@@ -590,7 +604,7 @@ export const styles = StyleSheet.create({
   },
   timelineFinishModalButton: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
@@ -613,7 +627,7 @@ export const styles = StyleSheet.create({
     padding: 12,
   },
   sheetPanel: {
-    borderRadius: 30,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     gap: 12,
     height: '82%',
@@ -675,7 +689,7 @@ export const styles = StyleSheet.create({
   },
   searchShell: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
@@ -714,8 +728,8 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   filterSheetPanel: {
-    borderTopLeftRadius: 26,
-    borderTopRightRadius: 26,
+    borderTopLeftRadius: reedRadii.xl,
+    borderTopRightRadius: reedRadii.xl,
     borderWidth: 1,
     maxHeight: '82%',
     paddingHorizontal: 16,
@@ -754,7 +768,7 @@ export const styles = StyleSheet.create({
   },
   filterSearchShell: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 8,

@@ -301,6 +301,50 @@ export const removeExercise = mutation({
   },
 });
 
+export const reorderExercises = mutation({
+  args: { orderedSessionExerciseIds: v.array(v.id('liveSessionExercises')) },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const sessionExercises = (await ctx.db
+      .query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+      .collect()) as Doc<'liveSessionExercises'>[];
+
+    if (sessionExercises.length !== args.orderedSessionExerciseIds.length) {
+      throw new ConvexError('The timeline reorder payload is out of date.');
+    }
+
+    const sessionExerciseIds = new Set(sessionExercises.map(entry => entry._id));
+    const orderedIds = new Set(args.orderedSessionExerciseIds);
+
+    if (sessionExerciseIds.size !== orderedIds.size) {
+      throw new ConvexError('The timeline reorder payload is invalid.');
+    }
+
+    for (const sessionExerciseId of args.orderedSessionExerciseIds) {
+      if (!sessionExerciseIds.has(sessionExerciseId)) {
+        throw new ConvexError('The timeline reorder payload references an unknown exercise.');
+      }
+    }
+
+    const currentPositions = new Map(sessionExercises.map(entry => [entry._id, entry.position]));
+
+    await Promise.all(
+      args.orderedSessionExerciseIds.map((sessionExerciseId, index) => {
+        const currentPosition = currentPositions.get(sessionExerciseId);
+        if (currentPosition === index) {
+          return Promise.resolve();
+        }
+
+        return ctx.db.patch(sessionExerciseId, { position: index });
+      }),
+    );
+
+    return null;
+  },
+});
+
 export const start = mutation({
   args: {},
   handler: async ctx => {

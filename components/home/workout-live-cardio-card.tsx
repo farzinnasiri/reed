@@ -1,6 +1,7 @@
 import { Pressable, View } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import type { RecipeFieldDefinition } from '@/domains/workout/recipes';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
 import type { CaptureCard, LiveCardioCard, LiveCardioFinishSummary } from './workout-surface.types';
@@ -75,7 +76,7 @@ export function WorkoutLiveCardioCard({
               styles.livePrimaryButton,
               {
                 backgroundColor: theme.colors.accentPrimary,
-                opacity: pressed || isWorking ? 0.9 : 1,
+                ...getTapScaleStyle(pressed, isWorking),
               },
             ]}
           >
@@ -90,7 +91,7 @@ export function WorkoutLiveCardioCard({
               styles.liveFinishButton,
               {
                 borderColor: theme.colors.controlActiveBorder,
-                opacity: pressed || isWorking || !liveCardioFinishSummary.nextExerciseId ? 0.75 : 1,
+                ...getTapScaleStyle(pressed, isWorking || !liveCardioFinishSummary.nextExerciseId),
               },
             ]}
           >
@@ -124,9 +125,7 @@ export function WorkoutLiveCardioCard({
               onPress={onToggleLiveCardioRunning}
               style={({ pressed }) => [
                 styles.liveRingButton,
-                {
-                  opacity: pressed || isWorking ? 0.9 : 1,
-                },
+                getTapScaleStyle(pressed, isWorking),
               ]}
             >
               <LiveCardioElapsedTimer
@@ -144,7 +143,7 @@ export function WorkoutLiveCardioCard({
                   styles.livePrimaryButton,
                   {
                     backgroundColor: theme.colors.accentPrimary,
-                    opacity: pressed || isWorking ? 0.9 : 1,
+                    ...getTapScaleStyle(pressed, isWorking),
                   },
                 ]}
               >
@@ -163,7 +162,7 @@ export function WorkoutLiveCardioCard({
                   styles.liveFinishButton,
                   {
                     borderColor: theme.colors.controlActiveBorder,
-                    opacity: pressed || isWorking ? 0.9 : 1,
+                    ...getTapScaleStyle(pressed, isWorking),
                   },
                 ]}
               >
@@ -244,7 +243,7 @@ export function WorkoutLiveCardioCard({
               styles.livePrimaryButton,
               {
                 backgroundColor: theme.colors.accentPrimary,
-                opacity: pressed || isWorking ? 0.9 : 1,
+                ...getTapScaleStyle(pressed, isWorking),
               },
             ]}
           >
@@ -286,7 +285,7 @@ function StepButton({
         {
           backgroundColor: theme.colors.controlFill,
           borderColor: theme.colors.controlBorder,
-          opacity: pressed || disabled ? 0.9 : 1,
+          ...getTapScaleStyle(pressed, disabled),
         },
       ]}
     >

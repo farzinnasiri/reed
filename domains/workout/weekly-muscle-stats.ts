@@ -2,6 +2,16 @@ import { roundMetric } from './recipes';
 
 export type WeeklyMuscleGroupId = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core' | 'cardio' | 'other';
 
+export const weeklyPrimaryMuscleGroupOrder: WeeklyMuscleGroupId[] = [
+  'arms',
+  'shoulders',
+  'chest',
+  'back',
+  'legs',
+  'core',
+  'cardio',
+] as const;
+
 export const weeklyMuscleGroupLabels: Record<WeeklyMuscleGroupId, string> = {
   arms: 'Arms',
   back: 'Back',

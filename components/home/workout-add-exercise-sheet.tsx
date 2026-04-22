@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
+import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
 import type { AddExerciseSheetData, CatalogItem } from './workout-surface.types';
@@ -30,13 +31,18 @@ export function AddExerciseSheet({
   onToggleFavorite,
 }: AddExerciseSheetProps) {
   const { theme } = useReedTheme();
+  const { height } = useWindowDimensions();
   const panelFill =
     theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.95)' : 'rgba(248, 250, 252, 0.94)';
+  const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
+  const filterSheetProgress = useRef(new Animated.Value(0)).current;
   const [searchText, setSearchText] = useState('');
   const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<Id<'exerciseCatalog'>[]>([]);
+  const [isSheetMounted, setIsSheetMounted] = useState(isOpen);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
+  const [isFilterSheetMounted, setIsFilterSheetMounted] = useState(false);
   const [muscleSearchText, setMuscleSearchText] = useState('');
   const [equipmentSearchText, setEquipmentSearchText] = useState('');
   const [activeFilterSection, setActiveFilterSection] = useState<FilterSectionKey>('muscles');
@@ -85,23 +91,52 @@ export function AddExerciseSheet({
   );
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setIsSheetMounted(true);
+      requestAnimationFrame(() => {
+        createTiming(sheetProgress, 1, reedMotion.durations.mode, reedEasing.easeOut).start();
+      });
+      return;
+    }
+
+    setIsFilterSheetOpen(false);
+    createTiming(sheetProgress, 0, reedMotion.durations.mode, reedEasing.easeInOut).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
+
+      setIsSheetMounted(false);
       setSearchText('');
       setSelectedMuscleGroups([]);
       setSelectedEquipment([]);
       setSelectedExerciseIds([]);
-      setIsFilterSheetOpen(false);
       setMuscleSearchText('');
       setEquipmentSearchText('');
       setActiveFilterSection('muscles');
-    }
-  }, [isOpen]);
+    });
+  }, [isOpen, sheetProgress]);
 
   useEffect(() => {
     if (data) {
       setStableData(current => (current === data ? current : data));
     }
   }, [data]);
+
+  useEffect(() => {
+    if (isFilterSheetOpen) {
+      setIsFilterSheetMounted(true);
+      requestAnimationFrame(() => {
+        createTiming(filterSheetProgress, 1, reedMotion.durations.mode, reedEasing.easeOut).start();
+      });
+      return;
+    }
+
+    createTiming(filterSheetProgress, 0, reedMotion.durations.mode, reedEasing.easeInOut).start(({ finished }) => {
+      if (finished) {
+        setIsFilterSheetMounted(false);
+      }
+    });
+  }, [filterSheetProgress, isFilterSheetOpen]);
 
   function toggleSelectedExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
     setSelectedExerciseIds(current =>
@@ -119,16 +154,41 @@ export function AddExerciseSheet({
     onAddBulk(selectedExerciseIds);
   }
 
+  if (!isSheetMounted) {
+    return null;
+  }
+
+  const overlayOpacity = sheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.4],
+  });
+  const panelTranslateY = sheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [height, 0],
+  });
+  const filterOverlayOpacity = filterSheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.4],
+  });
+  const filterTranslateY = filterSheetProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [height * 0.5, 0],
+  });
+
   return (
-    <Modal animationType="fade" onRequestClose={onClose} transparent visible={isOpen}>
+    <Modal animationType="none" onRequestClose={onClose} transparent visible={isSheetMounted}>
       <View style={styles.sheetOverlay}>
+        <Animated.View
+          style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', opacity: overlayOpacity, pointerEvents: 'none' }]}
+        />
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
-        <View
+        <Animated.View
           style={[
             styles.sheetPanel,
             {
               backgroundColor: panelFill,
               borderColor: theme.colors.borderSoft,
+              transform: [{ translateY: panelTranslateY }],
             },
           ]}
         >
@@ -142,7 +202,7 @@ export function AddExerciseSheet({
                     styles.bulkAddHeaderButton,
                     {
                       backgroundColor: theme.colors.accentPrimary,
-                      opacity: pressed || isWorking ? 0.9 : 1,
+                      ...getTapScaleStyle(pressed, isWorking),
                     },
                   ]}
                 >
@@ -152,7 +212,7 @@ export function AddExerciseSheet({
                 </Pressable>
               ) : null}
 
-              <Pressable onPress={onClose} style={styles.sheetClose}>
+              <Pressable onPress={onClose} style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}>
                 <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
               </Pressable>
             </View>
@@ -211,7 +271,7 @@ export function AddExerciseSheet({
                     setSelectedMuscleGroups([]);
                     setSelectedEquipment([]);
                   }}
-                  style={styles.filterSummaryClear}
+                  style={({ pressed }) => [styles.filterSummaryClear, getTapScaleStyle(pressed, activeFilterCount === 0)]}
                 >
                   <ReedText tone={activeFilterCount === 0 ? 'muted' : 'default'} variant="caption">
                     Clear
@@ -256,9 +316,7 @@ export function AddExerciseSheet({
                   onPress={() => setIsFilterSheetOpen(true)}
                   style={({ pressed }) => [
                     styles.searchFilterButton,
-                    {
-                      opacity: pressed ? 0.9 : 1,
-                    },
+                    getTapScaleStyle(pressed),
                   ]}
                 >
                   <Ionicons color={String(theme.colors.textMuted)} name="options-outline" size={18} />
@@ -282,21 +340,25 @@ export function AddExerciseSheet({
             </View>
           </View>
 
-          {isFilterSheetOpen ? (
-            <View style={styles.filterSheetOverlay}>
+          {isFilterSheetMounted ? (
+            <Animated.View style={[styles.filterSheetOverlay, { opacity: filterOverlayOpacity }]}>
               <Pressable onPress={() => setIsFilterSheetOpen(false)} style={StyleSheet.absoluteFill} />
-              <View
+              <Animated.View
                 style={[
                   styles.filterSheetPanel,
                   {
                     backgroundColor: panelFill,
                     borderColor: theme.colors.borderSoft,
+                    transform: [{ translateY: filterTranslateY }],
                   },
                 ]}
               >
                 <View style={styles.filterSheetHeader}>
                   <ReedText variant="section">Filters</ReedText>
-                  <Pressable onPress={() => setIsFilterSheetOpen(false)} style={styles.sheetClose}>
+                  <Pressable
+                    onPress={() => setIsFilterSheetOpen(false)}
+                    style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
+                  >
                     <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
                   </Pressable>
                 </View>
@@ -368,7 +430,7 @@ export function AddExerciseSheet({
                         {
                           backgroundColor: theme.colors.controlFill,
                           borderColor: theme.colors.controlBorder,
-                          opacity: pressed ? 0.9 : 1,
+                          ...getTapScaleStyle(pressed),
                         },
                       ]}
                     >
@@ -381,7 +443,7 @@ export function AddExerciseSheet({
                         styles.filterFooterPrimaryButton,
                         {
                           backgroundColor: theme.colors.accentPrimary,
-                          opacity: pressed ? 0.9 : 1,
+                          ...getTapScaleStyle(pressed),
                         },
                       ]}
                     >
@@ -391,10 +453,10 @@ export function AddExerciseSheet({
                     </Pressable>
                   </View>
                 </View>
-              </View>
-            </View>
+              </Animated.View>
+            </Animated.View>
           ) : null}
-        </View>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -443,7 +505,11 @@ function CatalogSection({
                 },
               ]}
             >
-              <Pressable disabled={isWorking} onPress={() => onAddSingle(item._id)} style={styles.catalogRowPressable}>
+              <Pressable
+                disabled={isWorking}
+                onPress={() => onAddSingle(item._id)}
+                style={({ pressed }) => [styles.catalogRowPressable, getTapScaleStyle(pressed, isWorking)]}
+              >
                 <View style={styles.catalogRowCopy}>
                   <ReedText numberOfLines={1} variant="bodyStrong">
                     {item.name}
@@ -454,7 +520,11 @@ function CatalogSection({
                 </View>
               </Pressable>
 
-              <Pressable disabled={isWorking} onPress={() => onToggleSelected(item._id)} style={styles.catalogActionButton}>
+              <Pressable
+                disabled={isWorking}
+                onPress={() => onToggleSelected(item._id)}
+                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed, isWorking)]}
+              >
                 <Ionicons
                   color={String(isSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
                   name={isSelected ? 'checkmark' : 'add'}
@@ -462,7 +532,11 @@ function CatalogSection({
                 />
               </Pressable>
 
-              <Pressable disabled={isWorking} onPress={() => onToggleFavorite(item._id)} style={styles.catalogActionButton}>
+              <Pressable
+                disabled={isWorking}
+                onPress={() => onToggleFavorite(item._id)}
+                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed, isWorking)]}
+              >
                 <Ionicons
                   color={String(item.isFavorite ? theme.colors.accentPrimary : theme.colors.textMuted)}
                   name={item.isFavorite ? 'star' : 'star-outline'}
@@ -511,7 +585,11 @@ function FilterSection({
             {subtitle}
           </ReedText>
         </View>
-        <Pressable disabled={selectedCount === 0} onPress={onClear}>
+        <Pressable
+          disabled={selectedCount === 0}
+          onPress={onClear}
+          style={({ pressed }) => [getTapScaleStyle(pressed, selectedCount === 0)]}
+        >
           <ReedText tone={selectedCount === 0 ? 'muted' : 'default'} variant="caption">
             Clear
           </ReedText>
@@ -561,7 +639,7 @@ function FilterSection({
                   {
                     backgroundColor: isSelected ? theme.colors.controlActiveFill : theme.colors.controlFill,
                     borderColor: isSelected ? theme.colors.controlActiveBorder : theme.colors.controlBorder,
-                    opacity: pressed ? 0.9 : 1,
+                    ...getTapScaleStyle(pressed),
                   },
                 ]}
               >

@@ -1,6 +1,8 @@
 import { Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type ReedButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -53,8 +55,7 @@ export function ReedButton({
         {
           backgroundColor: palette.backgroundColor,
           borderColor: palette.borderColor,
-          opacity: disabled ? 0.45 : 1,
-          transform: [{ scale: pressed ? 0.985 : 1 }],
+          ...getTapScaleStyle(pressed, disabled),
         },
         style,
       ]}
@@ -74,7 +75,7 @@ export function ReedButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 18,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
   },
   inner: {
