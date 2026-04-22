@@ -39,9 +39,9 @@ export function WorkoutExerciseRestView({
   return (
     <WorkoutSwipeCard
       disabled={isWorking}
-      hint="Swipe right to start next · Swipe left to go back"
+      hint="Swipe right to start next · Swipe left to return to set"
       leftIcon="play-back"
-      leftLabel="Go back"
+      leftLabel="Back to set"
       leftTone="danger"
       rightIcon="play-forward"
       rightLabel="Next set"

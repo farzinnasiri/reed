@@ -4,6 +4,8 @@ import { Animated, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, us
 import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
@@ -31,9 +33,8 @@ export function AddExerciseSheet({
   onToggleFavorite,
 }: AddExerciseSheetProps) {
   const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
   const { height } = useWindowDimensions();
-  const panelFill =
-    theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.95)' : 'rgba(248, 250, 252, 0.94)';
   const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const filterSheetProgress = useRef(new Animated.Value(0)).current;
   const [searchText, setSearchText] = useState('');
@@ -184,275 +185,275 @@ export function AddExerciseSheet({
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <Animated.View
           style={[
-            styles.sheetPanel,
+            styles.sheetPanelFrame,
             {
-              backgroundColor: panelFill,
-              borderColor: theme.colors.borderSoft,
               transform: [{ translateY: panelTranslateY }],
             },
           ]}
         >
-          <View style={styles.sheetHeader}>
-            <ReedText variant="section">Add exercise</ReedText>
-            <View style={styles.sheetHeaderActions}>
-              {selectedCount > 0 ? (
-                <Pressable
-                  onPress={handleAddBulk}
-                  style={({ pressed }) => [
-                    styles.bulkAddHeaderButton,
-                    {
-                      backgroundColor: theme.colors.accentPrimary,
-                      ...getTapScaleStyle(pressed, isWorking),
-                    },
-                  ]}
-                >
-                  <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                    {isWorking ? 'Adding…' : `Add ${selectedCount}`}
-                  </ReedText>
-                </Pressable>
-              ) : null}
+          <GlassSurface contentStyle={styles.sheetPanelContent} style={styles.sheetPanel}>
+            <View style={styles.sheetHeader}>
+              <ReedText variant="section">Add exercise</ReedText>
+              <View style={styles.sheetHeaderActions}>
+                {selectedCount > 0 ? (
+                  <Pressable
+                    onPress={handleAddBulk}
+                    style={({ pressed }) => [
+                      styles.bulkAddHeaderButton,
+                      {
+                        backgroundColor: theme.colors.accentPrimary,
+                        ...getTapScaleStyle(pressed, isWorking),
+                      },
+                    ]}
+                  >
+                    <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
+                      {isWorking ? 'Adding…' : `Add ${selectedCount}`}
+                    </ReedText>
+                  </Pressable>
+                ) : null}
 
-              <Pressable onPress={onClose} style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}>
-                <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
-              </Pressable>
-            </View>
-          </View>
-
-          <View style={styles.sheetBody}>
-            <ScrollView
-              contentContainerStyle={styles.sheetContent}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-              showsVerticalScrollIndicator={false}
-              style={styles.sheetResultsScroll}
-            >
-              {hasSearchContext ? (
-                <CatalogSection
-                  isWorking={isWorking}
-                  items={effectiveData?.results ?? []}
-                  onAddSingle={onAddSingle}
-                  onToggleFavorite={onToggleFavorite}
-                  onToggleSelected={toggleSelectedExercise}
-                  selectedExerciseIds={selectedExerciseIdsSet}
-                  title="Results"
-                />
-              ) : (
-                <>
-                  <CatalogSection
-                    isWorking={isWorking}
-                    items={effectiveData?.recents ?? []}
-                    onAddSingle={onAddSingle}
-                    onToggleFavorite={onToggleFavorite}
-                    onToggleSelected={toggleSelectedExercise}
-                    selectedExerciseIds={selectedExerciseIdsSet}
-                    title="Recents"
-                  />
-                  <CatalogSection
-                    isWorking={isWorking}
-                    items={effectiveData?.favorites ?? []}
-                    onAddSingle={onAddSingle}
-                    onToggleFavorite={onToggleFavorite}
-                    onToggleSelected={toggleSelectedExercise}
-                    selectedExerciseIds={selectedExerciseIdsSet}
-                    title="Favorites"
-                  />
-                </>
-              )}
-            </ScrollView>
-
-            <View style={styles.sheetBottomDock}>
-              <View style={styles.filterSummaryRow}>
-                <ReedText numberOfLines={1} style={styles.filterSummaryLine} tone="muted" variant="caption">
-                  {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
-                </ReedText>
-                <Pressable
-                  disabled={activeFilterCount === 0}
-                  onPress={() => {
-                    setSelectedMuscleGroups([]);
-                    setSelectedEquipment([]);
-                  }}
-                  style={({ pressed }) => [styles.filterSummaryClear, getTapScaleStyle(pressed, activeFilterCount === 0)]}
-                >
-                  <ReedText tone={activeFilterCount === 0 ? 'muted' : 'default'} variant="caption">
-                    Clear
-                  </ReedText>
+                <Pressable onPress={onClose} style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}>
+                  <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
                 </Pressable>
               </View>
+            </View>
 
-              <View
-                style={[
-                  styles.searchShell,
-                  {
-                    backgroundColor: theme.colors.controlFill,
-                    borderColor: theme.colors.controlBorder,
-                  },
-                ]}
+            <View style={styles.sheetBody}>
+              <ScrollView
+                contentContainerStyle={styles.sheetContent}
+                keyboardShouldPersistTaps="handled"
+                nestedScrollEnabled
+                showsVerticalScrollIndicator={false}
+                style={styles.sheetResultsScroll}
               >
-                <Ionicons color={String(theme.colors.textMuted)} name="search" size={16} />
-                <TextInput
-                  onChangeText={setSearchText}
-                  placeholder="Search exercises"
-                  placeholderTextColor={String(theme.colors.textMuted)}
-                  style={[
-                    styles.searchInput,
-                    {
-                      color: theme.colors.textPrimary,
-                      fontFamily: theme.typography.body.fontFamily,
-                    },
-                  ]}
-                  value={searchText}
-                />
+                {hasSearchContext ? (
+                  <CatalogSection
+                    isWorking={isWorking}
+                    items={effectiveData?.results ?? []}
+                    onAddSingle={onAddSingle}
+                    onToggleFavorite={onToggleFavorite}
+                    onToggleSelected={toggleSelectedExercise}
+                    selectedExerciseIds={selectedExerciseIdsSet}
+                    title="Results"
+                  />
+                ) : (
+                  <>
+                    <CatalogSection
+                      isWorking={isWorking}
+                      items={effectiveData?.recents ?? []}
+                      onAddSingle={onAddSingle}
+                      onToggleFavorite={onToggleFavorite}
+                      onToggleSelected={toggleSelectedExercise}
+                      selectedExerciseIds={selectedExerciseIdsSet}
+                      title="Recents"
+                    />
+                    <CatalogSection
+                      isWorking={isWorking}
+                      items={effectiveData?.favorites ?? []}
+                      onAddSingle={onAddSingle}
+                      onToggleFavorite={onToggleFavorite}
+                      onToggleSelected={toggleSelectedExercise}
+                      selectedExerciseIds={selectedExerciseIdsSet}
+                      title="Favorites"
+                    />
+                  </>
+                )}
+              </ScrollView>
+
+              <View style={styles.sheetBottomDock}>
+                <View style={styles.filterSummaryRow}>
+                  <ReedText numberOfLines={1} style={styles.filterSummaryLine} tone="muted" variant="caption">
+                    {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
+                  </ReedText>
+                  <Pressable
+                    disabled={activeFilterCount === 0}
+                    onPress={() => {
+                      setSelectedMuscleGroups([]);
+                      setSelectedEquipment([]);
+                    }}
+                    style={({ pressed }) => [styles.filterSummaryClear, getTapScaleStyle(pressed, activeFilterCount === 0)]}
+                  >
+                    <ReedText tone={activeFilterCount === 0 ? 'muted' : 'default'} variant="caption">
+                      Clear
+                    </ReedText>
+                  </Pressable>
+                </View>
 
                 <View
                   style={[
-                    styles.searchFilterDivider,
+                    styles.searchShell,
                     {
-                      backgroundColor: theme.colors.controlBorder,
+                      backgroundColor: glassControls.shellBackgroundColor,
+                      borderColor: glassControls.shellBorderColor,
                     },
                   ]}
-                />
-
-                <Pressable
-                  onPress={() => setIsFilterSheetOpen(true)}
-                  style={({ pressed }) => [
-                    styles.searchFilterButton,
-                    getTapScaleStyle(pressed),
-                  ]}
                 >
-                  <Ionicons color={String(theme.colors.textMuted)} name="options-outline" size={18} />
-                  <ReedText variant="caption">Filters</ReedText>
-                  {activeFilterCount > 0 ? (
-                    <View
-                      style={[
-                        styles.searchFilterBadge,
-                        {
-                          backgroundColor: theme.colors.accentPrimary,
-                        },
-                      ]}
-                    >
-                      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
-                        {activeFilterCount}
-                      </ReedText>
-                    </View>
-                  ) : null}
-                </Pressable>
+                  <Ionicons color={String(theme.colors.textMuted)} name="search" size={16} />
+                  <TextInput
+                    onChangeText={setSearchText}
+                    placeholder="Search exercises"
+                    placeholderTextColor={String(theme.colors.textMuted)}
+                    style={[
+                      styles.searchInput,
+                      {
+                        color: theme.colors.textPrimary,
+                        fontFamily: theme.typography.body.fontFamily,
+                      },
+                    ]}
+                    value={searchText}
+                  />
+
+                  <View
+                    style={[
+                      styles.searchFilterDivider,
+                      {
+                        backgroundColor: glassControls.shellBorderColor,
+                      },
+                    ]}
+                  />
+
+                  <Pressable
+                    onPress={() => setIsFilterSheetOpen(true)}
+                    style={({ pressed }) => [
+                      styles.searchFilterButton,
+                      getTapScaleStyle(pressed),
+                    ]}
+                  >
+                    <Ionicons color={String(theme.colors.textMuted)} name="options-outline" size={18} />
+                    <ReedText variant="caption">Filters</ReedText>
+                    {activeFilterCount > 0 ? (
+                      <View
+                        style={[
+                          styles.searchFilterBadge,
+                          {
+                            backgroundColor: theme.colors.accentPrimary,
+                          },
+                        ]}
+                      >
+                        <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
+                          {activeFilterCount}
+                        </ReedText>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                </View>
               </View>
             </View>
-          </View>
+          </GlassSurface>
 
           {isFilterSheetMounted ? (
             <Animated.View style={[styles.filterSheetOverlay, { opacity: filterOverlayOpacity }]}>
               <Pressable onPress={() => setIsFilterSheetOpen(false)} style={StyleSheet.absoluteFill} />
               <Animated.View
                 style={[
-                  styles.filterSheetPanel,
+                  styles.filterSheetPanelFrame,
                   {
-                    backgroundColor: panelFill,
-                    borderColor: theme.colors.borderSoft,
                     transform: [{ translateY: filterTranslateY }],
                   },
                 ]}
               >
-                <View style={styles.filterSheetHeader}>
-                  <ReedText variant="section">Filters</ReedText>
-                  <Pressable
-                    onPress={() => setIsFilterSheetOpen(false)}
-                    style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
-                  >
-                    <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
-                  </Pressable>
-                </View>
-
-                <View style={styles.filterSheetTabs}>
-                  <SegmentedControl<FilterSectionKey>
-                    compact
-                    onChange={setActiveFilterSection}
-                    options={filterSectionOptions}
-                    value={activeFilterSection}
-                  />
-                </View>
-
-                <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                  {activeFilterSection === 'muscles' ? (
-                    <FilterSection
-                      emptyLabel="No muscles found."
-                      onClear={() => setSelectedMuscleGroups([])}
-                      onSearchChange={setMuscleSearchText}
-                      onToggle={value => toggleFilterValue(value, setSelectedMuscleGroups)}
-                      options={filteredMuscleOptions}
-                      searchText={muscleSearchText}
-                      selectedCount={selectedMuscleGroups.length}
-                      subtitle="Pick one or more muscle groups."
-                      title="Muscles"
-                      valueIsSelected={value => selectedMuscleGroups.includes(value)}
-                    />
-                  ) : null}
-
-                  {activeFilterSection === 'equipment' ? (
-                    <FilterSection
-                      emptyLabel="No equipment found."
-                      onClear={() => setSelectedEquipment([])}
-                      onSearchChange={setEquipmentSearchText}
-                      onToggle={value => toggleFilterValue(value, setSelectedEquipment)}
-                      options={filteredEquipmentOptions}
-                      searchText={equipmentSearchText}
-                      selectedCount={selectedEquipment.length}
-                      subtitle="Pick one or more equipment options."
-                      title="Equipment"
-                      valueIsSelected={value => selectedEquipment.includes(value)}
-                    />
-                  ) : null}
-
-                </ScrollView>
-
-                <View
-                  style={[
-                    styles.filterSheetFooter,
-                    {
-                      borderTopColor: theme.colors.controlBorder,
-                    },
-                  ]}
-                >
-                  <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
-                    {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
-                  </ReedText>
-
-                  <View style={styles.filterSheetFooterActions}>
-                    <Pressable
-                      onPress={() => {
-                        setSelectedMuscleGroups([]);
-                        setSelectedEquipment([]);
-                        setMuscleSearchText('');
-                        setEquipmentSearchText('');
-                      }}
-                      style={({ pressed }) => [
-                        styles.filterFooterSecondaryButton,
-                        {
-                          backgroundColor: theme.colors.controlFill,
-                          borderColor: theme.colors.controlBorder,
-                          ...getTapScaleStyle(pressed),
-                        },
-                      ]}
-                    >
-                      <ReedText variant="caption">Reset</ReedText>
-                    </Pressable>
-
+                <GlassSurface contentStyle={styles.filterSheetPanelContent} style={styles.filterSheetPanel}>
+                  <View style={styles.filterSheetHeader}>
+                    <ReedText variant="section">Filters</ReedText>
                     <Pressable
                       onPress={() => setIsFilterSheetOpen(false)}
-                      style={({ pressed }) => [
-                        styles.filterFooterPrimaryButton,
-                        {
-                          backgroundColor: theme.colors.accentPrimary,
-                          ...getTapScaleStyle(pressed),
-                        },
-                      ]}
+                      style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
                     >
-                      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
-                        Apply
-                      </ReedText>
+                      <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
                     </Pressable>
                   </View>
-                </View>
+
+                  <View style={styles.filterSheetTabs}>
+                    <SegmentedControl<FilterSectionKey>
+                      compact
+                      onChange={setActiveFilterSection}
+                      options={filterSectionOptions}
+                      value={activeFilterSection}
+                    />
+                  </View>
+
+                  <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                    {activeFilterSection === 'muscles' ? (
+                      <FilterSection
+                        emptyLabel="No muscles found."
+                        onClear={() => setSelectedMuscleGroups([])}
+                        onSearchChange={setMuscleSearchText}
+                        onToggle={value => toggleFilterValue(value, setSelectedMuscleGroups)}
+                        options={filteredMuscleOptions}
+                        searchText={muscleSearchText}
+                        selectedCount={selectedMuscleGroups.length}
+                        subtitle="Pick one or more muscle groups."
+                        title="Muscles"
+                        valueIsSelected={value => selectedMuscleGroups.includes(value)}
+                      />
+                    ) : null}
+
+                    {activeFilterSection === 'equipment' ? (
+                      <FilterSection
+                        emptyLabel="No equipment found."
+                        onClear={() => setSelectedEquipment([])}
+                        onSearchChange={setEquipmentSearchText}
+                        onToggle={value => toggleFilterValue(value, setSelectedEquipment)}
+                        options={filteredEquipmentOptions}
+                        searchText={equipmentSearchText}
+                        selectedCount={selectedEquipment.length}
+                        subtitle="Pick one or more equipment options."
+                        title="Equipment"
+                        valueIsSelected={value => selectedEquipment.includes(value)}
+                      />
+                    ) : null}
+
+                  </ScrollView>
+
+                  <View
+                    style={[
+                      styles.filterSheetFooter,
+                      {
+                        borderTopColor: glassControls.shellBorderColor,
+                      },
+                    ]}
+                  >
+                    <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
+                      {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
+                    </ReedText>
+
+                    <View style={styles.filterSheetFooterActions}>
+                      <Pressable
+                        onPress={() => {
+                          setSelectedMuscleGroups([]);
+                          setSelectedEquipment([]);
+                          setMuscleSearchText('');
+                          setEquipmentSearchText('');
+                        }}
+                        style={({ pressed }) => [
+                          styles.filterFooterSecondaryButton,
+                          {
+                            backgroundColor: glassControls.shellBackgroundColor,
+                            borderColor: glassControls.shellBorderColor,
+                            ...getTapScaleStyle(pressed),
+                          },
+                        ]}
+                      >
+                        <ReedText variant="caption">Reset</ReedText>
+                      </Pressable>
+
+                      <Pressable
+                        onPress={() => setIsFilterSheetOpen(false)}
+                        style={({ pressed }) => [
+                          styles.filterFooterPrimaryButton,
+                          {
+                            backgroundColor: theme.colors.accentPrimary,
+                            ...getTapScaleStyle(pressed),
+                          },
+                        ]}
+                      >
+                        <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
+                          Apply
+                        </ReedText>
+                      </Pressable>
+                    </View>
+                  </View>
+                </GlassSurface>
               </Animated.View>
             </Animated.View>
           ) : null}
@@ -575,6 +576,7 @@ function FilterSection({
   valueIsSelected: (value: string) => boolean;
 }) {
   const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
 
   return (
     <View style={styles.filterSectionBlock}>
@@ -600,8 +602,8 @@ function FilterSection({
         style={[
           styles.filterSearchShell,
           {
-            backgroundColor: theme.colors.controlFill,
-            borderColor: theme.colors.controlBorder,
+            backgroundColor: glassControls.shellBackgroundColor,
+            borderColor: glassControls.shellBorderColor,
           },
         ]}
       >
@@ -637,8 +639,8 @@ function FilterSection({
                 style={({ pressed }) => [
                   styles.filterOptionRow,
                   {
-                    backgroundColor: isSelected ? theme.colors.controlActiveFill : theme.colors.controlFill,
-                    borderColor: isSelected ? theme.colors.controlActiveBorder : theme.colors.controlBorder,
+                    backgroundColor: isSelected ? glassControls.activeBackgroundColor : glassControls.shellBackgroundColor,
+                    borderColor: isSelected ? glassControls.activeBorderColor : glassControls.shellBorderColor,
                     ...getTapScaleStyle(pressed),
                   },
                 ]}

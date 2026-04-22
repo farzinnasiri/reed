@@ -626,12 +626,17 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     padding: 12,
   },
+  sheetPanelFrame: {
+    height: '82%',
+  },
   sheetPanel: {
     borderRadius: reedRadii.xl,
-    borderWidth: 1,
+    flex: 1,
+  },
+  sheetPanelContent: {
+    flex: 1,
     gap: 12,
-    height: '82%',
-    overflow: 'hidden',
+    minHeight: 0,
     padding: 18,
   },
   sheetBody: {
@@ -727,14 +732,19 @@ export const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'flex-end',
   },
+  filterSheetPanelFrame: {
+    maxHeight: '82%',
+  },
   filterSheetPanel: {
     borderTopLeftRadius: reedRadii.xl,
     borderTopRightRadius: reedRadii.xl,
-    borderWidth: 1,
-    maxHeight: '82%',
+  },
+  filterSheetPanelContent: {
+    flex: 1,
+    minHeight: 0,
     paddingHorizontal: 16,
-    paddingTop: 14,
     paddingBottom: 12,
+    paddingTop: 14,
   },
   filterSheetHeader: {
     alignItems: 'center',

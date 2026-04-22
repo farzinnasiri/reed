@@ -42,17 +42,17 @@ export function getGlassPaneTokens(theme: ReedTheme, tone: GlassTone = 'default'
 
   if (tone === 'danger') {
     return {
-      backgroundColor: isDark ? 'rgba(82, 14, 14, 0.52)' : 'rgba(255, 228, 228, 0.52)',
-      blurIntensity: isDark ? 46 : 60,
-      borderColor: isDark ? 'rgba(248, 113, 113, 0.35)' : 'rgba(248, 113, 113, 0.34)',
+      backgroundColor: isDark ? 'rgba(82, 14, 14, 0.5)' : 'rgba(255, 228, 228, 0.56)',
+      blurIntensity: isDark ? 52 : 66,
+      borderColor: isDark ? 'rgba(248, 113, 113, 0.38)' : 'rgba(248, 113, 113, 0.36)',
       shadowStyle: createGlassShadowStyle(),
     };
   }
 
   return {
-    backgroundColor: isDark ? 'rgba(13, 18, 27, 0.45)' : 'rgba(255, 255, 255, 0.45)',
-    blurIntensity: isDark ? 46 : 60,
-    borderColor: isDark ? 'rgba(255, 255, 255, 0.18)' : 'rgba(255, 255, 255, 0.72)',
+    backgroundColor: isDark ? 'rgba(13, 18, 27, 0.5)' : 'rgba(255, 255, 255, 0.5)',
+    blurIntensity: isDark ? 52 : 66,
+    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.76)',
     shadowStyle: createGlassShadowStyle(),
   };
 }
@@ -61,10 +61,10 @@ export function getGlassControlTokens(theme: ReedTheme): GlassControlTokens {
   const isDark = theme.mode === 'dark';
 
   return {
-    activeBackgroundColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.74)',
-    activeBorderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.86)',
-    shellBackgroundColor: isDark ? 'rgba(13, 18, 27, 0.38)' : 'rgba(255, 255, 255, 0.34)',
-    shellBorderColor: isDark ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.64)',
+    activeBackgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.78)',
+    activeBorderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.9)',
+    shellBackgroundColor: isDark ? 'rgba(13, 18, 27, 0.42)' : 'rgba(255, 255, 255, 0.4)',
+    shellBorderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.7)',
     shadowStyle: createGlassShadowStyle(),
   };
 }

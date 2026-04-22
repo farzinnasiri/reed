@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, ScrollView, View } from 'react-native';
 import type { Id } from '@/convex/_generated/dataModel';
 import { GlassSurface } from '@/components/ui/glass-surface';
-import { canUseGlassBlur, getGlassScrimTokens } from '@/components/ui/glass-material';
+import { canUseGlassBlur, getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import {
   createTiming,
@@ -64,6 +64,8 @@ export function TimelinePage({
   timeline,
 }: TimelinePageProps) {
   const { theme } = useReedTheme();
+  const pane = getGlassPaneTokens(theme);
+  const glassControls = getGlassControlTokens(theme);
   const scrim = getGlassScrimTokens(theme);
   const canUseBlur = canUseGlassBlur();
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
@@ -421,8 +423,8 @@ export function TimelinePage({
                   style={[
                     styles.timelineLineCopy,
                     {
-                      backgroundColor: theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.48)' : 'rgba(255, 255, 255, 0.56)',
-                      borderColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.72)',
+                      backgroundColor: glassControls.shellBackgroundColor,
+                      borderColor: glassControls.shellBorderColor,
                     },
                   ]}
                 >
@@ -564,10 +566,8 @@ export function TimelinePage({
           style={[
             styles.timelineBottomDockPanel,
             {
-              backgroundColor:
-                theme.mode === 'dark' ? 'rgba(13, 18, 27, 0.82)' : 'rgba(248, 250, 255, 0.94)',
-              borderColor:
-                theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.14)' : 'rgba(255, 255, 255, 0.76)',
+              backgroundColor: pane.backgroundColor,
+              borderColor: pane.borderColor,
             },
           ]}
         >
@@ -651,8 +651,8 @@ export function TimelinePage({
                 style={({ pressed }) => [
                   styles.timelineFinishModalButton,
                   {
-                    backgroundColor: theme.colors.controlFill,
-                    borderColor: theme.colors.controlBorder,
+                    backgroundColor: glassControls.shellBackgroundColor,
+                    borderColor: glassControls.shellBorderColor,
                     ...getTapScaleStyle(pressed),
                   },
                 ]}

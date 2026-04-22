@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { authClient } from '@/lib/auth-client';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
@@ -12,6 +13,7 @@ import { useReedTheme } from '@/design/provider';
 export function SettingsSurface() {
   const { data: session } = authClient.useSession();
   const { preference, setPreference, theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
   const [deletePassword, setDeletePassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -148,8 +150,8 @@ export function SettingsSurface() {
           style={[
             styles.accountEmailShell,
             {
-              backgroundColor: theme.colors.controlFill,
-              borderColor: theme.colors.controlBorder,
+              backgroundColor: glassControls.shellBackgroundColor,
+              borderColor: glassControls.shellBorderColor,
             },
           ]}
         >

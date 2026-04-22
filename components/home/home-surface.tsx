@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -9,6 +10,7 @@ import {
 } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
@@ -33,7 +35,20 @@ export function HomeSurface({
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [headline] = useState(() => pickHomeGreeting());
+  const firstName = getFirstName(displayName);
+  const [headline] = useState(() => pickHomeGreeting(firstName));
+  const glassControls = getGlassControlTokens(theme);
+  const homeCardShadow = {
+    ...(Platform.OS === 'web'
+      ? { boxShadow: theme.mode === 'dark' ? '0px 14px 34px rgba(2, 6, 23, 0.16)' : '0px 14px 34px rgba(15, 23, 42, 0.06)' }
+      : {
+          shadowColor: '#0f172a',
+          shadowOffset: { height: 14, width: 0 },
+          shadowOpacity: theme.mode === 'dark' ? 0.18 : 0.06,
+          shadowRadius: 24,
+        }),
+    elevation: 0,
+  } as const;
 
   const weekRange = getCurrentWeekRange();
   const weeklyStats = useQuery(api.homeStats.getWeeklyMuscleStats, {
@@ -41,7 +56,6 @@ export function HomeSurface({
     weekStartAt: weekRange.weekStartAt,
   });
 
-  const firstName = getFirstName(displayName);
   const weekLabel = formatWeekRange(
     weeklyStats?.weekStartAt ?? weekRange.weekStartAt,
     weeklyStats?.weekEndAt ?? weekRange.weekEndAt,
@@ -82,13 +96,12 @@ export function HomeSurface({
       style={styles.root}
     >
       <View style={styles.header}>
-        <ReedText tone="muted" variant="bodyStrong">
-          Hey, {firstName}
+        <ReedText style={styles.headerHeadline} variant="title">
+          {headline}
         </ReedText>
-        <ReedText variant="title">{headline}</ReedText>
       </View>
 
-      <GlassSurface style={styles.card}>
+      <GlassSurface style={[styles.card, homeCardShadow]}>
         <View style={styles.cardHeader}>
           <ReedText variant="section">{hasActiveSession ? 'Session in progress' : 'Start your next session'}</ReedText>
           <ReedText tone="muted">
@@ -125,7 +138,7 @@ export function HomeSurface({
         {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
       </GlassSurface>
 
-      <GlassSurface style={styles.card}>
+      <GlassSurface style={[styles.card, homeCardShadow]}>
         <View style={styles.cardHeader}>
           <View style={styles.weeklyHeaderCopy}>
             <ReedText variant="section">Weekly load</ReedText>
@@ -137,8 +150,8 @@ export function HomeSurface({
             style={({ pressed }) => [
               styles.expandButton,
               {
-                backgroundColor: theme.colors.controlFill,
-                borderColor: theme.colors.controlBorder,
+                backgroundColor: glassControls.shellBackgroundColor,
+                borderColor: glassControls.shellBorderColor,
                 ...getTapScaleStyle(pressed),
               },
             ]}
@@ -162,8 +175,8 @@ export function HomeSurface({
               style={[
                 styles.summaryStrip,
                 {
-                  backgroundColor: theme.colors.controlFill,
-                  borderColor: theme.colors.controlBorder,
+                  backgroundColor: glassControls.shellBackgroundColor,
+                  borderColor: glassControls.shellBorderColor,
                 },
               ]}
             >
@@ -216,8 +229,8 @@ export function HomeSurface({
                           style={[
                             styles.breakdownIconShell,
                             {
-                              backgroundColor: theme.colors.controlFill,
-                              borderColor: theme.colors.controlBorder,
+                              backgroundColor: glassControls.shellBackgroundColor,
+                              borderColor: glassControls.shellBorderColor,
                             },
                           ]}
                         >
@@ -392,6 +405,9 @@ const styles = StyleSheet.create({
   header: {
     gap: 4,
     paddingHorizontal: 4,
+  },
+  headerHeadline: {
+    lineHeight: 31,
   },
   card: {
     borderRadius: reedRadii.xl,

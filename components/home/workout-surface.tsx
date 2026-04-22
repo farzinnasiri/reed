@@ -445,8 +445,8 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     await runMutation(async () => {
       await cancelRestTimerBackgroundAlertsAsync();
       await endRest({});
-      // Return to the timeline so the user can pick a different exercise.
-      setPage('timeline');
+      // Keep exercise context; after ending rest the capture card returns
+      // to the same exercise so users can continue from the last set flow.
     });
   }
 
