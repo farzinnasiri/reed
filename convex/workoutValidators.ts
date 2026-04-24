@@ -9,6 +9,8 @@ export const recipeKeyValidator = v.union(
   v.literal('weighted_hold'),
   v.literal('unilateral_load_pair'),
   v.literal('unilateral_reps_pair'),
+  v.literal('unilateral_duration_rpe_pair'),
+  v.literal('unilateral_duration_distance_load_pair'),
   v.literal('cardio_manual_duration_rpe'),
   v.literal('cardio_manual_distance_time_rpe'),
   v.literal('cardio_live_duration_distance'),

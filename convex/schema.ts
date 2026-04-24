@@ -62,7 +62,9 @@ export default defineSchema({
     endedAt: v.optional(v.number()),
     activeSessionExerciseId: v.optional(v.id('liveSessionExercises')),
     activeProcess: activeProcessValidator,
-  }).index('by_profile_id_and_status', ['profileId', 'status']),
+  })
+    .index('by_profile_id_and_status', ['profileId', 'status'])
+    .index('by_profile_id_and_status_and_started_at', ['profileId', 'status', 'startedAt']),
   liveSessionExercises: defineTable({
     sessionId: v.id('liveSessions'),
     profileId: v.id('profiles'),

@@ -1,3 +1,7 @@
+import { formatCompactNumber } from '@/domains/workout/number-format';
+
+export { formatCompactNumber };
+
 export function formatElapsed(startedAt: number, now: number) {
   const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
   const hours = Math.floor(elapsedSeconds / 3600);
@@ -13,6 +17,23 @@ export function formatElapsed(startedAt: number, now: number) {
   }
 
   return `${seconds}s`;
+}
+
+export function formatElapsedCompact(startedAt: number, now: number) {
+  const elapsedSeconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  const totalMinutes = Math.floor(elapsedSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  if (totalMinutes > 0) {
+    return `${totalMinutes}m`;
+  }
+
+  return `${elapsedSeconds}s`;
 }
 
 export function formatClock(totalSeconds: number) {
@@ -50,4 +71,28 @@ export function getErrorMessage(error: unknown) {
   }
 
   return 'Something went wrong.';
+}
+
+export function formatCompactDistance(value: number) {
+  return `${formatCompactNumber(value, 1)} km`;
+}
+
+export function formatCompactLoad(value: number) {
+  return `${Math.round(value).toLocaleString('en-US')} kg`;
+}
+
+export function formatCompactMinutes(totalSeconds: number) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
+  const hours = Math.floor(safeSeconds / 3600);
+  const minutes = Math.floor((safeSeconds % 3600) / 60);
+
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+
+  return `${safeSeconds}s`;
 }

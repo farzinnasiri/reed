@@ -61,6 +61,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     typedRoutes: true,
   },
   extra: {
+    eas: {
+      projectId: 'c18d73a3-d9b8-405e-a082-2bdcd9069f45',
+    },
     convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL ?? '',
     convexSiteUrl: process.env.EXPO_PUBLIC_CONVEX_SITE_URL ?? '',
   },

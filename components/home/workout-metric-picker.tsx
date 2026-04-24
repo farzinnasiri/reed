@@ -231,77 +231,79 @@ export function WorkoutMetricPicker({
               : ''}
           </ReedText>
         </View>
-        {isDurationMetric && isEditingDuration ? (
-          <View style={styles.durationEditRow}>
-            <TextInput
-              autoFocus
-              keyboardType="number-pad"
-              maxLength={3}
-              onBlur={handleDurationEditorBlur}
-              onChangeText={handleDurationMinutesChange}
-              onSubmitEditing={() => durationSecondsInputRef.current?.focus()}
-              ref={durationMinutesInputRef}
-              returnKeyType="next"
-              style={[
-                styles.durationInput,
-                styles.durationMinutesInput,
-                {
+        <View style={styles.metricValueAnchor}>
+          {isDurationMetric && isEditingDuration ? (
+            <View style={styles.durationEditRow}>
+              <TextInput
+                autoFocus
+                keyboardType="number-pad"
+                maxLength={3}
+                onBlur={handleDurationEditorBlur}
+                onChangeText={handleDurationMinutesChange}
+                onSubmitEditing={() => durationSecondsInputRef.current?.focus()}
+                ref={durationMinutesInputRef}
+                returnKeyType="next"
+                style={[
+                  styles.durationInput,
+                  styles.durationMinutesInput,
+                  {
+                    color: accentColor,
+                    fontSize: valueFontSize,
+                    lineHeight: Math.floor(valueFontSize * 0.9),
+                  },
+                ]}
+                value={durationMinutesDraft}
+              />
+              <ReedText
+                style={{
                   color: accentColor,
                   fontSize: valueFontSize,
                   lineHeight: Math.floor(valueFontSize * 0.9),
-                },
-              ]}
-              value={durationMinutesDraft}
-            />
-            <ReedText
-              style={{
-                color: accentColor,
-                fontSize: valueFontSize,
-                lineHeight: Math.floor(valueFontSize * 0.9),
-              }}
-              variant="display"
+                }}
+                variant="display"
+              >
+                :
+              </ReedText>
+              <TextInput
+                keyboardType="number-pad"
+                maxLength={2}
+                onBlur={handleDurationEditorBlur}
+                onChangeText={handleDurationSecondsChange}
+                onSubmitEditing={commitDurationEdit}
+                ref={durationSecondsInputRef}
+                returnKeyType="done"
+                style={[
+                  styles.durationInput,
+                  styles.durationSecondsInput,
+                  {
+                    color: accentColor,
+                    fontSize: valueFontSize,
+                    lineHeight: Math.floor(valueFontSize * 0.9),
+                  },
+                ]}
+                value={durationSecondsDraft}
+              />
+            </View>
+          ) : (
+            <Pressable
+              disabled={!isDurationMetric}
+              onPress={beginDurationEdit}
+              style={({ pressed }) => (isDurationMetric ? [styles.metricValuePressable, getTapScaleStyle(pressed)] : [styles.metricValuePressable])}
             >
-              :
-            </ReedText>
-            <TextInput
-              keyboardType="number-pad"
-              maxLength={2}
-              onBlur={handleDurationEditorBlur}
-              onChangeText={handleDurationSecondsChange}
-              onSubmitEditing={commitDurationEdit}
-              ref={durationSecondsInputRef}
-              returnKeyType="done"
-              style={[
-                styles.durationInput,
-                styles.durationSecondsInput,
-                {
+              <ReedText
+                style={{
                   color: accentColor,
                   fontSize: valueFontSize,
+                  letterSpacing: isDurationMetric ? -1.2 : -1.8,
                   lineHeight: Math.floor(valueFontSize * 0.9),
-                },
-              ]}
-              value={durationSecondsDraft}
-            />
-          </View>
-        ) : (
-          <Pressable
-            disabled={!isDurationMetric}
-            onPress={beginDurationEdit}
-            style={({ pressed }) => (isDurationMetric ? [getTapScaleStyle(pressed)] : undefined)}
-          >
-            <ReedText
-              style={{
-                color: accentColor,
-                fontSize: valueFontSize,
-                letterSpacing: isDurationMetric ? -1.2 : -1.8,
-                lineHeight: Math.floor(valueFontSize * 0.9),
-              }}
-              variant="display"
-            >
-              {formatMetricValue(field, normalizedValue)}
-            </ReedText>
-          </Pressable>
-        )}
+                }}
+                variant="display"
+              >
+                {formatMetricValue(field, normalizedValue)}
+              </ReedText>
+            </Pressable>
+          )}
+        </View>
         {isDurationMetric ? (
           <Pressable
             onPress={toggleDurationRun}
@@ -515,9 +517,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     paddingVertical: 0,
   },
+  metricValueAnchor: {
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+    minHeight: 54,
+  },
+  metricValuePressable: {
+    alignSelf: 'flex-start',
+  },
   durationEditRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'flex-start',
+    minHeight: 54,
   },
   durationMinutesInput: {
     minWidth: 54,

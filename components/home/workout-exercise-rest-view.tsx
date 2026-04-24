@@ -1,4 +1,5 @@
 import { Pressable, View, useWindowDimensions } from 'react-native';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
@@ -33,6 +34,7 @@ export function WorkoutExerciseRestView({
   restRunning,
 }: RestViewProps) {
   const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
   const { width } = useWindowDimensions();
   const timerRingSize = Math.max(176, Math.min(228, Math.floor(width - 150)));
 
@@ -77,8 +79,8 @@ export function WorkoutExerciseRestView({
                   style={({ pressed }) => [
                     styles.restStep,
                     {
-                      backgroundColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.42)',
-                      borderColor: theme.colors.controlBorder,
+                      backgroundColor: glassControls.shellBackgroundColor,
+                      borderColor: glassControls.shellBorderColor,
                       ...getTapScaleStyle(pressed, isWorking),
                     },
                   ]}
@@ -100,11 +102,12 @@ export function WorkoutExerciseRestView({
                 {
                   backgroundColor:
                     restCard.durationSeconds === seconds
-                      ? theme.mode === 'dark'
-                        ? 'rgba(255,255,255,0.06)'
-                        : 'rgba(255,255,255,0.92)'
+                      ? glassControls.activeBackgroundColor
                       : 'transparent',
-                  borderColor: restCard.durationSeconds === seconds ? theme.colors.accentPrimary : 'transparent',
+                  borderColor:
+                    restCard.durationSeconds === seconds
+                      ? glassControls.activeBorderColor
+                      : 'transparent',
                   borderWidth: restCard.durationSeconds === seconds ? 3 : 1,
                   ...getTapScaleStyle(pressed, isWorking),
                 },

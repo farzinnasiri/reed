@@ -3,7 +3,7 @@ import { internalMutation, mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
-import { isSupportedRecipeKey, type RecipeKey } from '../domains/workout/recipes';
+import { resolveCatalogRecipeKey, type RecipeKey } from '../domains/workout/recipes';
 import { recipeKeyOrNullValidator } from './workoutValidators';
 
 const optionalMultiFilterValidator = v.optional(v.union(v.array(v.string()), v.null()));
@@ -180,8 +180,25 @@ export const importCatalogBatch = internalMutation({
   },
 });
 
-function isSupportedExercise(exercise: Doc<'exerciseCatalog'>): exercise is SupportedExercise {
-  return typeof exercise.recipeKey === 'string' && isSupportedRecipeKey(exercise.recipeKey);
+function resolveSupportedExercise(exercise: Doc<'exerciseCatalog'>): SupportedExercise | null {
+  const resolvedRecipeKey = resolveCatalogRecipeKey({
+    exerciseClass: exercise.exerciseClass,
+    isCardio: exercise.isCardio,
+    isHold: exercise.isHold,
+    laterality: exercise.laterality,
+    rawMetricRecipe: exercise.rawMetricRecipe,
+    recipeKey: exercise.recipeKey,
+    supportsLiveTracking: exercise.supportsLiveTracking,
+  });
+
+  if (!resolvedRecipeKey) {
+    return null;
+  }
+
+  return {
+    ...exercise,
+    recipeKey: resolvedRecipeKey,
+  };
 }
 
 function getExerciseById(
@@ -226,18 +243,16 @@ async function loadSearchContextExercises(
   if (hasSearchContext && queryText.length > 0) {
     const indexedMatches = await ctx.db
       .query('exerciseCatalog')
-      .withSearchIndex('search_text', q =>
-        q.search('searchText', queryText).eq('isSupportedInLiveSession', true),
-      )
+      .withSearchIndex('search_text', q => q.search('searchText', queryText))
       .take(300);
-    return indexedMatches.filter(isSupportedExercise);
+    return indexedMatches.map(resolveSupportedExercise).filter(isDefined);
   }
 
   const supportedExercises = await ctx.db
     .query('exerciseCatalog')
     .withIndex('by_supported_in_live_session', q => q.eq('isSupportedInLiveSession', true))
     .collect();
-  return supportedExercises.filter(isSupportedExercise);
+  return supportedExercises.map(resolveSupportedExercise).filter(isDefined);
 }
 
 function isDefined<T>(value: T | null | undefined): value is T {

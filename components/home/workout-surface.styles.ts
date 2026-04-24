@@ -6,6 +6,16 @@ export const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  activeWorkoutShell: {
+    flex: 1,
+    gap: 12,
+    minHeight: 0,
+    paddingTop: 8,
+  },
+  activeWorkoutPage: {
+    flex: 1,
+    minHeight: 0,
+  },
   loadingState: {
     alignItems: 'center',
     flex: 1,
@@ -37,7 +47,7 @@ export const styles = StyleSheet.create({
   },
   startIcon: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     height: 40,
     justifyContent: 'center',
@@ -72,12 +82,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
     paddingBottom: 0,
-    paddingTop: 8,
-  },
-  timelineTopRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    paddingTop: 2,
   },
   navButton: {
     alignItems: 'center',
@@ -120,7 +125,7 @@ export const styles = StyleSheet.create({
     width: 26,
   },
   timelineRailSegmentTop: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     height: 8,
     left: 12,
     position: 'absolute',
@@ -129,7 +134,7 @@ export const styles = StyleSheet.create({
     zIndex: 1,
   },
   timelineRailSegmentBottom: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     bottom: 0,
     left: 12,
     position: 'absolute',
@@ -139,7 +144,7 @@ export const styles = StyleSheet.create({
   },
   timelineNodeMarkerFixed: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 2,
     height: 26,
     justifyContent: 'center',
@@ -220,12 +225,12 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   timelineSetBranch: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     width: 24,
     height: 2,
   },
   timelineSetDot: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     height: 8,
     width: 8,
   },
@@ -252,20 +257,108 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 14,
     paddingBottom: 16,
-    paddingTop: 10,
+    paddingTop: 2,
   },
   exerciseTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 32,
   },
   exerciseTitle: {
-    flex: 1,
-    marginHorizontal: 12,
     fontFamily: 'Outfit_800ExtraBold',
     fontSize: 22,
     letterSpacing: -0.3,
     lineHeight: 26,
     textAlign: 'center',
+  },
+  statusStripShell: {
+    marginBottom: 2,
+  },
+  statusStripContent: {
+    gap: 0,
+    paddingBottom: 9,
+    paddingHorizontal: 10,
+    paddingTop: 9,
+  },
+  statusStripRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  statusStripNavButton: {
+    height: 30,
+    width: 30,
+  },
+  statusStripMetrics: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 46,
+    minWidth: 0,
+  },
+  statusStripCenter: {
+    alignItems: 'center',
+    gap: 4,
+    justifyContent: 'center',
+    minWidth: 0,
+    width: '100%',
+  },
+  statusStripCenterSingle: {
+    gap: 0,
+  },
+  statusStripPrimaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'center',
+    minWidth: 0,
+    width: '100%',
+  },
+  statusStripSegment: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 5,
+    minHeight: 22,
+    minWidth: 0,
+  },
+  statusStripValue: {
+    flexShrink: 1,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  statusStripDot: {
+    borderRadius: reedRadii.pill,
+    height: 3,
+    width: 3,
+  },
+  statusStripMicroRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'nowrap',
+    gap: 0,
+    justifyContent: 'center',
+    maxWidth: '100%',
+    minHeight: 18,
+  },
+  statusStripMicroToken: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 8,
+    minWidth: 0,
+  },
+  statusStripMicroDot: {
+    borderRadius: reedRadii.pill,
+    height: 3,
+    marginHorizontal: 10,
+    width: 3,
+  },
+  statusStripMicroText: {
+    fontFamily: 'Outfit_600SemiBold',
+    fontSize: 15,
+    lineHeight: 18,
   },
   cardArea: {
     flex: 1,
@@ -289,7 +382,7 @@ export const styles = StyleSheet.create({
   },
   warmupChip: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 32,
@@ -391,7 +484,7 @@ export const styles = StyleSheet.create({
   },
   liveElapsedTimerRing: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 12,
     justifyContent: 'center',
   },
@@ -448,7 +541,7 @@ export const styles = StyleSheet.create({
   },
   liveStepButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 30,
@@ -621,7 +714,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sheetOverlay: {
-    backgroundColor: 'rgba(0, 0, 0, 0.32)',
+    backgroundColor: 'transparent',
     flex: 1,
     justifyContent: 'flex-end',
     padding: 12,
@@ -680,7 +773,7 @@ export const styles = StyleSheet.create({
   },
   bulkAddHeaderButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     justifyContent: 'center',
     minHeight: 30,
     paddingHorizontal: 12,
@@ -722,7 +815,7 @@ export const styles = StyleSheet.create({
   },
   searchFilterBadge: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     justifyContent: 'center',
     minHeight: 18,
     minWidth: 18,
@@ -796,7 +889,7 @@ export const styles = StyleSheet.create({
   },
   filterOptionRow: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: reedRadii.sm,
     borderWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -824,7 +917,7 @@ export const styles = StyleSheet.create({
   },
   filterFooterSecondaryButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 32,
@@ -833,7 +926,7 @@ export const styles = StyleSheet.create({
   },
   filterFooterPrimaryButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     justifyContent: 'center',
     minHeight: 32,
     minWidth: 82,
@@ -849,7 +942,7 @@ export const styles = StyleSheet.create({
   },
   filterChip: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 34,

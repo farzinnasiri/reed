@@ -38,47 +38,36 @@ export function canUseGlassBlur() {
 }
 
 export function getGlassPaneTokens(theme: ReedTheme, tone: GlassTone = 'default'): GlassPaneTokens {
-  const isDark = theme.mode === 'dark';
-
   if (tone === 'danger') {
     return {
-      backgroundColor: isDark ? 'rgba(82, 14, 14, 0.5)' : 'rgba(255, 228, 228, 0.56)',
-      blurIntensity: isDark ? 52 : 66,
-      borderColor: isDark ? 'rgba(248, 113, 113, 0.38)' : 'rgba(248, 113, 113, 0.36)',
-      shadowStyle: createGlassShadowStyle(),
+      backgroundColor: String(theme.colors.dangerFill),
+      blurIntensity: theme.mode === 'dark' ? 52 : 66,
+      borderColor: String(theme.colors.dangerBorder),
+      shadowStyle: createGlassShadowStyle(theme),
     };
   }
 
   return {
-    backgroundColor: isDark ? 'rgba(13, 18, 27, 0.5)' : 'rgba(255, 255, 255, 0.5)',
-    blurIntensity: isDark ? 52 : 66,
-    borderColor: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(255, 255, 255, 0.76)',
-    shadowStyle: createGlassShadowStyle(),
+    backgroundColor: String(theme.colors.glassFill),
+    blurIntensity: theme.mode === 'dark' ? 52 : 66,
+    borderColor: String(theme.colors.glassHighlight),
+    shadowStyle: createGlassShadowStyle(theme),
   };
 }
 
 export function getGlassControlTokens(theme: ReedTheme): GlassControlTokens {
-  const isDark = theme.mode === 'dark';
-
   return {
-    activeBackgroundColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.78)',
-    activeBorderColor: isDark ? 'rgba(255, 255, 255, 0.22)' : 'rgba(255, 255, 255, 0.9)',
-    shellBackgroundColor: isDark ? 'rgba(13, 18, 27, 0.42)' : 'rgba(255, 255, 255, 0.4)',
-    shellBorderColor: isDark ? 'rgba(255, 255, 255, 0.16)' : 'rgba(255, 255, 255, 0.7)',
-    shadowStyle: createGlassShadowStyle(),
+    activeBackgroundColor: String(theme.colors.controlActiveFill),
+    activeBorderColor: String(theme.colors.controlActiveBorder),
+    shellBackgroundColor: String(theme.colors.controlFill),
+    shellBorderColor: String(theme.colors.controlBorder),
+    shadowStyle: createGlassShadowStyle(theme),
   };
 }
 
 export function getGlassScrimTokens(theme: ReedTheme): GlassScrimTokens {
-  if (theme.mode === 'dark') {
-    return {
-      backgroundColor: 'rgba(2, 6, 23, 0.18)',
-      blurIntensity: 18,
-    };
-  }
-
   return {
-    backgroundColor: 'rgba(248, 250, 255, 0.12)',
+    backgroundColor: String(theme.colors.overlayScrim),
     blurIntensity: 18,
   };
 }
@@ -101,7 +90,7 @@ export function getBackdropDiffusionTokens(theme: ReedTheme): BackdropDiffusionT
   };
 }
 
-function createGlassShadowStyle(): ViewStyle {
+function createGlassShadowStyle(theme: ReedTheme): ViewStyle {
   // Android often renders rounded translucent surfaces with a rectangular
   // elevation layer. Keep glass shadows on iOS/Web and avoid elevation
   // artifacts on device.
@@ -109,16 +98,9 @@ function createGlassShadowStyle(): ViewStyle {
     return {};
   }
 
-  if (Platform.OS === 'web') {
-    return {
-      boxShadow: '0px 8px 16px rgba(15, 23, 42, 0.08)',
-    } as ViewStyle;
-  }
-
+  const cardShadow = theme.shadows.card ?? {};
   return {
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
+    ...cardShadow,
+    elevation: 0,
   };
 }

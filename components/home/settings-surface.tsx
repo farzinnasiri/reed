@@ -9,6 +9,7 @@ import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 export function SettingsSurface() {
   const { data: session } = authClient.useSession();
@@ -250,7 +251,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   accountEmailShell: {
-    borderRadius: 16,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     gap: 2,
     paddingHorizontal: 14,

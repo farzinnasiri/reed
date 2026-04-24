@@ -1,9 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useState } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions } from 'react-native';
 import type { Id } from '@/convex/_generated/dataModel';
 import { ReedText } from '@/components/ui/reed-text';
-import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
 import type {
   CaptureCard,
@@ -62,7 +60,6 @@ type ExercisePageProps = {
 };
 
 export function ExercisePage({ navigation, capture, liveCardio, rest }: ExercisePageProps) {
-  const { theme } = useReedTheme();
   const { width } = useWindowDimensions();
   const title =
     liveCardio.card?.exerciseName ??
@@ -92,13 +89,10 @@ export function ExercisePage({ navigation, capture, liveCardio, rest }: Exercise
   return (
     <View style={styles.exercisePage}>
       <View style={styles.exerciseTopRow}>
-        <Pressable onPress={navigation.onBackToTimeline} style={styles.navButton}>
-          <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
-        </Pressable>
+        {/* The session status strip is the canonical back affordance for this nested surface. */}
         <ReedText numberOfLines={1} style={styles.exerciseTitle} variant="title">
           {title}
         </ReedText>
-        <View style={styles.navButtonSpacer} />
       </View>
 
       <View style={styles.cardArea}>

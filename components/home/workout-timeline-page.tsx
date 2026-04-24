@@ -31,7 +31,6 @@ type TimelinePageProps = {
   onAddExercise: () => void;
   onClearFinishSessionConfirm: () => void;
   onDeleteSet: (setLogId: Id<'liveSetLogs'>) => void;
-  onExitWorkout: () => void;
   onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;
@@ -54,7 +53,6 @@ export function TimelinePage({
   onAddExercise,
   onClearFinishSessionConfirm,
   onDeleteSet,
-  onExitWorkout,
   onFinishSession,
   onOpenExercise,
   onOpenSet,
@@ -280,19 +278,6 @@ export function TimelinePage({
 
   return (
     <View style={styles.timelinePage}>
-      <View style={styles.timelineTopRow}>
-        <Pressable onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
-          <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
-        </Pressable>
-        <View style={styles.metaChip}>
-          <Ionicons color={String(theme.colors.textMuted)} name="time-outline" size={16} />
-          <ReedText tone="muted" variant="body">
-            {elapsedLabel ?? 'Live session'}
-          </ReedText>
-        </View>
-        <View style={styles.navButtonSpacer} />
-      </View>
-
       <View style={styles.timelineHeader}>
         <ReedText variant="section">Timeline</ReedText>
         <ReedText tone="muted" variant="body">
@@ -587,8 +572,8 @@ export function TimelinePage({
                   { backgroundColor: theme.colors.accentPrimary },
                 ]}
               >
-                <Ionicons color="#ffffff" name="flag-outline" size={16} />
-                <ReedText style={{ color: '#ffffff' }} variant="bodyStrong">
+                <Ionicons color={String(theme.colors.accentPrimaryText)} name="flag-outline" size={16} />
+                <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
                   Finish workout
                 </ReedText>
               </View>

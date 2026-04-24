@@ -16,6 +16,7 @@ import {
   getRecipeFieldDefinitions,
   getRecipeInitialMetrics,
   isLiveCardioRecipeKey,
+  resolveCatalogRecipeKey,
   roundMetric,
   summarizeMetrics,
   validateRecipeMetrics,
@@ -209,18 +210,17 @@ export const getLatestEndedSummary = query({
     const profile = await requireViewerProfile(ctx);
     const endedSessions = await ctx.db
       .query('liveSessions')
-      .withIndex('by_profile_id_and_status', q => q.eq('profileId', profile._id).eq('status', 'ended'))
-      .collect();
+      .withIndex('by_profile_id_and_status_and_started_at', q =>
+        q.eq('profileId', profile._id).eq('status', 'ended'),
+      )
+      .order('desc')
+      .take(20);
 
     if (endedSessions.length === 0) {
       return null;
     }
 
-    const sortedEndedSessions = [...endedSessions].sort(
-      (left, right) => (right.endedAt ?? right.startedAt) - (left.endedAt ?? left.startedAt),
-    );
-
-    for (const endedSession of sortedEndedSessions) {
+    for (const endedSession of endedSessions) {
       const summary = await buildEndedSessionSummary(ctx, endedSession._id);
 
       if (summary.exerciseCount === 0) {
@@ -407,7 +407,21 @@ export const addExercise = mutation({
     const session = await requireActiveSession(ctx, profile._id);
     const catalogExercise = await ctx.db.get(args.exerciseCatalogId);
 
-    if (!catalogExercise || !catalogExercise.recipeKey || !catalogExercise.isSupportedInLiveSession) {
+    if (!catalogExercise) {
+      throw new ConvexError('This exercise is not available in the live session flow yet.');
+    }
+
+    const resolvedRecipeKey = resolveCatalogRecipeKey({
+      exerciseClass: catalogExercise.exerciseClass,
+      isCardio: catalogExercise.isCardio,
+      isHold: catalogExercise.isHold,
+      laterality: catalogExercise.laterality,
+      rawMetricRecipe: catalogExercise.rawMetricRecipe,
+      recipeKey: catalogExercise.recipeKey,
+      supportsLiveTracking: catalogExercise.supportsLiveTracking,
+    });
+
+    if (!resolvedRecipeKey) {
       throw new ConvexError('This exercise is not available in the live session flow yet.');
     }
 
@@ -423,7 +437,7 @@ export const addExercise = mutation({
       exerciseName: catalogExercise.name,
       position: existingEntries.length,
       profileId: profile._id,
-      recipeKey: catalogExercise.recipeKey,
+      recipeKey: resolvedRecipeKey,
       sessionId: session._id,
     });
 

@@ -7,6 +7,8 @@ export const supportedRecipeKeys = [
   'weighted_hold',
   'unilateral_load_pair',
   'unilateral_reps_pair',
+  'unilateral_duration_rpe_pair',
+  'unilateral_duration_distance_load_pair',
   'cardio_manual_duration_rpe',
   'cardio_manual_distance_time_rpe',
   'cardio_live_duration_distance',
@@ -25,6 +27,7 @@ export type LiveCardioRecipeKey =
 export type RecipeLayoutKind = 'standard' | 'unilateral_pair' | 'cardio_manual' | 'cardio_live';
 export type RecipeProcessKind = 'none' | 'rest_after_log' | 'live_cardio';
 export type RecipeFieldGroup = 'left' | 'right' | 'shared';
+export type ComparisonKind = 'distance' | 'duration' | 'floors' | 'load' | 'reps' | 'volume';
 
 export type RecipeFieldDefinition = {
   adjustInLiveTracking?: boolean;
@@ -175,6 +178,101 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
     layoutKind: 'unilateral_pair',
     processKind: 'rest_after_log',
   },
+  unilateral_duration_rpe_pair: {
+    fields: [
+      {
+        defaultValue: 30,
+        group: 'left',
+        key: 'leftDuration',
+        kind: 'duration',
+        label: 'Duration',
+        max: 1800,
+        min: 0,
+        pickerMax: 1800,
+        pickerMin: 0,
+        step: 5,
+        unit: 's',
+      },
+      {
+        defaultValue: 30,
+        group: 'right',
+        key: 'rightDuration',
+        kind: 'duration',
+        label: 'Duration',
+        max: 1800,
+        min: 0,
+        pickerMax: 1800,
+        pickerMin: 0,
+        step: 5,
+        unit: 's',
+      },
+      { defaultValue: 8, group: 'shared', key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
+    ],
+    formatSummary: metrics =>
+      `L ${formatDuration(metrics.leftDuration)} / R ${formatDuration(metrics.rightDuration)} · RPE ${formatRpe(metrics.rpe)}`,
+    label: 'Unilateral duration pair',
+    layoutKind: 'unilateral_pair',
+    processKind: 'rest_after_log',
+  },
+  unilateral_duration_distance_load_pair: {
+    fields: [
+      {
+        defaultValue: 30,
+        group: 'left',
+        key: 'leftDuration',
+        kind: 'duration',
+        label: 'Duration',
+        max: 1800,
+        min: 0,
+        pickerMax: 1800,
+        pickerMin: 0,
+        step: 5,
+        unit: 's',
+      },
+      {
+        defaultValue: 30,
+        group: 'right',
+        key: 'rightDuration',
+        kind: 'duration',
+        label: 'Duration',
+        max: 1800,
+        min: 0,
+        pickerMax: 1800,
+        pickerMin: 0,
+        step: 5,
+        unit: 's',
+      },
+      {
+        defaultValue: 0,
+        group: 'shared',
+        key: 'distance',
+        label: 'Distance',
+        min: 0,
+        max: 1000,
+        pickerMin: 0,
+        pickerMax: 1000,
+        step: 0.1,
+        unit: 'km',
+      },
+      {
+        defaultValue: 0,
+        group: 'shared',
+        key: 'load',
+        label: 'Load',
+        min: 0,
+        max: 300,
+        pickerMin: 0,
+        pickerMax: 300,
+        step: 2.5,
+        unit: 'kg',
+      },
+    ],
+    formatSummary: metrics =>
+      `L ${formatDuration(metrics.leftDuration)} / R ${formatDuration(metrics.rightDuration)} · ${formatDistance(metrics.distance)} · ${formatLoad(metrics.load)}`,
+    label: 'Unilateral carry pair',
+    layoutKind: 'unilateral_pair',
+    processKind: 'rest_after_log',
+  },
   cardio_manual_duration_rpe: {
     fields: [
       { defaultValue: 600, key: 'duration', kind: 'duration', label: 'Duration', min: 0, max: 10800, pickerMin: 0, pickerMax: 10800, step: 5, unit: 's' },
@@ -309,6 +407,25 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   },
 };
 
+const recipeComparisonKinds: Record<RecipeKey, ComparisonKind> = {
+  added_bodyweight: 'volume',
+  assist_bodyweight: 'volume',
+  bodyweight_reps: 'reps',
+  cardio_live_duration_distance: 'distance',
+  cardio_live_duration_distance_load: 'distance',
+  cardio_live_duration_distance_pace: 'distance',
+  cardio_live_duration_floors: 'floors',
+  cardio_manual_distance_time_rpe: 'distance',
+  cardio_manual_duration_rpe: 'duration',
+  hold: 'duration',
+  standard_load: 'volume',
+  unilateral_duration_distance_load_pair: 'distance',
+  unilateral_duration_rpe_pair: 'duration',
+  unilateral_load_pair: 'volume',
+  unilateral_reps_pair: 'reps',
+  weighted_hold: 'duration',
+};
+
 export function getRecipeDefinition(recipeKey: RecipeKey) {
   return recipeRegistry[recipeKey];
 }
@@ -338,6 +455,9 @@ export function mapCatalogRecipeKey(row: RecipeMappingInput): RecipeKey | null {
     case 'left_reps+right_reps+rpe':
       return 'unilateral_reps_pair';
     case 'duration+rpe':
+      if (laterality === 'unilateral' && (row.isHold || exerciseClass === 'hold')) {
+        return 'unilateral_duration_rpe_pair';
+      }
       if (row.isHold || exerciseClass === 'hold') {
         return 'hold';
       }
@@ -363,6 +483,9 @@ export function mapCatalogRecipeKey(row: RecipeMappingInput): RecipeKey | null {
     case 'duration+distance+pace':
       return cardioLiveTrackable ? 'cardio_live_duration_distance_pace' : null;
     case 'duration+distance+load':
+      if (laterality === 'unilateral' && !row.isCardio) {
+        return 'unilateral_duration_distance_load_pair';
+      }
       return cardioLiveTrackable ? 'cardio_live_duration_distance_load' : null;
     case 'duration+floors':
       return cardioLiveTrackable ? 'cardio_live_duration_floors' : null;
@@ -385,6 +508,29 @@ function isCardioManualRow(row: RecipeMappingInput, exerciseClass: string) {
 
 function isCardioLiveTrackable(row: RecipeMappingInput, exerciseClass: string) {
   return row.isCardio && row.supportsLiveTracking && exerciseClass === 'cardio-live';
+}
+
+function isLegacyEmptyMetricRecipe(value: string) {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length === 0 || normalized === 'legacy-empty';
+}
+
+function getVolumeComparisonScalar(recipeKey: RecipeKey, metrics: Record<string, number>) {
+  const reps = finiteOrZero(metrics.reps);
+
+  if (recipeKey === 'unilateral_load_pair') {
+    return roundMetric((finiteOrZero(metrics.leftLoad) + finiteOrZero(metrics.rightLoad)) * reps);
+  }
+
+  if (recipeKey === 'assist_bodyweight') {
+    return roundMetric(finiteOrZero(metrics.assistLoad) * reps);
+  }
+
+  if (recipeKey === 'added_bodyweight') {
+    return roundMetric(finiteOrZero(metrics.addedLoad) * reps);
+  }
+
+  return roundMetric(finiteOrZero(metrics.load) * reps);
 }
 
 export function getRecipeFieldDefinitions(recipeKey: RecipeKey) {
@@ -412,6 +558,59 @@ export function getLiveCardioTrackedFields(recipeKey: RecipeKey) {
 
 export function isSupportedRecipeKey(value: string): value is RecipeKey {
   return supportedRecipeKeys.includes(value as RecipeKey);
+}
+
+export function resolveCatalogRecipeKey(input: {
+  exerciseClass: string;
+  isCardio: boolean;
+  isHold: boolean;
+  laterality?: string;
+  rawMetricRecipe: string;
+  recipeKey?: string | null;
+  supportsLiveTracking: boolean;
+}): RecipeKey | null {
+  const mapped = mapCatalogRecipeKey({
+    exerciseClass: input.exerciseClass,
+    isCardio: input.isCardio,
+    isHold: input.isHold,
+    laterality: input.laterality,
+    rawMetricRecipe: input.rawMetricRecipe,
+    supportsLiveTracking: input.supportsLiveTracking,
+  });
+
+  if (mapped) {
+    return mapped;
+  }
+
+  if (isLegacyEmptyMetricRecipe(input.rawMetricRecipe) && input.recipeKey && isSupportedRecipeKey(input.recipeKey)) {
+    return input.recipeKey;
+  }
+
+  return null;
+}
+
+export function getComparisonScalarForRecipe(recipeKey: RecipeKey, metrics: Record<string, number>) {
+  const comparisonKind = recipeComparisonKinds[recipeKey];
+
+  switch (comparisonKind) {
+    case 'volume':
+      return getVolumeComparisonScalar(recipeKey, metrics);
+    case 'reps':
+      return roundMetric(finiteOrZero(metrics.reps) + finiteOrZero(metrics.leftReps) + finiteOrZero(metrics.rightReps));
+    case 'duration':
+      return roundMetric(
+        finiteOrZero(metrics.duration) + finiteOrZero(metrics.leftDuration) + finiteOrZero(metrics.rightDuration),
+      );
+    case 'distance':
+      // Hybrid carry recipes intentionally compare PRs by distance for now.
+      return roundMetric(finiteOrZero(metrics.distance));
+    case 'floors':
+      return roundMetric(finiteOrZero(metrics.floors));
+    case 'load':
+      return roundMetric(finiteOrZero(metrics.load));
+    default:
+      return 0;
+  }
 }
 
 export function isLiveCardioRecipeKey(recipeKey: RecipeKey): recipeKey is LiveCardioRecipeKey {
@@ -483,6 +682,10 @@ function formatNumber(value: number) {
 }
 
 const formatRpe = (value: number) => roundMetric(value).toString();
+
+function finiteOrZero(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
 
 export function roundMetric(value: number) {
   return Number.isInteger(value) ? value : Number(value.toFixed(2));

@@ -22,6 +22,51 @@ export const reedRadii = {
   pill: 999,
 } as const;
 
+// Domain palette for workout analytics semantics.
+// Intentionally separate from core UI accent tokens.
+export const workoutSemanticPalette = {
+  modalities: {
+    cardio: '#059669',
+    holds: '#7c3aed',
+    load: '#c2410c',
+    neutral: '#64748b',
+  },
+  muscleGroups: {
+    arms: '#0f766e',
+    back: '#c2410c',
+    cardio: '#dc2626',
+    chest: '#059669',
+    core: '#0891b2',
+    legs: '#65a30d',
+    other: '#64748b',
+    shoulders: '#7c3aed',
+  },
+  granularMuscleGroups: {
+    adductors: '#65a30d',
+    biceps: '#9333ea',
+    calves: '#10b981',
+    cardio: '#f59e0b',
+    chest: '#0d9488',
+    core: '#f97316',
+    forearms: '#a855f7',
+    glutes: '#84cc16',
+    hamstrings: '#16a34a',
+    lats: '#0f766e',
+    other: '#64748b',
+    quads: '#22c55e',
+    shoulders: '#8b5cf6',
+    traps: '#14b8a6',
+    triceps: '#c026d3',
+    upperBack: '#0ea5a4',
+  },
+  prTypes: {
+    load: '#059669',
+    output: '#64748b',
+    rep: '#7c3aed',
+    volume: '#c2410c',
+  },
+} as const;
+
 const radii = reedRadii;
 
 const typography = {
@@ -102,6 +147,7 @@ type ReedTheme = {
     dangerText: ColorValue;
     dangerFill: ColorValue;
     dangerBorder: ColorValue;
+    overlayScrim: ColorValue;
   };
   gradients: {
     background: readonly [ColorValue, ColorValue, ColorValue];
@@ -193,6 +239,7 @@ export const lightTheme: ReedTheme = {
     dangerText: '#b91c1c',
     dangerFill: 'rgba(254, 226, 226, 0.84)',
     dangerBorder: 'rgba(248, 113, 113, 0.24)',
+    overlayScrim: 'rgba(248, 250, 255, 0.12)',
   },
   gradients: {
     background: ['#ffffff', '#f7f7f4', '#f7f7f4'],
@@ -272,6 +319,7 @@ export const darkTheme: ReedTheme = {
     dangerText: '#fecaca',
     dangerFill: 'rgba(69, 10, 10, 0.68)',
     dangerBorder: 'rgba(248, 113, 113, 0.18)',
+    overlayScrim: 'rgba(2, 6, 23, 0.18)',
   },
   gradients: {
     background: ['#040404', '#040404', '#0a0a0a'],

@@ -6,15 +6,19 @@ import { requireViewerProfile } from './profiles';
 import {
   getSetRepCount,
   getSetVolume,
+  resolveWeeklyGranularMuscleGroups,
   resolveWeeklyMuscleGroups,
+  weeklyGranularMuscleGroupLabels,
+  weeklyGranularMuscleGroupOrder,
   weeklyMuscleGroupLabels,
   weeklyPrimaryMuscleGroupOrder,
+  type WeeklyGranularMuscleGroupId,
   type WeeklyMuscleGroupId,
 } from '../domains/workout/weekly-muscle-stats';
 import { roundMetric } from '../domains/workout/recipes';
 
-type GroupTotals = {
-  groupId: WeeklyMuscleGroupId;
+type GroupTotals<GroupId extends string> = {
+  groupId: GroupId;
   reps: number;
   setCount: number;
   volume: number;
@@ -54,7 +58,11 @@ export const getWeeklyMuscleStats = query({
       ),
     );
 
-    const totalsByGroup = new Map<WeeklyMuscleGroupId, GroupTotals>();
+    const totalsByGroup = new Map<WeeklyMuscleGroupId, GroupTotals<WeeklyMuscleGroupId>>();
+    const totalsByGranularGroup = new Map<
+      WeeklyGranularMuscleGroupId,
+      GroupTotals<WeeklyGranularMuscleGroupId>
+    >();
     let totalSets = 0;
     let totalReps = 0;
     let totalVolume = 0;
@@ -63,6 +71,10 @@ export const getWeeklyMuscleStats = query({
       const sessionExercise = sessionExerciseMap.get(log.sessionExerciseId);
       const catalogExercise = sessionExercise ? catalogMap.get(sessionExercise.exerciseCatalogId) : null;
       const targetGroups = resolveWeeklyMuscleGroups({
+        isCardio: Boolean(catalogExercise?.isCardio),
+        mainMuscleGroups: catalogExercise?.mainMuscleGroups ?? [],
+      });
+      const targetGranularGroups = resolveWeeklyGranularMuscleGroups({
         isCardio: Boolean(catalogExercise?.isCardio),
         mainMuscleGroups: catalogExercise?.mainMuscleGroups ?? [],
       });
@@ -89,6 +101,23 @@ export const getWeeklyMuscleStats = query({
           volume: setVolume,
         });
       }
+
+      for (const groupId of targetGranularGroups) {
+        const existing = totalsByGranularGroup.get(groupId);
+        if (existing) {
+          existing.reps = roundMetric(existing.reps + setReps);
+          existing.setCount += 1;
+          existing.volume = roundMetric(existing.volume + setVolume);
+          continue;
+        }
+
+        totalsByGranularGroup.set(groupId, {
+          groupId,
+          reps: setReps,
+          setCount: 1,
+          volume: setVolume,
+        });
+      }
     }
 
     const groups = [
@@ -109,9 +138,28 @@ export const getWeeklyMuscleStats = query({
           label: weeklyMuscleGroupLabels[group.groupId],
         })),
     ];
+    const granularGroups = [
+      ...weeklyGranularMuscleGroupOrder.map(groupId => {
+        const group = totalsByGranularGroup.get(groupId);
+        return {
+          groupId,
+          label: weeklyGranularMuscleGroupLabels[groupId],
+          reps: group?.reps ?? 0,
+          setCount: group?.setCount ?? 0,
+          volume: group?.volume ?? 0,
+        };
+      }),
+      ...Array.from(totalsByGranularGroup.values())
+        .filter(group => !weeklyGranularMuscleGroupOrder.includes(group.groupId))
+        .map(group => ({
+          ...group,
+          label: weeklyGranularMuscleGroupLabels[group.groupId],
+        })),
+    ];
 
     return {
       groups,
+      granularGroups,
       totalReps: roundMetric(totalReps),
       totalSets,
       totalVolume: roundMetric(totalVolume),

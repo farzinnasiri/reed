@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,12 +9,13 @@ import {
 } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii } from '@/design/system';
+import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
 import { getFirstName, pickHomeGreeting } from './home-greetings';
 
@@ -23,6 +23,19 @@ type HomeSurfaceProps = {
   displayName: string;
   hasActiveSession: boolean;
   onOpenWorkout: () => void;
+};
+
+type WeeklyBreakdownMetric = 'reps' | 'sets' | 'volume';
+type WeeklyBreakdownGroup = {
+  groupId: string;
+  label: string;
+  reps: number;
+  setCount: number;
+  volume: number;
+};
+type WeeklyBreakdownStats = {
+  granularGroups?: WeeklyBreakdownGroup[];
+  groups: WeeklyBreakdownGroup[];
 };
 
 export function HomeSurface({
@@ -33,22 +46,12 @@ export function HomeSurface({
   const { theme } = useReedTheme();
   const startSession = useMutation(api.liveSessions.start);
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
+  const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const firstName = getFirstName(displayName);
   const [headline] = useState(() => pickHomeGreeting(firstName));
   const glassControls = getGlassControlTokens(theme);
-  const homeCardShadow = {
-    ...(Platform.OS === 'web'
-      ? { boxShadow: theme.mode === 'dark' ? '0px 14px 34px rgba(2, 6, 23, 0.16)' : '0px 14px 34px rgba(15, 23, 42, 0.06)' }
-      : {
-          shadowColor: '#0f172a',
-          shadowOffset: { height: 14, width: 0 },
-          shadowOpacity: theme.mode === 'dark' ? 0.18 : 0.06,
-          shadowRadius: 24,
-        }),
-    elevation: 0,
-  } as const;
 
   const weekRange = getCurrentWeekRange();
   const weeklyStats = useQuery(api.homeStats.getWeeklyMuscleStats, {
@@ -60,7 +63,63 @@ export function HomeSurface({
     weeklyStats?.weekStartAt ?? weekRange.weekStartAt,
     weeklyStats?.weekEndAt ?? weekRange.weekEndAt,
   );
-  const breakdownGroups = weeklyStats?.groups ?? [];
+  const workoutShapeGroups = weeklyStats?.groups ?? [];
+  const breakdownGroups = getWeeklyBreakdownGroups(weeklyStats);
+  const rankedWorkoutShapeGroups = useMemo(
+    () =>
+      [...workoutShapeGroups]
+        .filter(group => group.setCount > 0)
+        .sort((left, right) => right.setCount - left.setCount || left.label.localeCompare(right.label)),
+    [workoutShapeGroups],
+  );
+  const workoutShapeShare = useMemo(
+    () => getNormalizedShareByGroup(rankedWorkoutShapeGroups, 'sets'),
+    [rankedWorkoutShapeGroups],
+  );
+  const workoutShapeSegments = useMemo(
+    () =>
+      rankedWorkoutShapeGroups.map(group => ({
+        color: getCoarseMuscleGroupColor(group.groupId),
+        groupId: group.groupId,
+        label: group.label,
+        percent: workoutShapeShare.get(group.groupId) ?? 0,
+      })),
+    [rankedWorkoutShapeGroups, workoutShapeShare],
+  );
+  const rankedGroups = useMemo(
+    () =>
+      [...breakdownGroups]
+        .filter(group => getMetricValue(group, metricMode) > 0)
+        .sort((left, right) => {
+          const diff = getMetricValue(right, metricMode) - getMetricValue(left, metricMode);
+          if (diff !== 0) {
+            return diff;
+          }
+          return left.label.localeCompare(right.label);
+        }),
+    [breakdownGroups, metricMode],
+  );
+  const shareByGroup = useMemo(
+    () => getNormalizedShareByGroup(rankedGroups, metricMode),
+    [metricMode, rankedGroups],
+  );
+  const totalMetricValue = useMemo(
+    () => rankedGroups.reduce((sum, group) => sum + getMetricValue(group, metricMode), 0),
+    [metricMode, rankedGroups],
+  );
+  const chartSegments = useMemo(
+    () =>
+      rankedGroups
+        .filter(group => getMetricValue(group, metricMode) > 0)
+        .map(group => ({
+          color: getGranularMuscleGroupColor(group.groupId),
+          groupId: group.groupId,
+          label: group.label,
+          percent: shareByGroup.get(group.groupId) ?? 0,
+          value: getMetricValue(group, metricMode),
+        })),
+    [metricMode, rankedGroups, shareByGroup],
+  );
 
   function toggleBreakdown() {
     runReedLayoutAnimation();
@@ -101,7 +160,7 @@ export function HomeSurface({
         </ReedText>
       </View>
 
-      <GlassSurface style={[styles.card, homeCardShadow]}>
+      <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>
           <ReedText variant="section">{hasActiveSession ? 'Session in progress' : 'Start your next session'}</ReedText>
           <ReedText tone="muted">
@@ -129,7 +188,7 @@ export function HomeSurface({
               { backgroundColor: theme.colors.accentPrimary },
             ]}
           >
-            <ReedText style={styles.startButtonLabel} variant="section">
+            <ReedText style={[styles.startButtonLabel, { color: theme.colors.accentPrimaryText }]} variant="section">
               {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Session'}
             </ReedText>
           </View>
@@ -138,7 +197,7 @@ export function HomeSurface({
         {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
       </GlassSurface>
 
-      <GlassSurface style={[styles.card, homeCardShadow]}>
+      <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.weeklyHeaderCopy}>
             <ReedText variant="section">Weekly load</ReedText>
@@ -197,62 +256,115 @@ export function HomeSurface({
             </View>
 
             {isBreakdownExpanded ? (
-              breakdownGroups.length === 0 ? (
+              rankedGroups.length === 0 ? (
                 <View style={styles.emptyState}>
                   <ReedText tone="muted">
                     No sets logged this week yet. Start a session to populate your muscle board.
                   </ReedText>
                 </View>
               ) : (
-                <View
-                  style={[
-                    styles.breakdownList,
-                    {
-                      borderColor: theme.colors.controlBorder,
-                    },
-                  ]}
-                >
-                  {breakdownGroups.map((group, index) => (
+                <View style={styles.breakdownSection}>
+                  <View style={styles.breakdownControlsRow}>
                     <View
-                      key={group.groupId}
                       style={[
-                        styles.breakdownRow,
-                        index < breakdownGroups.length - 1
-                          ? {
-                              borderBottomColor: theme.colors.controlBorder,
-                            }
-                          : null,
+                        styles.breakdownMetricSwitch,
+                        {
+                          backgroundColor: glassControls.shellBackgroundColor,
+                          borderColor: glassControls.shellBorderColor,
+                        },
                       ]}
                     >
-                      <View style={styles.breakdownRowContent}>
-                        <View
-                          style={[
-                            styles.breakdownIconShell,
-                            {
-                              backgroundColor: glassControls.shellBackgroundColor,
-                              borderColor: glassControls.shellBorderColor,
-                            },
+                      {(['sets', 'reps', 'volume'] as WeeklyBreakdownMetric[]).map(mode => (
+                        <Pressable
+                          key={mode}
+                          onPress={() => setMetricMode(mode)}
+                          style={({ pressed }) => [
+                            styles.breakdownMetricOption,
+                            metricMode === mode
+                              ? {
+                                  backgroundColor: theme.colors.controlActiveFill,
+                                }
+                              : null,
+                            getTapScaleStyle(pressed),
                           ]}
                         >
-                          <Ionicons
-                            color={String(theme.colors.accentPrimary)}
-                            name={getMuscleGroupIconName(group.groupId)}
-                            size={20}
-                          />
-                        </View>
-                        <View style={styles.breakdownCopy}>
-                          <ReedText variant="bodyStrong">{group.label}</ReedText>
-                          <ReedText tone="muted">
-                            {formatWholeNumber(group.reps)} reps
-                            {'  •  '}
-                            {formatWeeklyVolume(group.volume)}
-                            {'  •  '}
-                            {formatSetCount(group.setCount)}
+                          <ReedText
+                            style={styles.breakdownMetricOptionText}
+                            tone={metricMode === mode ? 'default' : 'muted'}
+                            variant="caption"
+                          >
+                            {mode === 'sets' ? 'Sets' : mode === 'reps' ? 'Reps' : 'Volume'}
+                          </ReedText>
+                        </Pressable>
+                      ))}
+                    </View>
+                  </View>
+
+                  <View style={styles.breakdownOverview}>
+                    <WeeklyDonutChart
+                      segments={chartSegments.map(segment => ({
+                        color: segment.color,
+                        id: segment.groupId,
+                        percent: segment.percent,
+                      }))}
+                      subtitle={metricMode === 'sets' ? 'sets' : metricMode === 'reps' ? 'reps' : 'volume'}
+                      value={formatMetricSummaryValue(metricMode, totalMetricValue)}
+                    />
+
+                    <View style={styles.breakdownLegend}>
+                      {chartSegments.slice(0, 5).map(segment => (
+                        <View key={`legend-${segment.groupId}`} style={styles.breakdownLegendRow}>
+                          <View style={[styles.breakdownLegendDot, { backgroundColor: segment.color }]} />
+                          <ReedText style={styles.breakdownLegendLabel} variant="caption">
+                            {segment.label}
+                          </ReedText>
+                          <ReedText tone="muted" variant="caption">
+                            {segment.percent}% ({formatMetricLegendValue(metricMode, segment.value)})
                           </ReedText>
                         </View>
+                      ))}
+                    </View>
+                  </View>
+
+                  {workoutShapeSegments.length > 0 ? (
+                    <View style={styles.breakdownShapeSection}>
+                      <ReedText tone="muted" variant="caption">
+                        Workout shape
+                      </ReedText>
+                      <View
+                        style={[
+                          styles.breakdownShapeTrack,
+                          { backgroundColor: theme.colors.controlBorder },
+                        ]}
+                      >
+                        {workoutShapeSegments.map(segment => (
+                          <View
+                            key={`shape-${segment.groupId}`}
+                            style={[
+                              styles.breakdownShapeSegment,
+                              {
+                                backgroundColor: segment.color,
+                                flex: Math.max(segment.percent, 0.0001),
+                              },
+                            ]}
+                          />
+                        ))}
+                      </View>
+                      <View style={styles.breakdownShapeLegend}>
+                        {workoutShapeSegments.map(segment => (
+                          <View key={`shape-legend-${segment.groupId}`} style={styles.breakdownShapeLegendRow}>
+                            <View style={[styles.breakdownLegendDot, { backgroundColor: segment.color }]} />
+                            <ReedText style={styles.breakdownShapeLegendLabel} variant="caption">
+                              {segment.label}
+                            </ReedText>
+                            <ReedText tone="muted" variant="caption">
+                              {segment.percent}%
+                            </ReedText>
+                          </View>
+                        ))}
                       </View>
                     </View>
-                  ))}
+                  ) : null}
                 </View>
               )
             ) : null}
@@ -301,41 +413,230 @@ function SummaryMetric({
   );
 }
 
+function WeeklyDonutChart({
+  segments,
+  subtitle,
+  value,
+}: {
+  segments: Array<{ color: string; id: string; percent: number }>;
+  subtitle: string;
+  value: string;
+}) {
+  return (
+    <AnalyticsDonut
+      centerPrimary={value}
+      centerPrimaryStyle={styles.breakdownDonutValue}
+      centerSecondary={subtitle}
+      centerSecondaryStyle={styles.breakdownDonutSubtitle}
+      containerStyle={styles.breakdownDonutContainer}
+      segments={segments}
+      size={132}
+      strokeWidth={16}
+      wrapStyle={styles.breakdownDonutWrap}
+    />
+  );
+}
+
 type MetricDisplay = {
   unit?: string;
   value: string;
 };
 
-function getMuscleGroupIconName(groupId: string): React.ComponentProps<typeof Ionicons>['name'] {
+function getWeeklyBreakdownGroups(weeklyStats: WeeklyBreakdownStats | undefined): WeeklyBreakdownGroup[] {
+  if (!weeklyStats) {
+    return [];
+  }
+
+  if ('granularGroups' in weeklyStats && Array.isArray(weeklyStats.granularGroups)) {
+    return weeklyStats.granularGroups;
+  }
+
+  return weeklyStats.groups;
+}
+
+function getMetricValue(group: WeeklyBreakdownGroup, mode: WeeklyBreakdownMetric) {
+  if (mode === 'sets') {
+    return group.setCount;
+  }
+
+  if (mode === 'reps') {
+    return group.reps;
+  }
+
+  return group.volume;
+}
+
+function formatMetricSummaryValue(mode: WeeklyBreakdownMetric, value: number) {
+  if (mode === 'volume') {
+    return formatWeeklyVolume(value);
+  }
+
+  return formatWholeNumber(value);
+}
+
+function formatMetricLegendValue(mode: WeeklyBreakdownMetric, value: number) {
+  if (mode === 'sets') {
+    return `${formatWholeNumber(value)} sets`;
+  }
+
+  if (mode === 'reps') {
+    return `${formatWholeNumber(value)} reps`;
+  }
+
+  return formatWeeklyVolume(value);
+}
+
+function getNormalizedShareByGroup(
+  groups: WeeklyBreakdownGroup[],
+  mode: WeeklyBreakdownMetric,
+) {
+  const shares = new Map<string, number>();
+  const positive = groups
+    .map(group => ({ group, value: getMetricValue(group, mode) }))
+    .filter(entry => entry.value > 0);
+
+  if (positive.length === 0) {
+    for (const group of groups) {
+      shares.set(group.groupId, 0);
+    }
+    return shares;
+  }
+
+  const total = positive.reduce((sum, entry) => sum + entry.value, 0);
+  const ranked = positive.map(entry => {
+    const raw = (entry.value / total) * 100;
+    const floor = Math.floor(raw);
+    return {
+      floor,
+      fraction: raw - floor,
+      groupId: entry.group.groupId,
+      value: entry.value,
+    };
+  });
+
+  let distributed = ranked.reduce((sum, row) => sum + row.floor, 0);
+  const needed = Math.max(0, 100 - distributed);
+  const byRemainder = [...ranked].sort(
+    (left, right) =>
+      right.fraction - left.fraction || right.value - left.value || left.groupId.localeCompare(right.groupId),
+  );
+
+  for (let index = 0; index < needed; index += 1) {
+    const target = byRemainder[index % byRemainder.length];
+    target.floor += 1;
+    distributed += 1;
+    if (distributed >= 100) {
+      break;
+    }
+  }
+
+  for (const row of ranked) {
+    shares.set(row.groupId, row.floor);
+  }
+
+  for (const group of groups) {
+    if (!shares.has(group.groupId)) {
+      shares.set(group.groupId, 0);
+    }
+  }
+
+  return shares;
+}
+
+function getCoarseMuscleGroupColor(groupId: string) {
   if (groupId === 'arms') {
-    return 'barbell-outline';
-  }
-
-  if (groupId === 'shoulders') {
-    return 'triangle-outline';
-  }
-
-  if (groupId === 'chest') {
-    return 'body-outline';
+    return workoutSemanticPalette.muscleGroups.arms;
   }
 
   if (groupId === 'back') {
-    return 'shirt-outline';
+    return workoutSemanticPalette.muscleGroups.back;
   }
 
   if (groupId === 'cardio') {
-    return 'heart-outline';
+    return workoutSemanticPalette.muscleGroups.cardio;
   }
 
-  if (groupId === 'legs') {
-    return 'walk-outline';
+  if (groupId === 'chest') {
+    return workoutSemanticPalette.muscleGroups.chest;
   }
 
   if (groupId === 'core') {
-    return 'ellipse-outline';
+    return workoutSemanticPalette.muscleGroups.core;
   }
 
-  return 'fitness-outline';
+  if (groupId === 'legs') {
+    return workoutSemanticPalette.muscleGroups.legs;
+  }
+
+  if (groupId === 'shoulders') {
+    return workoutSemanticPalette.muscleGroups.shoulders;
+  }
+
+  return workoutSemanticPalette.muscleGroups.other;
+}
+
+function getGranularMuscleGroupColor(groupId: string) {
+  if (groupId === 'adductors') {
+    return workoutSemanticPalette.granularMuscleGroups.adductors;
+  }
+
+  if (groupId === 'biceps') {
+    return workoutSemanticPalette.granularMuscleGroups.biceps;
+  }
+
+  if (groupId === 'calves') {
+    return workoutSemanticPalette.granularMuscleGroups.calves;
+  }
+
+  if (groupId === 'cardio') {
+    return workoutSemanticPalette.granularMuscleGroups.cardio;
+  }
+
+  if (groupId === 'chest') {
+    return workoutSemanticPalette.granularMuscleGroups.chest;
+  }
+
+  if (groupId === 'core') {
+    return workoutSemanticPalette.granularMuscleGroups.core;
+  }
+
+  if (groupId === 'forearms') {
+    return workoutSemanticPalette.granularMuscleGroups.forearms;
+  }
+
+  if (groupId === 'glutes') {
+    return workoutSemanticPalette.granularMuscleGroups.glutes;
+  }
+
+  if (groupId === 'hamstrings') {
+    return workoutSemanticPalette.granularMuscleGroups.hamstrings;
+  }
+
+  if (groupId === 'lats') {
+    return workoutSemanticPalette.granularMuscleGroups.lats;
+  }
+
+  if (groupId === 'quads') {
+    return workoutSemanticPalette.granularMuscleGroups.quads;
+  }
+
+  if (groupId === 'shoulders') {
+    return workoutSemanticPalette.granularMuscleGroups.shoulders;
+  }
+
+  if (groupId === 'traps') {
+    return workoutSemanticPalette.granularMuscleGroups.traps;
+  }
+
+  if (groupId === 'triceps') {
+    return workoutSemanticPalette.granularMuscleGroups.triceps;
+  }
+
+  if (groupId === 'upperBack') {
+    return workoutSemanticPalette.granularMuscleGroups.upperBack;
+  }
+
+  return workoutSemanticPalette.granularMuscleGroups.other;
 }
 
 function getCurrentWeekRange() {
@@ -378,10 +679,6 @@ function formatVolumeDisplay(value: number): MetricDisplay {
     unit,
     value: amount ?? formatted,
   };
-}
-
-function formatSetCount(value: number) {
-  return `${value} ${value === 1 ? 'set' : 'sets'}`;
 }
 
 function getErrorMessage(error: unknown) {
@@ -443,7 +740,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   startButtonLabel: {
-    color: '#f8fafc',
+    textAlign: 'center',
   },
   loadingRow: {
     alignItems: 'center',
@@ -486,34 +783,92 @@ const styles = StyleSheet.create({
     top: 16,
     width: 1,
   },
-  breakdownList: {
-    borderTopWidth: 1,
-    gap: 0,
+  breakdownSection: {
+    gap: 12,
     paddingTop: 8,
   },
-  breakdownRow: {
-    borderBottomWidth: 1,
-    gap: 3,
-    minHeight: 60,
-    justifyContent: 'center',
-    paddingVertical: 10,
-  },
-  breakdownRowContent: {
+  breakdownControlsRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 12,
-  },
-  breakdownIconShell: {
-    alignItems: 'center',
-    borderRadius: reedRadii.md,
-    borderWidth: 1,
-    height: 44,
+    gap: 10,
     justifyContent: 'center',
-    width: 44,
   },
-  breakdownCopy: {
+  breakdownMetricSwitch: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  breakdownMetricOption: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 30,
+    minWidth: 58,
+    paddingHorizontal: 10,
+  },
+  breakdownMetricOptionText: {
+    fontFamily: 'Outfit_600SemiBold',
+  },
+  breakdownShapeSection: {
+    gap: 6,
+  },
+  breakdownShapeTrack: {
+    borderRadius: reedRadii.pill,
+    flexDirection: 'row',
+    height: 10,
+    overflow: 'hidden',
+  },
+  breakdownShapeSegment: {
+    minWidth: 0,
+  },
+  breakdownShapeLegend: {
+    gap: 4,
+  },
+  breakdownShapeLegendRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  breakdownShapeLegendLabel: {
     flex: 1,
-    gap: 3,
+  },
+  breakdownOverview: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  breakdownDonutContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  breakdownDonutWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  breakdownDonutValue: {
+    textAlign: 'center',
+  },
+  breakdownDonutSubtitle: {
+    marginTop: -1,
+    textTransform: 'capitalize',
+  },
+  breakdownLegend: {
+    flex: 1,
+    gap: 6,
+  },
+  breakdownLegendRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  breakdownLegendDot: {
+    borderRadius: reedRadii.pill,
+    height: 8,
+    width: 8,
+  },
+  breakdownLegendLabel: {
+    flex: 1,
   },
   emptyState: {
     minHeight: 80,

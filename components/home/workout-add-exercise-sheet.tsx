@@ -4,7 +4,7 @@ import { Animated, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, us
 import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { getGlassControlTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -34,6 +34,7 @@ export function AddExerciseSheet({
 }: AddExerciseSheetProps) {
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
+  const scrim = getGlassScrimTokens(theme);
   const { height } = useWindowDimensions();
   const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const filterSheetProgress = useRef(new Animated.Value(0)).current;
@@ -161,7 +162,7 @@ export function AddExerciseSheet({
 
   const overlayOpacity = sheetProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.4],
+    outputRange: [0, 1],
   });
   const panelTranslateY = sheetProgress.interpolate({
     inputRange: [0, 1],
@@ -169,7 +170,7 @@ export function AddExerciseSheet({
   });
   const filterOverlayOpacity = filterSheetProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 0.4],
+    outputRange: [0, 1],
   });
   const filterTranslateY = filterSheetProgress.interpolate({
     inputRange: [0, 1],
@@ -180,7 +181,10 @@ export function AddExerciseSheet({
     <Modal animationType="none" onRequestClose={onClose} transparent visible={isSheetMounted}>
       <View style={styles.sheetOverlay}>
         <Animated.View
-          style={[StyleSheet.absoluteFill, { backgroundColor: '#000000', opacity: overlayOpacity, pointerEvents: 'none' }]}
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: scrim.backgroundColor, opacity: overlayOpacity, pointerEvents: 'none' },
+          ]}
         />
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
         <Animated.View
@@ -343,6 +347,12 @@ export function AddExerciseSheet({
 
           {isFilterSheetMounted ? (
             <Animated.View style={[styles.filterSheetOverlay, { opacity: filterOverlayOpacity }]}>
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { backgroundColor: scrim.backgroundColor, pointerEvents: 'none' },
+                ]}
+              />
               <Pressable onPress={() => setIsFilterSheetOpen(false)} style={StyleSheet.absoluteFill} />
               <Animated.View
                 style={[

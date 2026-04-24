@@ -66,6 +66,19 @@ export function WorkoutSwipeCard({
   );
 
   const scale = useMemo(() => Animated.multiply(dragScale, entryScale), [dragScale, entryScale]);
+  const leftGradientColors = useMemo(
+    () =>
+      leftTone === 'danger'
+        ? ([String(theme.colors.dangerFill), 'transparent'] as const)
+        : ([String(theme.colors.controlFill), 'transparent'] as const),
+    [leftTone, theme.colors.controlFill, theme.colors.dangerFill],
+  );
+  const leftForegroundColor = leftTone === 'danger' ? theme.colors.dangerText : theme.colors.textPrimary;
+  const rightGradientColors = useMemo(
+    () => [String(theme.colors.accentPrimary), 'transparent'] as const,
+    [theme.colors.accentPrimary],
+  );
+  const rightForegroundColor = theme.colors.accentPrimaryText;
 
   const leftOpacity = useMemo(
     () =>
@@ -188,20 +201,14 @@ export function WorkoutSwipeCard({
         ]}
       >
         <LinearGradient
-          colors={
-            leftTone === 'danger'
-              ? ['rgba(239,68,68,0.9)', 'rgba(239,68,68,0.12)']
-              : theme.mode === 'dark'
-                ? ['rgba(82,82,91,0.6)', 'rgba(82,82,91,0.05)']
-                : ['rgba(100,116,139,0.5)', 'rgba(100,116,139,0.08)']
-          }
+          colors={leftGradientColors}
           end={{ x: 1, y: 0.5 }}
           start={{ x: 0, y: 0.5 }}
           style={StyleSheet.absoluteFill}
         />
         <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: leftCopyX }] }]}>
-          <Ionicons color="#ffffff" name={leftIcon} size={32} />
-          <ReedText style={styles.underlayText} variant="label">
+          <Ionicons color={String(leftForegroundColor)} name={leftIcon} size={32} />
+          <ReedText style={[styles.underlayText, { color: leftForegroundColor }]} variant="label">
             {leftLabel}
           </ReedText>
         </Animated.View>
@@ -218,14 +225,14 @@ export function WorkoutSwipeCard({
         ]}
       >
         <LinearGradient
-          colors={['rgba(16,185,129,0.9)', 'rgba(16,185,129,0.12)']}
+          colors={rightGradientColors}
           end={{ x: 0, y: 0.5 }}
           start={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFill}
         />
         <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: rightCopyX }] }]}>
-          <Ionicons color="#ffffff" name={rightIcon} size={32} />
-          <ReedText style={styles.underlayText} variant="label">
+          <Ionicons color={String(rightForegroundColor)} name={rightIcon} size={32} />
+          <ReedText style={[styles.underlayText, { color: rightForegroundColor }]} variant="label">
             {rightLabel}
           </ReedText>
         </Animated.View>
@@ -282,7 +289,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   underlayText: {
-    color: '#ffffff',
     letterSpacing: 1.6,
   },
   card: {

@@ -12,12 +12,17 @@ import {
 } from '@/lib/rest-timer-alerts';
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
+import { WorkoutSessionInsightsSheet } from './workout-session-insights-sheet';
+import { WorkoutSessionStatusStrip } from './workout-session-status-strip';
 import { styles } from './workout-surface.styles';
 import type {
   CaptureCard,
   EditingSet,
   LiveCardioCard,
   LiveCardioFinishSummary,
+  LiveSessionFullInsights,
+  LiveSessionStatusStrip,
+  LiveSessionSummary,
   MetricValues,
   RestCard,
   TimelineRow,
@@ -27,7 +32,7 @@ import type {
 import { TimelinePage } from './workout-timeline-page';
 import { useRestBackgroundAlerts } from './use-rest-background-alerts';
 import { useRunningTicker } from './use-running-ticker';
-import { formatElapsed, getErrorMessage } from './workout-surface.utils';
+import { formatElapsedCompact, getErrorMessage } from './workout-surface.utils';
 
 type WorkoutSurfaceProps = {
   onExitWorkout: () => void;
@@ -37,6 +42,7 @@ type WorkoutSurfaceProps = {
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
   const session = useQuery(api.liveSessions.getCurrent, {});
+  const sessionInsights = useQuery(api.liveSessionInsights.getCurrent, {});
   const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
   const startSession = useMutation(api.liveSessions.start);
   const addExercise = useMutation(api.liveSessions.addExercise);
@@ -69,6 +75,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [liveElapsedSeconds, setLiveElapsedSeconds] = useState(0);
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
@@ -131,6 +138,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     if (!session) {
       setPage('timeline');
       setEditingSet(null);
+      setIsInsightsOpen(false);
       return;
     }
 
@@ -232,8 +240,26 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return null;
     }
 
-    return formatElapsed(session.session.startedAt, elapsedNow);
+    return formatElapsedCompact(session.session.startedAt, elapsedNow);
   }, [elapsedNow, session?.session.startedAt]);
+
+  const fallbackStatus = useMemo<LiveSessionStatusStrip>(() => {
+    const completedSets = session?.timeline.reduce((total, row) => total + row.setCount, 0) ?? 0;
+    return {
+      completedSetsLabel: `${completedSets} ${completedSets === 1 ? 'set' : 'sets'}`,
+      durationLabel: elapsedLabel ?? '0m',
+      microLineTokens: [],
+      workSlotKind: 'active',
+      workSlotLabel: 'Active',
+    };
+  }, [elapsedLabel, session?.timeline]);
+
+  const insightsStatus = sessionInsights?.statusStrip
+    ? {
+        ...sessionInsights.statusStrip,
+        durationLabel: elapsedLabel ?? sessionInsights.statusStrip.durationLabel,
+      }
+    : fallbackStatus;
 
   const closeAddSheet = () => {
     setIsAddSheetOpen(false);
@@ -583,7 +609,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         }}
         onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
         onDeleteSet={handleDeleteSet}
-        onExitWorkout={onExitWorkout}
         onFinishSession={handleFinishSession}
         onOpenExercise={handleSelectExercise}
         onOpenSet={handleOpenSet}
@@ -647,9 +672,30 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       />
     );
 
+  function handleStatusStripBack() {
+    // Two-level workout stack: timeline back exits the workout, while nested
+    // exercise/rest/live-cardio surfaces return to the timeline first.
+    if (page === 'timeline') {
+      onExitWorkout();
+      return;
+    }
+
+    setEditingSet(null);
+    setLiveCardioFinishSummary(null);
+    setPage('timeline');
+  }
+
   return (
     <View style={styles.root}>
-      {renderWorkoutPage(page)}
+      <View style={styles.activeWorkoutShell}>
+        <WorkoutSessionStatusStrip
+          onBack={handleStatusStripBack}
+          onOpenInsights={() => setIsInsightsOpen(true)}
+          status={insightsStatus}
+        />
+
+        <View style={styles.activeWorkoutPage}>{renderWorkoutPage(page)}</View>
+      </View>
 
       <AddExerciseSheet
         isOpen={isAddSheetOpen}
@@ -659,6 +705,15 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         onClose={closeAddSheet}
         onToggleFavorite={handleToggleFavorite}
       />
+
+      {sessionInsights ? (
+        <WorkoutSessionInsightsSheet
+          fullInsights={sessionInsights.fullInsights as LiveSessionFullInsights}
+          isOpen={isInsightsOpen}
+          onClose={() => setIsInsightsOpen(false)}
+          summary={sessionInsights.summary as LiveSessionSummary}
+        />
+      ) : null}
     </View>
   );
 }

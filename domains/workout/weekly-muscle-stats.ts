@@ -1,6 +1,23 @@
 import { roundMetric } from './recipes';
 
 export type WeeklyMuscleGroupId = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core' | 'cardio' | 'other';
+export type WeeklyGranularMuscleGroupId =
+  | 'quads'
+  | 'hamstrings'
+  | 'glutes'
+  | 'adductors'
+  | 'calves'
+  | 'chest'
+  | 'lats'
+  | 'upperBack'
+  | 'traps'
+  | 'shoulders'
+  | 'biceps'
+  | 'triceps'
+  | 'forearms'
+  | 'core'
+  | 'cardio'
+  | 'other';
 
 export const weeklyPrimaryMuscleGroupOrder: WeeklyMuscleGroupId[] = [
   'arms',
@@ -23,6 +40,44 @@ export const weeklyMuscleGroupLabels: Record<WeeklyMuscleGroupId, string> = {
   shoulders: 'Shoulders',
 };
 
+export const weeklyGranularMuscleGroupOrder: WeeklyGranularMuscleGroupId[] = [
+  'quads',
+  'hamstrings',
+  'glutes',
+  'adductors',
+  'calves',
+  'chest',
+  'lats',
+  'upperBack',
+  'traps',
+  'shoulders',
+  'biceps',
+  'triceps',
+  'forearms',
+  'core',
+  'cardio',
+  'other',
+] as const;
+
+export const weeklyGranularMuscleGroupLabels: Record<WeeklyGranularMuscleGroupId, string> = {
+  adductors: 'Adductors',
+  biceps: 'Biceps',
+  calves: 'Calves',
+  cardio: 'Cardio',
+  chest: 'Chest',
+  core: 'Core',
+  forearms: 'Forearms',
+  glutes: 'Glutes',
+  hamstrings: 'Hamstrings',
+  lats: 'Lats',
+  other: 'Other',
+  quads: 'Quads',
+  shoulders: 'Shoulders',
+  traps: 'Traps',
+  triceps: 'Triceps',
+  upperBack: 'Upper back',
+};
+
 export function resolveWeeklyMuscleGroups(input: {
   isCardio: boolean;
   mainMuscleGroups: string[];
@@ -34,7 +89,28 @@ export function resolveWeeklyMuscleGroups(input: {
   const mapped = new Set<WeeklyMuscleGroupId>();
 
   for (const rawGroup of input.mainMuscleGroups) {
-    mapped.add(mapMuscleGroup(rawGroup));
+    mapped.add(toWeeklyMuscleGroupId(mapGranularMuscleGroup(rawGroup)));
+  }
+
+  if (mapped.size === 0) {
+    return ['other'];
+  }
+
+  return Array.from(mapped);
+}
+
+export function resolveWeeklyGranularMuscleGroups(input: {
+  isCardio: boolean;
+  mainMuscleGroups: string[];
+}): WeeklyGranularMuscleGroupId[] {
+  if (input.isCardio) {
+    return ['cardio'];
+  }
+
+  const mapped = new Set<WeeklyGranularMuscleGroupId>();
+
+  for (const rawGroup of input.mainMuscleGroups) {
+    mapped.add(mapGranularMuscleGroup(rawGroup));
   }
 
   if (mapped.size === 0) {
@@ -79,80 +155,175 @@ export function formatWeeklyVolume(value: number) {
   return `${Math.round(value).toLocaleString('en')} kg`;
 }
 
-function mapMuscleGroup(rawGroup: string): WeeklyMuscleGroupId {
-  const normalized = rawGroup.trim().toLowerCase();
+const granularMuscleGroupAliases: Record<string, WeeklyGranularMuscleGroupId> = {
+  abs: 'core',
+  adductors: 'adductors',
+  anconeus: 'other',
+  biceps: 'biceps',
+  'biceps tendons': 'biceps',
+  brachialis: 'forearms',
+  brachioradialis: 'forearms',
+  calves: 'calves',
+  'cardiorespiratory system': 'other',
+  core: 'core',
+  'external rotators': 'shoulders',
+  forearms: 'forearms',
+  'front delts': 'shoulders',
+  gastrocnemius: 'calves',
+  'glute max': 'glutes',
+  'glute med': 'glutes',
+  'glute min': 'glutes',
+  glutes: 'glutes',
+  grip: 'forearms',
+  hamstrings: 'hamstrings',
+  'hip flexors': 'calves',
+  hips: 'other',
+  infraspinatus: 'shoulders',
+  'intrinsic foot muscles': 'other',
+  'lateral delts': 'shoulders',
+  lats: 'lats',
+  'levator scapulae': 'other',
+  'lower pecs': 'chest',
+  'lower traps': 'traps',
+  'mid back': 'upperBack',
+  'neck extensors': 'other',
+  'neck flexors': 'other',
+  obliques: 'other',
+  pecs: 'chest',
+  'quadratus lumborum': 'core',
+  quads: 'quads',
+  'rear delts': 'shoulders',
+  'rectus abdominis': 'core',
+  'rectus femoris': 'quads',
+  rhomboids: 'upperBack',
+  'rotator cuff': 'shoulders',
+  serratus: 'chest',
+  shoulders: 'shoulders',
+  soleus: 'calves',
+  'spinal erectors': 'upperBack',
+  stabilizers: 'other',
+  supraspinatus: 'shoulders',
+  'tensor fasciae latae': 'other',
+  'teres major': 'other',
+  'teres minor': 'shoulders',
+  thumbs: 'other',
+  'tibialis anterior': 'other',
+  'tibialis posterior': 'other',
+  tfl: 'other',
+  traps: 'traps',
+  'transverse abdominis': 'core',
+  triceps: 'triceps',
+  'triceps long head': 'triceps',
+  'upper back': 'upperBack',
+  'upper chest': 'chest',
+  'upper traps': 'traps',
+  vmo: 'quads',
+  'wrist extensors': 'other',
+  'wrist flexors': 'other',
+};
 
-  if (
-    normalized.includes('quad') ||
-    normalized.includes('hamstring') ||
-    normalized.includes('glute') ||
-    normalized.includes('adductor') ||
-    normalized.includes('calf') ||
-    normalized.includes('soleus') ||
-    normalized.includes('gastrocnemius') ||
-    normalized.includes('tibialis') ||
-    normalized.includes('hip flexor') ||
-    normalized.includes('rectus femoris') ||
-    normalized.includes('vmo')
-  ) {
-    return 'legs';
+function mapGranularMuscleGroup(rawGroup: string): WeeklyGranularMuscleGroupId {
+  const normalized = normalizeMuscleGroupToken(rawGroup);
+  const alias = granularMuscleGroupAliases[normalized];
+  if (alias) {
+    return alias;
   }
 
-  if (
-    normalized.includes('pec') ||
-    normalized.includes('chest') ||
-    normalized.includes('serratus')
-  ) {
+  // Legacy/free-text fallback. Catalog values should be handled by the exact alias table above.
+  if (normalized.includes('wrist') || normalized.includes('thumb') || normalized.includes('tibialis') || normalized.includes('neck')) {
+    return 'other';
+  }
+
+  if (normalized.includes('quad') || normalized.includes('vastus')) {
+    return 'quads';
+  }
+
+  if (normalized.includes('hamstring')) {
+    return 'hamstrings';
+  }
+
+  if (normalized.includes('glute')) {
+    return 'glutes';
+  }
+
+  if (normalized.includes('adductor')) {
+    return 'adductors';
+  }
+
+  if (normalized.includes('calf') || normalized.includes('soleus') || normalized.includes('gastrocnemius')) {
+    return 'calves';
+  }
+
+  if (normalized.includes('pec') || normalized.includes('chest')) {
     return 'chest';
   }
 
-  if (
-    normalized.includes('delt') ||
-    normalized === 'shoulders' ||
-    normalized.includes('rotator cuff') ||
-    normalized.includes('external rotator') ||
-    normalized.includes('infraspinatus') ||
-    normalized.includes('teres minor')
-  ) {
+  if (normalized.includes('lat')) {
+    return 'lats';
+  }
+
+  if (normalized.includes('trap')) {
+    return 'traps';
+  }
+
+  if (normalized.includes('back') || normalized.includes('rhomboid') || normalized.includes('erector')) {
+    return 'upperBack';
+  }
+
+  if (normalized.includes('delt') || normalized.includes('shoulder') || normalized.includes('rotator')) {
     return 'shoulders';
   }
 
-  if (
-    normalized.includes('lat') ||
-    normalized.includes('back') ||
-    normalized.includes('trap') ||
-    normalized.includes('rhomboid') ||
-    normalized.includes('spinal erector') ||
-    normalized.includes('teres major')
-  ) {
-    return 'back';
+  if (normalized.includes('biceps')) {
+    return 'biceps';
   }
 
-  if (
-    normalized.includes('biceps') ||
-    normalized.includes('triceps') ||
-    normalized.includes('brachialis') ||
-    normalized.includes('brachioradialis') ||
-    normalized.includes('forearm') ||
-    normalized.includes('wrist') ||
-    normalized.includes('thumb') ||
-    normalized === 'grip'
-  ) {
-    return 'arms';
+  if (normalized.includes('triceps')) {
+    return 'triceps';
   }
 
-  if (
-    normalized.includes('core') ||
-    normalized === 'abs' ||
-    normalized.includes('oblique') ||
-    normalized.includes('transverse abdominis') ||
-    normalized.includes('rectus abdominis') ||
-    normalized.includes('quadratus lumborum')
-  ) {
+  if (normalized.includes('brach') || normalized.includes('forearm') || normalized === 'grip') {
+    return 'forearms';
+  }
+
+  if (normalized.includes('core') || normalized === 'abs' || normalized.includes('abdominis')) {
     return 'core';
   }
 
   return 'other';
+}
+
+function normalizeMuscleGroupToken(value: string) {
+  return value.trim().toLowerCase().replace(/[\s_-]+/g, ' ');
+}
+
+function toWeeklyMuscleGroupId(granularGroup: WeeklyGranularMuscleGroupId): WeeklyMuscleGroupId {
+  switch (granularGroup) {
+    case 'quads':
+    case 'hamstrings':
+    case 'glutes':
+    case 'adductors':
+    case 'calves':
+      return 'legs';
+    case 'lats':
+    case 'upperBack':
+    case 'traps':
+      return 'back';
+    case 'biceps':
+    case 'triceps':
+    case 'forearms':
+      return 'arms';
+    case 'chest':
+      return 'chest';
+    case 'shoulders':
+      return 'shoulders';
+    case 'core':
+      return 'core';
+    case 'cardio':
+      return 'cardio';
+    default:
+      return 'other';
+  }
 }
 
 function finiteOrZero(value: number | undefined) {

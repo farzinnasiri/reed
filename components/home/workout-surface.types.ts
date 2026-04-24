@@ -95,3 +95,143 @@ export type LiveCardioFinishSummary = {
   nextExerciseId: Id<'liveSessionExercises'> | null;
   summary: string;
 };
+
+export type LiveSessionStatusStrip = {
+  completedSetsLabel: string;
+  durationLabel: string;
+  microLineTokens: string[];
+  workSlotKind: 'active' | 'cardio' | 'holds' | 'load' | 'mixed';
+  workSlotLabel: string;
+};
+
+export type LiveSessionSummary = {
+  distribution: {
+    byGranularMuscleGroup: Array<{
+      contributionPercent: number;
+      groupId: string;
+      label: string;
+      loadKg: number;
+      reps: number;
+      setCount: number;
+    }>;
+    byMuscleGroup: Array<{
+      contributionPercent: number;
+      groupId: string;
+      label: string;
+      loadKg: number;
+      reps: number;
+      setCount: number;
+    }>;
+    workSplit: Array<{
+      contributionPercent: number;
+      groupId: string;
+      label: string;
+      loadKg: number;
+      reps: number;
+      setCount: number;
+    }>;
+  };
+  highlights: {
+    mostDemandingExercise: {
+      averageRpe: number;
+      exerciseName: string;
+      highestRpe: number;
+      sessionExerciseId: string;
+      setCount: number;
+    } | null;
+    nearPrCount: number;
+    prCount: number;
+  };
+  intensity: {
+    averageRpe: number | null;
+    byMuscleGroup: Array<{
+      label: string;
+      value: number | null;
+    }>;
+    highestRpe: number | null;
+  };
+  output: {
+    completedSets: number;
+    totalDistanceKm: number;
+    totalHoldSeconds: number;
+    totalLoadKg: number;
+  };
+  recovery: {
+    averageRestSeconds: number | null;
+    totalRestSeconds: number;
+  };
+};
+
+export type LiveSessionFullInsights = {
+  exerciseMap: {
+    entries: Array<{
+      averageRpe: number | null;
+      exerciseName: string;
+      firstLoggedAt: number;
+      lastLoggedAt: number;
+      modality: 'cardio' | 'holds' | 'load' | 'unmeasured';
+      outputLabel: string | null;
+      sessionExerciseId: string;
+      setCount: number;
+    }>;
+    setsPerHour: number | null;
+  };
+  intensityAnalysis: {
+    averageRpe: number | null;
+    byMuscleGroup: Array<{
+      label: string;
+      value: number | null;
+    }>;
+    highestRpe: number | null;
+    trend: Array<{
+      exerciseName: string;
+      rpe: number;
+      setLogId: string;
+      setNumber: number;
+    }>;
+  };
+  modalityBreakdown: {
+    buckets: Array<{
+      count: number;
+      key: 'cardio' | 'holds' | 'load' | 'unmeasured';
+      label: string;
+      primaryValueLabel: string | null;
+      ratio: number;
+    }>;
+  };
+  performance: {
+    nearPrExercises: string[];
+    prExercises: string[];
+    topSets: Array<{
+      exerciseName: string;
+      score: number;
+      summary: string;
+    }>;
+  };
+  recoveryAnalysis: {
+    averageRestSeconds: number | null;
+    highIntensityAverageRestSeconds: number | null;
+    longestRestSeconds: number | null;
+    shortestRestSeconds: number | null;
+    standardAverageRestSeconds: number | null;
+    totalRestSeconds: number;
+  };
+  workBreakdown: {
+    byGranularMuscleGroup: Array<{
+      contributionPercent: number;
+      groupId: string;
+      label: string;
+      loadKg: number;
+      reps: number;
+      setCount: number;
+    }>;
+    byMuscleGroup: Array<{
+      contributionPercent: number;
+      groupId: string;
+      label: string;
+      loadKg: number;
+      reps: number;
+      setCount: number;
+    }>;
+  };
+};
