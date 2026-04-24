@@ -365,7 +365,7 @@ export const styles = StyleSheet.create({
     minHeight: 0,
   },
   cardHeader: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',

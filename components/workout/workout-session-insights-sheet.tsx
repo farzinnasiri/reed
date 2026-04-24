@@ -81,6 +81,13 @@ export function WorkoutSessionInsightsSheet({
 }: WorkoutSessionInsightsSheetProps) {
   const { theme } = useReedTheme();
   const scrim = getGlassScrimTokens(theme);
+  const frostedSheetSurfaceStyle = useMemo(
+    () => ({
+      backgroundColor: theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.76)' : 'rgba(255, 255, 255, 0.72)',
+      borderColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0.78)',
+    }),
+    [theme.mode],
+  );
   const { height } = useWindowDimensions();
   const openProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const expandProgress = useRef(new Animated.Value(0)).current;
@@ -96,12 +103,12 @@ export function WorkoutSessionInsightsSheet({
     if (isOpen) {
       setIsMounted(true);
       requestAnimationFrame(() => {
-        createTiming(openProgress, 1, reedMotion.durations.mode, reedEasing.easeOut).start();
+        createTiming(openProgress, 1, reedMotion.durations.mode, reedEasing.easeOut, false).start();
       });
       return;
     }
 
-    createTiming(openProgress, 0, reedMotion.durations.mode, reedEasing.easeInOut).start(({ finished }) => {
+    createTiming(openProgress, 0, reedMotion.durations.mode, reedEasing.easeInOut, false).start(({ finished }) => {
       if (!finished) {
         return;
       }
@@ -226,7 +233,10 @@ export function WorkoutSessionInsightsSheet({
         <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
 
         <Animated.View style={[styles.sessionInsightsFrame, panelStyle]}>
-          <GlassSurface contentStyle={styles.sessionInsightsContent} style={styles.sessionInsightsPanel}>
+          <GlassSurface
+            contentStyle={styles.sessionInsightsContent}
+            style={[styles.sessionInsightsPanel, frostedSheetSurfaceStyle]}
+          >
             <View {...panResponder.panHandlers} style={styles.sessionInsightsHandleArea}>
               <View style={styles.sessionInsightsHandle} />
             </View>

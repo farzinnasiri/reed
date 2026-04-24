@@ -84,6 +84,7 @@ Roadmap tasks:
 - Verify production callback URLs, allowed origins, and native app identifiers.
 - Document secret rotation and emergency rollback steps.
 - Add a release checklist for auth + backend environment validation.
+- add github actions build 
 
 ### 3. Logging
 

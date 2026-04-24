@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
@@ -9,6 +9,7 @@ import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import {
   cancelRestTimerBackgroundAlertsAsync,
+  playRestTimerCompletionCueAsync,
 } from '@/lib/rest-timer-alerts';
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
@@ -77,9 +78,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
+  const previousRestRemainingRef = useRef<number | null>(null);
+  const currentRestRemainingRef = useRef(restRemaining);
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
+  const restRuntime =
+    ((session as { restRuntime?: RestCard | null } | null | undefined)?.restRuntime ?? null) as RestCard | null;
   const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
+  currentRestRemainingRef.current = restRemaining;
   const activeSetEditor = useMemo(() => {
     if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
       return null;
@@ -123,16 +129,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }, [activeSetEditor]);
 
   useEffect(() => {
-    if (!restCard) {
+    if (!restRuntime) {
+      setRestRemaining(0);
+      setRestRunning(false);
       return;
     }
 
     setIsPickerInteracting(false);
     setEditingSet(null);
-    setRestRemaining(restCard.remainingSeconds);
-    setRestRunning(restCard.isRunning);
+    const currentRemaining = currentRestRemainingRef.current;
+    const isServerEchoWithinTick =
+      restRuntime.isRunning && Math.abs(restRuntime.remainingSeconds - currentRemaining) <= 1;
+    if (!isServerEchoWithinTick) {
+      setRestRemaining(restRuntime.remainingSeconds);
+    }
+    setRestRunning(restRuntime.isRunning);
     setErrorMessage(null);
-  }, [restCard?.isRunning, restCard?.nextSetNumber, restCard?.remainingSeconds, restCard?.sessionExerciseId]);
+  }, [restRuntime?.isRunning, restRuntime?.nextSetNumber, restRuntime?.remainingSeconds, restRuntime?.sessionExerciseId]);
 
   useEffect(() => {
     if (!session) {
@@ -165,7 +178,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }, [editingSet, session]);
 
   useEffect(() => {
-    if (session?.cardMode !== 'rest' || !restRunning || restRemaining <= 0) {
+    if (!restRunning || restRemaining <= 0) {
       return;
     }
 
@@ -174,7 +187,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }, 1000);
 
     return () => clearTimeout(timeout);
-  }, [restRemaining, restRunning, session?.cardMode]);
+  }, [restRemaining, restRunning]);
 
   useEffect(() => {
     if (!liveCardioCard) {
@@ -199,9 +212,31 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
   }, [restRemaining]);
 
+  useEffect(() => {
+    if (!restRuntime) {
+      previousRestRemainingRef.current = null;
+      return;
+    }
+
+    const previousRemaining = previousRestRemainingRef.current;
+    previousRestRemainingRef.current = restRemaining;
+
+    if (
+      previousRemaining !== null &&
+      previousRemaining > 0 &&
+      restRemaining === 0 &&
+      AppState.currentState === 'active'
+    ) {
+      void playRestTimerCompletionCueAsync({
+        exerciseName: restRuntime.exerciseName,
+        nextSetNumber: restRuntime.nextSetNumber,
+      });
+    }
+  }, [restRemaining, restRuntime]);
+
   useRestBackgroundAlerts({
     cardMode:
-      session?.cardMode === 'rest'
+      restRuntime
         ? 'rest'
         : session?.cardMode === 'live_cardio'
           ? 'live_cardio'
@@ -209,7 +244,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     onPermissionDenied: () => {
       setErrorMessage('Enable notifications to get rest alerts when the app is in the background.');
     },
-    restCard,
+    restCard: restRuntime,
     restRemaining,
   });
 
@@ -488,10 +523,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleAdjustRest(deltaSeconds: number) {
-    await runMutation(async () => {
+    setErrorMessage(null);
+    setRestRemaining(current => clampRestSeconds(current + deltaSeconds));
+
+    try {
       await updateRestProcess({ deltaSeconds, mode: 'adjustBy' });
-      return true;
-    });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
   }
 
   async function handlePresetRest(durationSeconds: number) {
@@ -596,9 +635,9 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const renderWorkoutPage = (targetPage: WorkoutPage) =>
     targetPage === 'timeline' ? (
       <TimelinePage
-        activeRestAfterSetNumber={session.activeCard.rest ? session.activeCard.rest.nextSetNumber - 1 : null}
-        activeRestExerciseId={session.activeCard.rest?.sessionExerciseId ?? null}
-        activeRestSeconds={session.activeCard.rest?.remainingSeconds ?? null}
+        activeRestAfterSetNumber={restRuntime ? restRuntime.nextSetNumber - 1 : null}
+        activeRestExerciseId={restRuntime?.sessionExerciseId ?? null}
+        activeRestSeconds={restRuntime ? restRemaining : null}
         elapsedLabel={elapsedLabel}
         errorMessage={errorMessage}
         isConfirmingFinishSession={isConfirmingFinishSession}
@@ -730,4 +769,8 @@ function getNextTimelineExerciseId(
 
   const nextRow = timeline[currentIndex + 1];
   return nextRow?.sessionExerciseId ?? null;
+}
+
+function clampRestSeconds(value: number) {
+  return Math.max(15, Math.min(240, Math.round(value)));
 }

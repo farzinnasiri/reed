@@ -1,7 +1,8 @@
 import { isDurationField, type RecipeFieldDefinition } from './recipes';
 
 export function formatMetricValue(field: RecipeFieldDefinition, value: number) {
-  const rounded = roundMetricValue(value);
+  const precision = getMetricPrecision(field);
+  const rounded = roundMetricValue(value, precision);
 
   if (field.key === 'reps') {
     return `${Math.round(rounded)}`;
@@ -12,14 +13,14 @@ export function formatMetricValue(field: RecipeFieldDefinition, value: number) {
   }
 
   if (field.key === 'load' || field.key === 'assistLoad' || field.key === 'addedLoad') {
-    return rounded.toFixed(1);
+    return formatNumberWithPrecision(rounded, precision);
   }
 
   if (isDurationField(field)) {
     return formatDurationClock(Math.round(rounded));
   }
 
-  return Number.isInteger(rounded) ? `${rounded}` : rounded.toFixed(1);
+  return formatNumberWithPrecision(rounded, precision);
 }
 
 export function formatMetricLabel(field: RecipeFieldDefinition) {
@@ -41,18 +42,25 @@ export function formatMetricLabel(field: RecipeFieldDefinition) {
   return field.label.toUpperCase();
 }
 
-export function roundMetricValue(value: number) {
-  return Number.isInteger(value) ? value : Number(value.toFixed(1));
+export function roundMetricValue(value: number, precision = 2) {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  if (precision <= 0) {
+    return Math.round(value);
+  }
+  return Number(value.toFixed(precision));
 }
 
-export function normalizeMetricInput(value: number, min: number, max: number) {
-  return roundMetricValue(Math.max(min, Math.min(max, value)));
+export function normalizeMetricInput(value: number, min: number, max: number, precision = 2) {
+  return roundMetricValue(Math.max(min, Math.min(max, value)), precision);
 }
 
 export function normalizeMetricValueForField(field: RecipeFieldDefinition, value: number) {
   const min = field.min ?? field.pickerMin;
   const max = field.max ?? field.pickerMax;
-  return normalizeMetricInput(value, min, max);
+  const precision = getMetricPrecision(field);
+  return normalizeMetricInput(value, min, max, precision);
 }
 
 export function normalizeMinutePart(input: string) {
@@ -76,4 +84,26 @@ function formatDurationClock(seconds: number) {
   const minutes = Math.floor(totalSeconds / 60);
   const remainingSeconds = totalSeconds % 60;
   return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+}
+
+function getMetricPrecision(field: RecipeFieldDefinition) {
+  if (isDurationField(field)) {
+    return 0;
+  }
+  if (field.key === 'rpe') {
+    return 1;
+  }
+  if (Number.isInteger(field.step)) {
+    return 0;
+  }
+  // Manual logging can include quarter-style values (e.g. 1.25, 70.75).
+  return 2;
+}
+
+function formatNumberWithPrecision(value: number, precision: number) {
+  if (precision <= 0) {
+    return `${Math.round(value)}`;
+  }
+  const fixed = value.toFixed(precision);
+  return fixed.replace(/\.?0+$/, '');
 }

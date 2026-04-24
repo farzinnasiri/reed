@@ -23,11 +23,13 @@ type NotificationRequest = {
     sound: 'default';
     title: string;
   };
-  trigger: {
-    channelId?: string;
-    seconds: number;
-    type: string;
-  };
+  trigger:
+    | null
+    | {
+        channelId?: string;
+        seconds: number;
+        type: string;
+      };
 };
 
 type NotificationModule = {
@@ -99,7 +101,7 @@ async function configureNotificationHandlerOnce() {
   configuredNotificationHandler = true;
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
-      shouldPlaySound: AppState.currentState !== 'active',
+      shouldPlaySound: true,
       shouldSetBadge: false,
       shouldShowBanner: AppState.currentState !== 'active',
       shouldShowList: AppState.currentState !== 'active',
@@ -197,6 +199,33 @@ export async function cancelRestTimerBackgroundAlertsAsync() {
 
   await Notifications.cancelScheduledNotificationAsync(scheduledRestTimerNotificationId);
   scheduledRestTimerNotificationId = null;
+}
+
+export async function playRestTimerCompletionCueAsync({
+  exerciseName,
+  nextSetNumber,
+}: {
+  exerciseName: string;
+  nextSetNumber: number;
+}) {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    return;
+  }
+
+  const permissionStatus = await ensureRestTimerAlertPermissionsAsync();
+  if (permissionStatus !== 'granted') {
+    return;
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      body: `${exerciseName} · Set ${nextSetNumber} is ready.`,
+      sound: 'default',
+      title: 'Rest complete',
+    },
+    trigger: null,
+  });
 }
 
 function isNotificationPermissionGranted(permission: NotificationPermissionStatus) {

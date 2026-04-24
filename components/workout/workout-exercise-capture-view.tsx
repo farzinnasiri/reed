@@ -76,9 +76,7 @@ export function WorkoutExerciseCaptureView({
           <ReedText tone="muted" variant="caption">
             {isEditingSet
               ? `Editing set ${editingSetNumber ?? captureCard.currentSetNumber}`
-              : `Set ${captureCard.currentSetNumber}${
-                  captureCard.previousSetSummary ? ` · Last ${captureCard.previousSetSummary}` : ' · First set'
-                }`}
+              : `Set ${captureCard.currentSetNumber}`}
           </ReedText>
         </View>
         <View style={styles.cardHeaderActions}>

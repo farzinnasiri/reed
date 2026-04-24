@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
@@ -35,6 +35,13 @@ export function AddExerciseSheet({
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
   const scrim = getGlassScrimTokens(theme);
+  const frostedSheetSurfaceStyle = useMemo(
+    () => ({
+      backgroundColor: theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.76)' : 'rgba(255, 255, 255, 0.72)',
+      borderColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0.78)',
+    }),
+    [theme.mode],
+  );
   const { height } = useWindowDimensions();
   const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const filterSheetProgress = useRef(new Animated.Value(0)).current;
@@ -179,7 +186,10 @@ export function AddExerciseSheet({
 
   return (
     <Modal animationType="none" onRequestClose={onClose} transparent visible={isSheetMounted}>
-      <View style={styles.sheetOverlay}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.sheetOverlay}
+      >
         <Animated.View
           style={[
             StyleSheet.absoluteFill,
@@ -195,7 +205,10 @@ export function AddExerciseSheet({
             },
           ]}
         >
-          <GlassSurface contentStyle={styles.sheetPanelContent} style={styles.sheetPanel}>
+          <GlassSurface
+            contentStyle={styles.sheetPanelContent}
+            style={[styles.sheetPanel, frostedSheetSurfaceStyle]}
+          >
             <View style={styles.sheetHeader}>
               <ReedText variant="section">Add exercise</ReedText>
               <View style={styles.sheetHeaderActions}>
@@ -362,7 +375,10 @@ export function AddExerciseSheet({
                   },
                 ]}
               >
-                <GlassSurface contentStyle={styles.filterSheetPanelContent} style={styles.filterSheetPanel}>
+                <GlassSurface
+                  contentStyle={styles.filterSheetPanelContent}
+                  style={[styles.filterSheetPanel, frostedSheetSurfaceStyle]}
+                >
                   <View style={styles.filterSheetHeader}>
                     <ReedText variant="section">Filters</ReedText>
                     <Pressable
@@ -468,7 +484,7 @@ export function AddExerciseSheet({
             </Animated.View>
           ) : null}
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

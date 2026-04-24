@@ -6,6 +6,7 @@ import { requireViewerProfile } from '../profiles';
 import {
   requireLiveCardioProcess,
   requireRestProcess,
+  type RestProcess,
   writeRestSecondsToCurrentSetLog,
 } from './processes';
 import { getLiveCardioElapsedSeconds, getLiveCardioSnapshot } from '../../domains/workout/liveCardio';
@@ -59,10 +60,8 @@ export const getCurrent = query({
 
     const restProcess = session.activeProcess?.kind === 'rest' ? session.activeProcess : null;
     const liveCardioProcess = session.activeProcess?.kind === 'live_cardio' ? session.activeProcess : null;
-    const processOwnedExerciseId =
-      liveCardioProcess?.sessionExerciseId ?? restProcess?.sessionExerciseId ?? null;
     const requestedActiveSessionExerciseId =
-      processOwnedExerciseId ?? session.activeSessionExerciseId ?? sessionExercises[0]?._id ?? null;
+      liveCardioProcess?.sessionExerciseId ?? session.activeSessionExerciseId ?? sessionExercises[0]?._id ?? null;
 
     const timeline = sessionExercises.map(sessionExercise => {
       const logs = logsByExercise.get(sessionExercise._id) ?? [];
@@ -106,6 +105,7 @@ export const getCurrent = query({
       return {
         activeCard: { capture: null, liveCardio: null, rest: null },
         cardMode: 'capture',
+        restRuntime: null,
         session: {
           startedAt: session.startedAt,
           status: session.status,
@@ -117,6 +117,9 @@ export const getCurrent = query({
     const activeLogs = logsByExercise.get(activeSessionExercise._id) ?? [];
     const previousSet = activeLogs.at(-1);
     const activeRecipeDefinition = getRecipeDefinition(activeSessionExercise.recipeKey);
+    const restRuntime = restProcess
+      ? buildRestCard(restProcess, sessionExercises, logsByExercise)
+      : null;
 
     if (liveCardioProcess && liveCardioProcess.sessionExerciseId === activeSessionExercise._id) {
       const liveCardioSnapshot = getLiveCardioSnapshot(liveCardioProcess);
@@ -144,6 +147,7 @@ export const getCurrent = query({
           startedAt: session.startedAt,
           status: session.status,
         },
+        restRuntime,
         timeline,
       };
     }
@@ -161,7 +165,7 @@ export const getCurrent = query({
       sessionExerciseId: activeSessionExercise._id,
     };
 
-    if (!restProcess || restProcess.sessionExerciseId !== activeSessionExercise._id) {
+    if (!restProcess || !restRuntime || restProcess.sessionExerciseId !== activeSessionExercise._id) {
       return {
         activeCard: {
           capture: captureCard,
@@ -173,32 +177,23 @@ export const getCurrent = query({
           startedAt: session.startedAt,
           status: session.status,
         },
+        restRuntime,
         timeline,
       };
     }
-
-    const restSnapshot = getRestSnapshot(restProcess);
 
     return {
       activeCard: {
         capture: null,
         liveCardio: null,
-        rest: {
-          durationSeconds: restSnapshot.durationSeconds,
-          exerciseName: activeSessionExercise.exerciseName,
-          isComplete: restSnapshot.isComplete,
-          isRunning: restSnapshot.isRunning,
-          nextSetNumber: restProcess.nextSetNumber,
-          previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
-          remainingSeconds: restSnapshot.remainingSeconds,
-          sessionExerciseId: activeSessionExercise._id,
-        },
+        rest: restRuntime,
       },
       cardMode: 'rest',
       session: {
         startedAt: session.startedAt,
         status: session.status,
       },
+      restRuntime,
       timeline,
     };
   },
@@ -236,6 +231,32 @@ export const getLatestEndedSummary = query({
     return null;
   },
 });
+
+function buildRestCard(
+  restProcess: RestProcess,
+  sessionExercises: SessionExerciseWithRecipe[],
+  logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'liveSetLogs'>[]>,
+) {
+  const restExercise = sessionExercises.find(entry => entry._id === restProcess.sessionExerciseId);
+  if (!restExercise) {
+    return null;
+  }
+
+  const restLogs = logsByExercise.get(restExercise._id) ?? [];
+  const previousSet = restLogs.at(-1);
+  const restSnapshot = getRestSnapshot(restProcess);
+
+  return {
+    durationSeconds: restSnapshot.durationSeconds,
+    exerciseName: restExercise.exerciseName,
+    isComplete: restSnapshot.isComplete,
+    isRunning: restSnapshot.isRunning,
+    nextSetNumber: restProcess.nextSetNumber,
+    previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+    remainingSeconds: restSnapshot.remainingSeconds,
+    sessionExerciseId: restExercise._id,
+  };
+}
 
 export const removeExercise = mutation({
   args: { sessionExerciseId: v.id('liveSessionExercises') },
@@ -486,8 +507,8 @@ export const logSet = mutation({
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
 
-    if (session.activeProcess) {
-      throw new ConvexError('Resolve the active runtime card before logging another set.');
+    if (session.activeProcess?.kind === 'live_cardio') {
+      throw new ConvexError('Finish live cardio before logging another set.');
     }
 
     const sessionExercise = await requireSessionExercise(ctx, session, profile._id, args.sessionExerciseId);
@@ -521,12 +542,12 @@ export const logSet = mutation({
       activeProcess: shouldOpenRest
         ? {
             durationSeconds: DEFAULT_REST_SECONDS,
-            isRunning: false,
+            isRunning: true,
             kind: 'rest',
             nextSetNumber: setNumber + 1,
             remainingSeconds: DEFAULT_REST_SECONDS,
             sessionExerciseId: sessionExercise._id,
-            startedAt: null,
+            startedAt: Date.now(),
           }
         : null,
       activeSessionExerciseId: sessionExercise._id,
@@ -550,8 +571,8 @@ export const updateSet = mutation({
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
 
-    if (session.activeProcess) {
-      throw new ConvexError('Finish the active runtime card before editing sets.');
+    if (session.activeProcess?.kind === 'live_cardio') {
+      throw new ConvexError('Finish live cardio before editing sets.');
     }
 
     const setLog = await ctx.db.get(args.setLogId);
@@ -586,8 +607,8 @@ export const deleteSet = mutation({
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
 
-    if (session.activeProcess) {
-      throw new ConvexError('Finish the active runtime card before deleting sets.');
+    if (session.activeProcess?.kind === 'live_cardio') {
+      throw new ConvexError('Finish live cardio before deleting sets.');
     }
 
     const setLog = await ctx.db.get(args.setLogId);
@@ -640,7 +661,6 @@ export const endRest = mutation({
 
     await ctx.db.patch(session._id, {
       activeProcess: null,
-      activeSessionExerciseId: restProcess.sessionExerciseId,
     });
 
     return null;
@@ -729,8 +749,8 @@ export const startLiveCardio = mutation({
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
 
-    if (session.activeProcess) {
-      throw new ConvexError('Finish the active runtime card before starting live cardio.');
+    if (session.activeProcess?.kind === 'live_cardio') {
+      throw new ConvexError('Finish live cardio before starting another live tracker.');
     }
 
     const sessionExercise = await requireSessionExercise(ctx, session, profile._id, args.sessionExerciseId);

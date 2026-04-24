@@ -43,6 +43,7 @@ export function WorkoutSwipeCard({
   const entryScale = useRef(new Animated.Value(1)).current;
   const entryTranslateY = useRef(new Animated.Value(0)).current;
   const isHandlingSwipe = useRef(false);
+  const dragXRef = useRef(0);
   const flyoutDistance = Math.max(width * 1.05, 360);
 
   const rotation = useMemo(
@@ -74,9 +75,13 @@ export function WorkoutSwipeCard({
     [leftTone, theme.colors.controlFill, theme.colors.dangerFill],
   );
   const leftForegroundColor = leftTone === 'danger' ? theme.colors.dangerText : theme.colors.textPrimary;
+  const rightUnderlayStrongGreen = useMemo(
+    () => (theme.mode === 'dark' ? 'rgba(22, 163, 74, 0.52)' : 'rgba(22, 163, 74, 0.42)'),
+    [theme.mode],
+  );
   const rightGradientColors = useMemo(
-    () => [String(theme.colors.accentPrimary), 'transparent'] as const,
-    [theme.colors.accentPrimary],
+    () => [rightUnderlayStrongGreen, 'transparent'] as const,
+    [rightUnderlayStrongGreen],
   );
   const rightForegroundColor = theme.colors.accentPrimaryText;
 
@@ -130,19 +135,27 @@ export function WorkoutSwipeCard({
           Math.abs(gestureState.dx) > 8,
         onPanResponderGrant: () => {
           translateX.stopAnimation();
+          dragXRef.current = 0;
         },
         onPanResponderMove: (_, gestureState) => {
-          translateX.setValue(gestureState.dx);
+          const nextX = gestureState.dx;
+          dragXRef.current = nextX;
+          translateX.setValue(nextX);
         },
         onPanResponderRelease: (_, gestureState) => {
           void handleSwipeEnd(gestureState.dx);
         },
-        onPanResponderTerminate: (_, gestureState) => {
-          void handleSwipeEnd(gestureState.dx);
+        onPanResponderTerminate: () => {
+          resetSwipePosition();
         },
       }),
     [disabled, onSwipeLeft, onSwipeRight, translateX, width],
   );
+
+  function resetSwipePosition() {
+    dragXRef.current = 0;
+    createTiming(translateX, 0, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER).start();
+  }
 
   async function handleSwipeEnd(deltaX: number) {
     if (isHandlingSwipe.current) {
@@ -153,11 +166,12 @@ export function WorkoutSwipeCard({
     const completedLeft = deltaX < -SWIPE_THRESHOLD && onSwipeLeft;
 
     if (!completedRight && !completedLeft) {
-      createTiming(translateX, 0, reedMotion.durations.micro, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER).start();
+      resetSwipePosition();
       return;
     }
 
     isHandlingSwipe.current = true;
+    dragXRef.current = 0;
     const target = completedRight ? flyoutDistance : -flyoutDistance;
 
     await new Promise<void>(resolve => {

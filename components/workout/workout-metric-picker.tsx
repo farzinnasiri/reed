@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { Animated, AppState, PanResponder, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { isDurationField, type RecipeFieldDefinition } from '@/domains/workout/recipes';
 import {
   formatMetricLabel,
@@ -18,7 +18,8 @@ import { useRunningTicker } from './use-running-ticker';
 
 const ITEM_HEIGHT = 24;
 const VISIBLE_ROWS = 5;
-const PADDING_HEIGHT = ((VISIBLE_ROWS - 1) / 2) * ITEM_HEIGHT;
+const PICKER_TOUCH_HEIGHT = 144;
+const PICKER_TOUCH_WIDTH = 116;
 
 type WorkoutMetricPickerProps = {
   compact?: boolean;
@@ -41,7 +42,6 @@ export function WorkoutMetricPicker({
 }: WorkoutMetricPickerProps) {
   const { theme } = useReedTheme();
   const { height, width } = useWindowDimensions();
-  const scrollRef = useRef<ScrollView | null>(null);
   const isDurationMetric = isDurationField(field);
   const values = useMemo(
     () => buildRange(field.pickerMin, field.pickerMax, field.step),
@@ -50,9 +50,10 @@ export function WorkoutMetricPicker({
   const normalizedValue = normalizeMetricValueForField(field, value);
   const normalizedPreviousValue =
     previousValue === undefined ? undefined : normalizeMetricValueForField(field, previousValue);
-  const lastOffsetYRef = useRef(0);
+  const dragOffsetY = useRef(new Animated.Value(0)).current;
   const lastEmittedValueRef = useRef<number>(normalizedValue);
-  const isInteractingRef = useRef(false);
+  const gestureStartIndexRef = useRef(0);
+  const wheelGestureActiveRef = useRef(false);
   const valueFontSize = isDurationMetric
     ? Math.max(42, Math.min(58, Math.floor(width * 0.15)))
     : Math.max(48, Math.min(68, Math.floor(width * 0.165)));
@@ -62,14 +63,22 @@ export function WorkoutMetricPicker({
   const accentColor = getMetricAccentColor(theme, field, normalizedValue);
   const [isDurationRunning, setIsDurationRunning] = useState(false);
   const [isEditingDuration, setIsEditingDuration] = useState(false);
+  const [isEditingNumeric, setIsEditingNumeric] = useState(false);
   const [durationMinutesDraft, setDurationMinutesDraft] = useState('');
   const [durationSecondsDraft, setDurationSecondsDraft] = useState('');
+  const [numericDraft, setNumericDraft] = useState('');
   const durationMinutesInputRef = useRef<TextInput | null>(null);
   const durationSecondsInputRef = useRef<TextInput | null>(null);
+  const numericInputRef = useRef<TextInput | null>(null);
   const currentValueRef = useRef(normalizedValue);
   const onChangeRef = useRef(onChange);
+  const runningStartedAtRef = useRef<number | null>(null);
+  const runningBaseValueRef = useRef<number>(normalizedValue);
   const minValue = field.min ?? field.pickerMin;
   const maxValue = field.max ?? field.pickerMax;
+  const supportsManualNumericEdit = !isDurationMetric && field.key !== 'rpe';
+  const supportsDecimalNumericEdit = supportsManualNumericEdit && !Number.isInteger(field.step);
+  const supportsManualEdit = isDurationMetric || supportsManualNumericEdit;
 
   currentValueRef.current = normalizedValue;
   onChangeRef.current = onChange;
@@ -90,56 +99,107 @@ export function WorkoutMetricPicker({
   useEffect(() => {
     const index = findNearestIndex(values, normalizedValue);
     lastEmittedValueRef.current = values[index];
-
-    requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({
-        animated: !(isDurationMetric && isDurationRunning),
-        y: index * ITEM_HEIGHT,
-      });
-    });
-  }, [isDurationMetric, isDurationRunning, normalizedValue, values]);
+    dragOffsetY.setValue(0);
+  }, [dragOffsetY, normalizedValue, values]);
 
   useEffect(() => {
     setIsDurationRunning(false);
+    runningStartedAtRef.current = null;
     setIsEditingDuration(false);
+    setIsEditingNumeric(false);
     setDurationMinutesDraft('');
     setDurationSecondsDraft('');
+    setNumericDraft('');
   }, [field.key]);
+
+  function stopDurationRun() {
+    setIsDurationRunning(false);
+    runningStartedAtRef.current = null;
+  }
+
+  function applyDurationRunProgress(now: number) {
+    if (!isDurationMetric || !isDurationRunning || runningStartedAtRef.current === null) {
+      return;
+    }
+
+    const elapsedSeconds = Math.max(0, Math.floor((now - runningStartedAtRef.current) / 1000));
+    const nextValue = normalizeMetric(runningBaseValueRef.current + elapsedSeconds, minValue, maxValue);
+    if (nextValue !== currentValueRef.current) {
+      onChangeRef.current(nextValue);
+    }
+
+    if (nextValue >= maxValue) {
+      stopDurationRun();
+    }
+  }
 
   useRunningTicker({
     isRunning: isDurationMetric && isDurationRunning,
-    onTick: () => {
-      const nextValue = normalizeMetric(currentValueRef.current + 1, minValue, maxValue);
-      if (nextValue === currentValueRef.current) {
-        setIsDurationRunning(false);
-        return;
-      }
-      onChangeRef.current(nextValue);
-    },
+    onTick: () => applyDurationRunProgress(Date.now()),
   });
+
+  useEffect(() => {
+    if (!isDurationMetric || !isDurationRunning) {
+      return;
+    }
+
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState === 'active') {
+        applyDurationRunProgress(Date.now());
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isDurationMetric, isDurationRunning]);
 
   function toggleDurationRun() {
     if (!isDurationMetric) {
       return;
     }
+    wheelGestureActiveRef.current = false;
+    dragOffsetY.stopAnimation();
+    dragOffsetY.setValue(0);
     if (isEditingDuration) {
       commitDurationEdit();
+      return;
     }
-    setIsDurationRunning(current => !current);
+
+    if (isDurationRunning) {
+      stopDurationRun();
+      return;
+    }
+
+    runningBaseValueRef.current = currentValueRef.current;
+    runningStartedAtRef.current = Date.now();
+    setIsDurationRunning(true);
   }
 
   function beginDurationEdit() {
     if (!isDurationMetric) {
       return;
     }
+    wheelGestureActiveRef.current = false;
+    dragOffsetY.stopAnimation();
+    dragOffsetY.setValue(0);
     const totalSeconds = Math.round(normalizedValue);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
-    setIsDurationRunning(false);
+    stopDurationRun();
     setDurationMinutesDraft(String(minutes));
     setDurationSecondsDraft(seconds.toString().padStart(2, '0'));
     setIsEditingDuration(true);
-    onInteractionStart?.();
+  }
+
+  function beginNumericEdit() {
+    if (!supportsManualNumericEdit) {
+      return;
+    }
+
+    wheelGestureActiveRef.current = false;
+    dragOffsetY.stopAnimation();
+    dragOffsetY.setValue(0);
+    setNumericDraft(String(normalizedValue));
+    setIsEditingNumeric(true);
   }
 
   function commitDurationEdit() {
@@ -160,7 +220,25 @@ export function WorkoutMetricPicker({
     setIsEditingDuration(false);
     setDurationMinutesDraft('');
     setDurationSecondsDraft('');
-    onInteractionEnd?.();
+  }
+
+  function commitNumericEdit() {
+    if (!supportsManualNumericEdit || !isEditingNumeric) {
+      return;
+    }
+
+    const normalized = normalizeNumericDraftInput(numericDraft, supportsDecimalNumericEdit);
+    if (normalized.length > 0 && normalized !== '.') {
+      const parsed = supportsDecimalNumericEdit
+        ? Number.parseFloat(normalized)
+        : Number.parseInt(normalized, 10);
+      if (Number.isFinite(parsed)) {
+        onChange(normalizeMetricValueForField(field, parsed));
+      }
+    }
+
+    setIsEditingNumeric(false);
+    setNumericDraft('');
   }
 
   function handleDurationMinutesChange(text: string) {
@@ -187,38 +265,76 @@ export function WorkoutMetricPicker({
     });
   }
 
-  function settle(offsetY: number, source: 'touch' | 'momentum') {
-    lastOffsetYRef.current = offsetY;
-    const nextValue = getNearestValue(values, offsetY);
+  function handleNumericChange(text: string) {
+    setNumericDraft(normalizeNumericDraftInput(text, supportsDecimalNumericEdit));
+  }
 
-    scrollRef.current?.scrollTo({
-      animated: true,
-      y: findNearestIndex(values, nextValue) * ITEM_HEIGHT,
-    });
+  function handleNumericBlur() {
+    commitNumericEdit();
+  }
 
+  function emitValueAtIndex(index: number) {
+    const nextValue = values[Math.max(0, Math.min(values.length - 1, index))];
     if (nextValue !== lastEmittedValueRef.current) {
       lastEmittedValueRef.current = nextValue;
-      onChange(nextValue);
+      onChangeRef.current(nextValue);
     }
+  }
 
-    // Release the swipe-card disable when the fling settles. Guard with a ref
-    // so we don't fire onInteractionEnd multiple times if both touch-end and
-    // momentum-end fire for the same gesture.
-    if (source === 'momentum' && isInteractingRef.current) {
-      isInteractingRef.current = false;
+  function updateWheelDrag(deltaY: number) {
+    const rawIndex = gestureStartIndexRef.current - deltaY / ITEM_HEIGHT;
+    const nextIndex = Math.max(0, Math.min(values.length - 1, Math.round(rawIndex)));
+    dragOffsetY.setValue((nextIndex - rawIndex) * ITEM_HEIGHT);
+    emitValueAtIndex(nextIndex);
+  }
+
+  function settleWheelDrag(deltaY: number) {
+    if (!wheelGestureActiveRef.current) {
+      dragOffsetY.setValue(0);
+      return;
+    }
+    updateWheelDrag(deltaY);
+    Animated.timing(dragOffsetY, {
+      duration: 120,
+      toValue: 0,
+      useNativeDriver: true,
+    }).start(() => {
       onInteractionEnd?.();
-    }
+    });
+    wheelGestureActiveRef.current = false;
   }
 
-  function handleScroll(offsetY: number) {
-    lastOffsetYRef.current = offsetY;
-    const nextValue = getNearestValue(values, offsetY);
-
-    if (nextValue !== lastEmittedValueRef.current) {
-      lastEmittedValueRef.current = nextValue;
-      onChange(nextValue);
-    }
-  }
+  const selectedIndex = findNearestIndex(values, normalizedValue);
+  const visibleTicks = useMemo(() => buildVisibleTicks(values, selectedIndex), [selectedIndex, values]);
+  const pickerPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) =>
+          !(isDurationMetric && (isEditingDuration || isDurationRunning)) &&
+          !isEditingNumeric &&
+          Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 4,
+        onPanResponderGrant: () => {
+          wheelGestureActiveRef.current = true;
+          dragOffsetY.stopAnimation();
+          onInteractionStart?.();
+          if (isDurationRunning) {
+            setIsDurationRunning(false);
+          }
+          gestureStartIndexRef.current = findNearestIndex(values, currentValueRef.current);
+          dragOffsetY.setValue(0);
+        },
+        onPanResponderMove: (_, gestureState) => {
+          updateWheelDrag(gestureState.dy);
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          settleWheelDrag(gestureState.dy);
+        },
+        onPanResponderTerminate: (_, gestureState) => {
+          settleWheelDrag(gestureState.dy);
+        },
+      }),
+    [dragOffsetY, isDurationMetric, isDurationRunning, isEditingDuration, isEditingNumeric, values],
+  );
 
   return (
     <View style={[styles.row, { minHeight: rowMinHeight }]}>
@@ -284,11 +400,32 @@ export function WorkoutMetricPicker({
                 value={durationSecondsDraft}
               />
             </View>
+          ) : supportsManualNumericEdit && isEditingNumeric ? (
+            <TextInput
+              autoFocus
+              keyboardType={supportsDecimalNumericEdit ? 'decimal-pad' : 'number-pad'}
+              maxLength={5}
+              onBlur={handleNumericBlur}
+              onChangeText={handleNumericChange}
+              onSubmitEditing={commitNumericEdit}
+              ref={numericInputRef}
+              returnKeyType="done"
+              style={[
+                styles.numericInput,
+                {
+                  color: accentColor,
+                  fontSize: valueFontSize,
+                  letterSpacing: -1.2,
+                  lineHeight: Math.floor(valueFontSize * 0.9),
+                },
+              ]}
+              value={numericDraft}
+            />
           ) : (
             <Pressable
-              disabled={!isDurationMetric}
-              onPress={beginDurationEdit}
-              style={({ pressed }) => (isDurationMetric ? [styles.metricValuePressable, getTapScaleStyle(pressed)] : [styles.metricValuePressable])}
+              disabled={!supportsManualEdit}
+              onPress={isDurationMetric ? beginDurationEdit : beginNumericEdit}
+              style={({ pressed }) => (supportsManualEdit ? [styles.metricValuePressable, getTapScaleStyle(pressed)] : [styles.metricValuePressable])}
             >
               <ReedText
                 style={{
@@ -305,27 +442,33 @@ export function WorkoutMetricPicker({
           )}
         </View>
         {isDurationMetric ? (
-          <Pressable
-            onPress={toggleDurationRun}
-            style={({ pressed }) => [
-              styles.durationRunButton,
-              {
-                backgroundColor: theme.colors.controlFill,
-                borderColor: theme.colors.controlBorder,
-                ...getTapScaleStyle(pressed),
-              },
-            ]}
-          >
-            <Ionicons
-              color={String(theme.colors.textPrimary)}
-              name={isDurationRunning ? 'pause' : 'play'}
-              size={14}
-            />
-          </Pressable>
+          <View style={styles.durationRunRow}>
+            <Pressable
+              onPress={toggleDurationRun}
+              style={({ pressed }) => [
+                styles.durationRunButton,
+                {
+                  backgroundColor: theme.colors.controlFill,
+                  borderColor: theme.colors.controlBorder,
+                  ...getTapScaleStyle(pressed),
+                },
+              ]}
+            >
+              <Ionicons
+                color={String(theme.colors.textPrimary)}
+                name={isDurationRunning ? 'pause' : 'play'}
+                size={22}
+                style={isDurationRunning ? undefined : styles.durationPlayIcon}
+              />
+            </Pressable>
+            <ReedText style={styles.durationRunLabel} tone="muted" variant="bodyStrong">
+              {isDurationRunning ? 'Pause timer' : 'Start timer'}
+            </ReedText>
+          </View>
         ) : null}
       </View>
 
-      <View style={styles.pickerShell}>
+      <View {...pickerPanResponder.panHandlers} style={styles.pickerShell}>
         <View
           style={[
             styles.centerIndicator,
@@ -335,50 +478,17 @@ export function WorkoutMetricPicker({
             },
           ]}
         />
-        <ScrollView
-          decelerationRate="fast"
-          nestedScrollEnabled
-          onMomentumScrollEnd={event => settle(event.nativeEvent.contentOffset.y, 'momentum')}
-          onScroll={event => {
-            handleScroll(event.nativeEvent.contentOffset.y);
-          }}
-          onScrollEndDrag={event => settle(event.nativeEvent.contentOffset.y, 'touch')}
-          onScrollBeginDrag={() => {
-            if (isDurationRunning) {
-              setIsDurationRunning(false);
+        <Animated.View style={[styles.pickerTicks, { transform: [{ translateY: dragOffsetY }] }]}>
+          {visibleTicks.map((tick, rowIndex) => {
+            if (!tick) {
+              return <View key={`empty-${rowIndex}`} style={styles.tickRow} />;
             }
-            isInteractingRef.current = true;
-            onInteractionStart?.();
-          }}
-          onTouchEnd={() => {
-            settle(lastOffsetYRef.current, 'touch');
-            if (isInteractingRef.current) {
-              isInteractingRef.current = false;
-              onInteractionEnd?.();
-            }
-          }}
-          onTouchStart={() => {
-            if (isDurationRunning) {
-              setIsDurationRunning(false);
-            }
-            isInteractingRef.current = true;
-            onInteractionStart?.();
-          }}
-          ref={scrollRef}
-          scrollEventThrottle={16}
-          showsVerticalScrollIndicator={false}
-          snapToInterval={ITEM_HEIGHT}
-          style={styles.picker}
-        >
-          <View style={{ height: PADDING_HEIGHT }} />
-          {values.map((option, tickIndex) => {
-            const isSelected = option === normalizedValue;
-            // Use the array index for major/minor so that float step sizes
-            // (e.g. 0.5, 2.5) don't alias when rounded.
-            const isMajor = tickIndex % 2 === 0;
+
+            const isSelected = tick.index === selectedIndex;
+            const isMajor = tick.index % 2 === 0;
 
             return (
-              <View key={String(option)} style={styles.tickRow}>
+              <View key={String(tick.value)} style={styles.tickRow}>
                 <View
                   style={[
                     styles.tickMark,
@@ -386,15 +496,14 @@ export function WorkoutMetricPicker({
                       backgroundColor: isSelected ? theme.colors.textPrimary : theme.colors.textMuted,
                       height: isSelected ? 4 : isMajor ? 3 : 2,
                       opacity: isSelected ? 1 : isMajor ? 0.72 : 0.38,
-                      width: isSelected ? 34 : isMajor ? 24 : 12,
+                      width: isSelected ? 42 : isMajor ? 28 : 14,
                     },
                   ]}
                 />
               </View>
             );
           })}
-          <View style={{ height: PADDING_HEIGHT }} />
-        </ScrollView>
+        </Animated.View>
       </View>
     </View>
   );
@@ -426,9 +535,18 @@ function findNearestIndex(values: number[], target: number) {
   return bestIndex;
 }
 
-function getNearestValue(values: number[], offsetY: number) {
-  const index = Math.max(0, Math.min(values.length - 1, Math.round(offsetY / ITEM_HEIGHT)));
-  return values[index];
+function buildVisibleTicks(values: number[], selectedIndex: number) {
+  return [-2, -1, 0, 1, 2].map(offset => {
+    const index = selectedIndex + offset;
+    if (index < 0 || index >= values.length) {
+      return null;
+    }
+
+    return {
+      index,
+      value: values[index],
+    };
+  });
 }
 
 function getMetricAccentColor(
@@ -480,6 +598,30 @@ function normalizeMetric(value: number, min: number, max: number) {
   return normalizeMetricInput(value, min, max);
 }
 
+function normalizeNumericDraftInput(input: string, allowDecimal: boolean) {
+  if (!allowDecimal) {
+    return input.replace(/\D+/g, '');
+  }
+
+  const normalized = input.replace(/,/g, '.');
+  let output = '';
+  let hasDecimal = false;
+
+  for (const char of normalized) {
+    if (/\d/.test(char)) {
+      output += char;
+      continue;
+    }
+
+    if (char === '.' && !hasDecimal) {
+      output += '.';
+      hasDecimal = true;
+    }
+  }
+
+  return output;
+}
+
 const styles = StyleSheet.create({
   row: {
     alignItems: 'center',
@@ -503,13 +645,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 999,
     borderWidth: 1,
-    height: 28,
+    height: 46,
     justifyContent: 'center',
-    position: 'absolute',
-    right: 0,
-    top: '50%',
-    transform: [{ translateY: -14 }],
-    width: 28,
+    width: 46,
+  },
+  durationRunLabel: {
+    fontFamily: 'Outfit_600SemiBold',
+  },
+  durationRunRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 2,
+  },
+  durationPlayIcon: {
+    marginLeft: 2,
   },
   durationInput: {
     fontFamily: 'Outfit_800ExtraBold',
@@ -531,6 +681,13 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-start',
     minHeight: 54,
   },
+  numericInput: {
+    fontFamily: 'Outfit_800ExtraBold',
+    minWidth: 54,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+    textAlign: 'left',
+  },
   durationMinutesInput: {
     minWidth: 54,
     textAlign: 'right',
@@ -539,22 +696,25 @@ const styles = StyleSheet.create({
     minWidth: 42,
   },
   pickerShell: {
-    height: ITEM_HEIGHT * VISIBLE_ROWS,
+    alignItems: 'flex-end',
+    height: PICKER_TOUCH_HEIGHT,
     justifyContent: 'center',
     overflow: 'visible',
-    width: 80,
+    width: PICKER_TOUCH_WIDTH,
   },
   centerIndicator: {
     borderRadius: 999,
     height: 18,
     position: 'absolute',
-    right: 4,
-    top: (ITEM_HEIGHT * VISIBLE_ROWS - 18) / 2,
+    right: 18,
+    top: (PICKER_TOUCH_HEIGHT - 18) / 2,
     width: 8,
     zIndex: 10,
   },
-  picker: {
-    flex: 1,
+  pickerTicks: {
+    height: ITEM_HEIGHT * VISIBLE_ROWS,
+    justifyContent: 'center',
+    width: 76,
   },
   tickRow: {
     alignItems: 'flex-end',
