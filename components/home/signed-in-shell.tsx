@@ -15,8 +15,8 @@ import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+import { WorkoutSurface } from '@/components/workout/workout-surface';
 import { SettingsSurface } from './settings-surface';
-import { WorkoutSurface } from './workout-surface';
 import { HomeSurface } from './home-surface';
 import type { AppMode } from './types';
 
