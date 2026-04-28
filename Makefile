@@ -4,7 +4,7 @@ ENV_FILE := .env.$(ENV)
 CONVEX_TARGET := $(if $(filter prod production,$(ENV)),prod,dev)
 EAS_ENV := $(if $(filter prod production,$(ENV)),production,development)
 
-.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push catalog-import env-check env-show eas-env-sync android-arm-dev android-arm-prod
+.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push catalog-import env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
 
 help:
 	@echo "make install           # npm install"
@@ -16,6 +16,7 @@ help:
 	@echo "make convex-deploy     # deploy Convex backend to production using .env.prod"
 	@echo "make convex-env-push ENV=dev|prod"
 	@echo "make eas-env-sync ENV=dev|prod # sync EXPO_PUBLIC_* to EAS env"
+	@echo "make android-dev-client # development client APK using .env.dev values"
 	@echo "make android-arm-dev   # arm64 APK build using .env.dev values"
 	@echo "make android-arm-prod  # arm64 APK build using .env.prod values"
 	@echo "make catalog-import ENV=dev|prod"
@@ -68,6 +69,11 @@ eas-env-sync: env-check
 	test -n "$$EXPO_PUBLIC_CONVEX_SITE_URL" || (echo "EXPO_PUBLIC_CONVEX_SITE_URL is missing in $(ENV_FILE)"; exit 1); \
 	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CONVEX_URL --value "$$EXPO_PUBLIC_CONVEX_URL" --visibility plaintext --scope project --force --non-interactive; \
 	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CONVEX_SITE_URL --value "$$EXPO_PUBLIC_CONVEX_SITE_URL" --visibility plaintext --scope project --force --non-interactive
+
+android-dev-client:
+	@$(MAKE) eas-env-sync ENV=dev
+	@set -a; source ".env.dev"; set +a; \
+	REED_ENV_FILE=".env.dev" npx eas-cli build -p android -e development
 
 android-arm-dev:
 	@$(MAKE) eas-env-sync ENV=dev
