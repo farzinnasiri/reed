@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Platform, Pressable, View, type ColorValue, type ViewStyle } from 'react-native';
+import { Pressable, View, type ColorValue } from 'react-native';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
@@ -24,12 +24,11 @@ export function WorkoutSessionStatusStrip({
   const workSlotLabelColor = getWorkSlotLabelColor(status.workSlotKind, theme.colors.textPrimary);
   const workSlotIconColor = getWorkSlotIconColor(status.workSlotKind, theme.colors.textMuted);
   const workSlotIcon = getWorkSlotIcon(status.workSlotKind);
-  const cardShadowStyle = getSoftHeaderShadow(theme.mode);
 
   return (
     <GlassSurface
       contentStyle={styles.statusStripContent}
-      style={[styles.statusStripShell, cardShadowStyle]}
+      style={[styles.statusStripShell, theme.shadows.card]}
     >
       <View style={styles.statusStripRow}>
         <Pressable
@@ -155,29 +154,6 @@ function getMicroTokenColor(token: string, fallbackColor: ColorValue) {
   }
 
   return fallbackColor;
-}
-
-function getSoftHeaderShadow(mode: 'dark' | 'light'): ViewStyle {
-  if (Platform.OS === 'android') {
-    return {};
-  }
-
-  if (Platform.OS === 'web') {
-    return {
-      boxShadow:
-        mode === 'dark'
-          ? '0px 14px 36px rgba(0, 0, 0, 0.11)'
-          : '0px 14px 36px rgba(15, 23, 42, 0.05)',
-    } as ViewStyle;
-  }
-
-  return {
-    elevation: 0,
-    shadowColor: '#0f172a',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: mode === 'dark' ? 0.11 : 0.05,
-    shadowRadius: 32,
-  };
 }
 
 function getWorkSlotLabelColor(

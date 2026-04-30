@@ -7,6 +7,7 @@ import { reedRadii } from '@/design/system';
 type ReedButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 type ReedButtonProps = Omit<PressableProps, 'style'> & {
+  elevated?: boolean;
   label: string;
   style?: StyleProp<ViewStyle>;
   variant?: ReedButtonVariant;
@@ -14,6 +15,7 @@ type ReedButtonProps = Omit<PressableProps, 'style'> & {
 
 export function ReedButton({
   disabled,
+  elevated = true,
   label,
   style,
   variant = 'primary',
@@ -51,7 +53,7 @@ export function ReedButton({
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
-        variant === 'ghost' ? null : theme.shadows.floating,
+        variant === 'ghost' || !elevated ? null : theme.shadows.floating,
         {
           backgroundColor: palette.backgroundColor,
           borderColor: palette.borderColor,

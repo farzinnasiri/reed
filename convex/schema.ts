@@ -1,6 +1,15 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 import { activeProcessValidator, recipeKeyOrNullValidator, recipeKeyValidator, setMetricsValidator } from './workoutValidators';
+import {
+  bodyMetricKeyValidator,
+  bodyMetricUnitValidator,
+  cardioAnchorKeyValidator,
+  cardioModalityValidator,
+  strengthAnchorKeyValidator,
+  strengthAssessmentKindValidator,
+  trainingProfileValidator,
+} from './profileValidators';
 
 export default defineSchema({
   profiles: defineTable({
@@ -8,13 +17,52 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     displayName: v.optional(v.string()),
     email: v.string(),
+    onboardingCompletedAt: v.optional(v.number()),
     updatedAt: v.number(),
   }).index('by_auth_user_id', ['authUserId']),
+  trainingProfiles: defineTable(trainingProfileValidator)
+    .index('by_profile_id', ['profileId'])
+    .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
+  bodyMeasurements: defineTable({
+    metricKey: bodyMetricKeyValidator,
+    observedAt: v.number(),
+    profileId: v.id('profiles'),
+    source: v.union(v.literal('onboarding'), v.literal('manual')),
+    unit: bodyMetricUnitValidator,
+    value: v.number(),
+  })
+    .index('by_profile_id_and_metric_key_and_observed_at', ['profileId', 'metricKey', 'observedAt'])
+    .index('by_profile_id_and_observed_at', ['profileId', 'observedAt']),
+  strengthAssessments: defineTable({
+    anchorKey: strengthAnchorKeyValidator,
+    estimatedOneRepMaxKg: v.union(v.number(), v.null()),
+    kind: strengthAssessmentKindValidator,
+    loadKg: v.union(v.number(), v.null()),
+    observedAt: v.number(),
+    profileId: v.id('profiles'),
+    reps: v.number(),
+    source: v.union(v.literal('onboarding'), v.literal('manual')),
+  })
+    .index('by_profile_id_and_anchor_key_and_observed_at', ['profileId', 'anchorKey', 'observedAt'])
+    .index('by_profile_id_and_observed_at', ['profileId', 'observedAt']),
+  cardioAssessments: defineTable({
+    anchorKey: cardioAnchorKeyValidator,
+    distanceMeters: v.union(v.number(), v.null()),
+    durationSeconds: v.union(v.number(), v.null()),
+    floors: v.union(v.number(), v.null()),
+    modality: cardioModalityValidator,
+    observedAt: v.number(),
+    profileId: v.id('profiles'),
+    source: v.union(v.literal('onboarding'), v.literal('manual')),
+  })
+    .index('by_profile_id_and_anchor_key_and_observed_at', ['profileId', 'anchorKey', 'observedAt'])
+    .index('by_profile_id_and_observed_at', ['profileId', 'observedAt']),
   exerciseCatalog: defineTable({
     exerciseId: v.string(),
     name: v.string(),
     aliases: v.array(v.string()),
     canonicalFamily: v.string(),
+    bodyweightLoadFactor: v.optional(v.number()),
     exerciseClass: v.string(),
     rawMetricRecipe: v.string(),
     recipeKey: recipeKeyOrNullValidator,
@@ -87,6 +135,8 @@ export default defineSchema({
     warmup: v.boolean(),
     recipeKey: recipeKeyValidator,
     metrics: setMetricsValidator,
+    derivedBodyweightKg: v.optional(v.number()),
+    derivedEffectiveLoadKg: v.optional(v.number()),
     restSeconds: v.optional(v.number()),
   })
     .index('by_session_id_and_set_number', ['sessionId', 'setNumber'])

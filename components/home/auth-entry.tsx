@@ -19,10 +19,8 @@ type AuthEntryProps = {
   isExpoGo: boolean;
   isWorking: boolean;
   mode: AuthMode;
-  name: string;
   onChangeEmail: (value: string) => void;
   onChangeMode: (mode: AuthMode) => void;
-  onChangeName: (value: string) => void;
   onChangePassword: (value: string) => void;
   onGoogleSignIn: () => void;
   onSubmit: () => void;
@@ -36,10 +34,8 @@ export function AuthEntry({
   isExpoGo,
   isWorking,
   mode,
-  name,
   onChangeEmail,
   onChangeMode,
-  onChangeName,
   onChangePassword,
   onGoogleSignIn,
   onSubmit,
@@ -61,17 +57,6 @@ export function AuthEntry({
           options={AUTH_OPTIONS as unknown as { label: string; value: AuthMode }[]}
           value={mode}
         />
-
-        {mode === 'sign-up' ? (
-          <ReedInput
-            autoCapitalize="words"
-            autoCorrect={false}
-            label="Name"
-            onChangeText={onChangeName}
-            placeholder="Your name"
-            value={name}
-          />
-        ) : null}
 
         <ReedInput
           autoCapitalize="none"

@@ -1,4 +1,4 @@
-import { roundMetric } from './recipes';
+import { getSetRepCount as getRecipeSetRepCount, roundMetric } from './recipes';
 
 export type WeeklyMuscleGroupId = 'chest' | 'back' | 'shoulders' | 'arms' | 'legs' | 'core' | 'cardio' | 'other';
 export type WeeklyGranularMuscleGroupId =
@@ -120,16 +120,19 @@ export function resolveWeeklyGranularMuscleGroups(input: {
   return Array.from(mapped);
 }
 
-export function getSetRepCount(metrics: Record<string, number>) {
-  const reps = finiteOrZero(metrics.reps) + finiteOrZero(metrics.leftReps) + finiteOrZero(metrics.rightReps);
-  return roundMetric(reps);
-}
+export function getSetVolume(input: {
+  derivedEffectiveLoadKg?: number | null;
+  metrics: Record<string, number>;
+}) {
+  const reps = getRecipeSetRepCount(input.metrics);
+  const derivedEffectiveLoadKg = finiteOrZero(input.derivedEffectiveLoadKg ?? 0);
+  const load = finiteOrZero(input.metrics.load);
+  const addedLoad = finiteOrZero(input.metrics.addedLoad);
+  const assistLoad = finiteOrZero(input.metrics.assistLoad);
 
-export function getSetVolume(metrics: Record<string, number>) {
-  const reps = finiteOrZero(metrics.reps);
-  const load = finiteOrZero(metrics.load);
-  const addedLoad = finiteOrZero(metrics.addedLoad);
-  const assistLoad = finiteOrZero(metrics.assistLoad);
+  if (reps > 0 && derivedEffectiveLoadKg > 0) {
+    return roundMetric(derivedEffectiveLoadKg * reps);
+  }
 
   if (reps > 0 && load > 0) {
     return roundMetric(load * reps);
@@ -143,7 +146,7 @@ export function getSetVolume(metrics: Record<string, number>) {
     return roundMetric(assistLoad * reps);
   }
 
-  const unilateralLoad = finiteOrZero(metrics.leftLoad) + finiteOrZero(metrics.rightLoad);
+  const unilateralLoad = finiteOrZero(input.metrics.leftLoad) + finiteOrZero(input.metrics.rightLoad);
   if (reps > 0 && unilateralLoad > 0) {
     return roundMetric(unilateralLoad * reps);
   }
@@ -153,6 +156,10 @@ export function getSetVolume(metrics: Record<string, number>) {
 
 export function formatWeeklyVolume(value: number) {
   return `${Math.round(value).toLocaleString('en')} kg`;
+}
+
+export function getSetRepCount(metrics: Record<string, number>) {
+  return getRecipeSetRepCount(metrics);
 }
 
 const granularMuscleGroupAliases: Record<string, WeeklyGranularMuscleGroupId> = {

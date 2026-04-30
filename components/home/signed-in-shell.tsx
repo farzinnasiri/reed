@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from 'convex/react';
@@ -18,6 +18,7 @@ import { reedRadii } from '@/design/system';
 import { WorkoutSurface } from '@/components/workout/workout-surface';
 import { SettingsSurface } from './settings-surface';
 import { HomeSurface } from './home-surface';
+import { getFirstName, pickHomeGreeting } from './home-greetings';
 import type { AppMode } from './types';
 
 type ChatMessage = {
@@ -57,6 +58,26 @@ export function SignedInShell({
   const currentWorkoutSession = useQuery(api.liveSessions.getCurrent, {});
   const hasActiveWorkoutSession = currentWorkoutSession !== null && currentWorkoutSession !== undefined;
   const [dockHeight, setDockHeight] = useState(TAB_PILL_MIN_HEIGHT);
+  const [isEditingSettingsProfile, setIsEditingSettingsProfile] = useState(false);
+  const [currentDayKey, setCurrentDayKey] = useState(() => new Date().toDateString());
+  const homeHeadline = useMemo(
+    () => pickHomeGreeting(getFirstName(displayName)),
+    [displayName, currentDayKey],
+  );
+
+  useEffect(() => {
+    if (appMode !== 'settings' && isEditingSettingsProfile) {
+      setIsEditingSettingsProfile(false);
+    }
+  }, [appMode, isEditingSettingsProfile]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const nextDayKey = new Date().toDateString();
+      setCurrentDayKey(prev => (prev === nextDayKey ? prev : nextDayKey));
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const tabItems: Array<{
     accessibilityLabel: string;
@@ -117,7 +138,7 @@ export function SignedInShell({
   // Hide the bottom dock during a live workout so the swipe cards have
   // full-screen room. The WorkoutSurface owns exit/back navigation in that
   // state via its own nav button.
-  const showDock = !(appMode === 'workout' && hasActiveWorkoutSession);
+  const showDock = !(appMode === 'workout' && hasActiveWorkoutSession) && !isEditingSettingsProfile;
   const isFullscreenWorkout = appMode === 'workout' && hasActiveWorkoutSession;
   const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
   const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
@@ -127,8 +148,8 @@ export function SignedInShell({
       case 'home':
         return (
           <HomeSurface
-            displayName={displayName}
             hasActiveSession={hasActiveWorkoutSession}
+            homeHeadline={homeHeadline}
             onOpenWorkout={() => onChangeMode('workout')}
           />
         );
@@ -142,7 +163,7 @@ export function SignedInShell({
       case 'chat':
         return <CoachSurface displayName={displayName} dockReservedSpace={dockReservedSpace} />;
       case 'settings':
-        return <SettingsSurface />;
+        return <SettingsSurface onEditingProfileChange={setIsEditingSettingsProfile} />;
       default:
         return null;
     }

@@ -1,6 +1,7 @@
 import { AppState, Platform } from 'react-native';
 
-const REST_TIMER_CHANNEL_ID = 'rest-timer';
+const REST_TIMER_CHANNEL_ID = 'rest-timer-alerts';
+const REST_TIMER_CUE = require('../assets/sounds/rest-timer-complete.wav');
 
 type NotificationPermissionStatus = {
   canAskAgain: boolean;
@@ -67,12 +68,64 @@ type NotificationModule = {
   }) => void;
 };
 
+type AudioPlayer = {
+  play: () => void;
+  seekTo: (seconds: number) => void;
+};
+
+type AudioModule = {
+  createAudioPlayer: (source: unknown) => AudioPlayer;
+  setAudioModeAsync: (mode: {
+    interruptionMode?: 'mixWithOthers';
+    playsInSilentMode?: boolean;
+    shouldPlayInBackground?: boolean;
+  }) => Promise<void>;
+};
+
 export type RestTimerAlertPermissionStatus = 'granted' | 'permission_denied' | 'unavailable';
 export type RestTimerAlertScheduleStatus = 'scheduled' | RestTimerAlertPermissionStatus;
 
+let audioModeConfigured = false;
+let audioModulePromise: Promise<AudioModule | null> | null = null;
 let configuredNotificationHandler = false;
 let notificationsModulePromise: Promise<NotificationModule | null> | null = null;
+let restTimerCuePlayer: AudioPlayer | null = null;
 let scheduledRestTimerNotificationId: string | null = null;
+
+async function getAudioModule() {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  if (!audioModulePromise) {
+    audioModulePromise = import('expo-audio').then(
+      module => module as unknown as AudioModule,
+    );
+  }
+
+  return audioModulePromise;
+}
+
+async function playLocalRestTimerCueAsync() {
+  const Audio = await getAudioModule();
+  if (!Audio) {
+    return false;
+  }
+
+  if (!audioModeConfigured) {
+    await Audio.setAudioModeAsync({
+      interruptionMode: 'mixWithOthers',
+      playsInSilentMode: true,
+      shouldPlayInBackground: false,
+    });
+    audioModeConfigured = true;
+  }
+
+  restTimerCuePlayer ??= Audio.createAudioPlayer(REST_TIMER_CUE);
+  restTimerCuePlayer.seekTo(0);
+  restTimerCuePlayer.play();
+  return true;
+}
 
 async function getNotificationsModule() {
   if (Platform.OS === 'web') {
@@ -208,6 +261,11 @@ export async function playRestTimerCompletionCueAsync({
   exerciseName: string;
   nextSetNumber: number;
 }) {
+  const playedLocalCue = await playLocalRestTimerCueAsync().catch(() => false);
+  if (playedLocalCue) {
+    return;
+  }
+
   const Notifications = await getNotificationsModule();
   if (!Notifications) {
     return;

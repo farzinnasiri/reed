@@ -50,10 +50,18 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    'expo-asset',
+    [
+      'expo-audio',
+      {
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
     [
       'expo-notifications',
       {
-        defaultChannel: 'rest-timer',
+        defaultChannel: 'rest-timer-alerts',
       },
     ],
   ],

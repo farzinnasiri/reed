@@ -8,6 +8,7 @@ import {
 import { formatCompactNumber } from './number-format';
 import {
   getSetRepCount,
+  getSetVolume,
   resolveWeeklyGranularMuscleGroups,
   resolveWeeklyMuscleGroups,
   weeklyGranularMuscleGroupLabels,
@@ -29,6 +30,8 @@ type SessionInsightsExercise = {
 };
 
 type SessionInsightsLog = {
+  derivedBodyweightKg?: number | null;
+  derivedEffectiveLoadKg?: number | null;
   loggedAt: number;
   metrics: Record<string, number>;
   recipeKey: RecipeKey;
@@ -39,6 +42,7 @@ type SessionInsightsLog = {
 };
 
 type HistoricalPerformanceEntry = {
+  derivedEffectiveLoadKg?: number | null;
   exerciseCatalogId: string;
   metrics: Record<string, number>;
   recipeKey: RecipeKey;
@@ -215,7 +219,7 @@ export function buildLiveSessionInsights(args: {
         exercise,
         floors: finiteOrZero(log.metrics.floors),
         holdSeconds: getHoldSeconds(log.recipeKey, log.metrics),
-        loadKg: getLoadKg(log.recipeKey, log.metrics),
+        loadKg: getLoadKg(log),
         log,
         modality: classifyModality(exercise, log),
         reps: getSetRepCount(log.metrics),
@@ -524,7 +528,11 @@ function buildModalityBreakdown(args: {
 function buildPerformance(historicalEntries: HistoricalPerformanceEntry[], enrichedSets: EnrichedSet[]) {
   const historicalBest = new Map<string, number>();
   for (const entry of historicalEntries) {
-    const score = getComparisonScalarForRecipe(entry.recipeKey, entry.metrics);
+    const score = getComparisonScalarForRecipe(
+      entry.recipeKey,
+      entry.metrics,
+      entry.derivedEffectiveLoadKg ?? null,
+    );
     if (score <= 0) {
       continue;
     }
@@ -537,7 +545,11 @@ function buildPerformance(historicalEntries: HistoricalPerformanceEntry[], enric
   const currentBest = new Map<string, { exerciseName: string; score: number }>();
   const topSets: TopSet[] = [];
   for (const setEntry of enrichedSets) {
-    const score = getComparisonScalarForRecipe(setEntry.log.recipeKey, setEntry.log.metrics);
+    const score = getComparisonScalarForRecipe(
+      setEntry.log.recipeKey,
+      setEntry.log.metrics,
+      setEntry.log.derivedEffectiveLoadKg ?? null,
+    );
     if (score > 0) {
       const current = currentBest.get(setEntry.exercise.exerciseCatalogId);
       if (!current || score > current.score) {
@@ -688,7 +700,7 @@ function classifyModality(exercise: SessionInsightsExercise, log: SessionInsight
     return 'holds';
   }
 
-  if (getLoadKg(log.recipeKey, log.metrics) > 0 || getSetRepCount(log.metrics) > 0) {
+  if (getLoadKg(log) > 0 || getSetRepCount(log.metrics) > 0) {
     return 'load';
   }
 
@@ -789,22 +801,23 @@ function getHoldSeconds(recipeKey: RecipeKey, metrics: Record<string, number>) {
   }
 }
 
-function getLoadKg(recipeKey: RecipeKey, metrics: Record<string, number>) {
-  const reps = finiteOrZero(metrics.reps);
-  switch (recipeKey) {
-    case 'standard_load':
-      return roundMetric(finiteOrZero(metrics.load) * reps);
-    case 'assist_bodyweight':
-      return roundMetric(finiteOrZero(metrics.assistLoad) * reps);
-    case 'added_bodyweight':
-      return roundMetric(finiteOrZero(metrics.addedLoad) * reps);
+function getLoadKg(log: Pick<SessionInsightsLog, 'derivedEffectiveLoadKg' | 'metrics' | 'recipeKey'>) {
+  const reps = finiteOrZero(log.metrics.reps);
+  const derivedVolumeKg = getSetVolume({
+    derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+    metrics: log.metrics,
+  });
+
+  if (derivedVolumeKg > 0) {
+    return derivedVolumeKg;
+  }
+
+  switch (log.recipeKey) {
     case 'weighted_hold':
-      return roundMetric(finiteOrZero(metrics.load));
-    case 'unilateral_load_pair':
-      return roundMetric((finiteOrZero(metrics.leftLoad) + finiteOrZero(metrics.rightLoad)) * reps);
+      return roundMetric(finiteOrZero(log.metrics.load));
     case 'unilateral_duration_distance_load_pair':
     case 'cardio_live_duration_distance_load':
-      return roundMetric(finiteOrZero(metrics.load));
+      return roundMetric(finiteOrZero(log.metrics.load));
     default:
       return 0;
   }

@@ -77,6 +77,7 @@ export const getCurrent = query({
 
         return [
           {
+            derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
             exerciseCatalogId: sessionExercise.exerciseCatalogId as string,
             metrics: log.metrics,
             recipeKey: log.recipeKey,
@@ -84,6 +85,8 @@ export const getCurrent = query({
         ];
       }),
       logs: currentLogs.map(log => ({
+        derivedBodyweightKg: log.derivedBodyweightKg ?? null,
+        derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
         loggedAt: log.loggedAt,
         metrics: log.metrics,
         recipeKey: log.recipeKey,

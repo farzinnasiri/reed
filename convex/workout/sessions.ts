@@ -11,6 +11,7 @@ import {
 } from './processes';
 import { getLiveCardioElapsedSeconds, getLiveCardioSnapshot } from '../../domains/workout/liveCardio';
 import { getRestSnapshot, clampSeconds } from '../../domains/workout/rest';
+import { isBodyweightLoadRecipeKey } from '../../domains/workout/bodyweight-load-factors';
 import {
   getLiveCardioTrackedFields,
   getRecipeDefinition,
@@ -84,6 +85,8 @@ export const getCurrent = query({
         lastLoggedSummary: lastLog ? summarizeMetrics(lastLog.recipeKey, lastLog.metrics) : null,
         sessionExerciseId: sessionExercise._id,
         sets: logs.map(log => ({
+          derivedBodyweightKg: log.derivedBodyweightKg ?? null,
+          derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
           metrics: log.metrics,
           restSeconds: log.restSeconds ?? null,
           setLogId: log._id,
@@ -525,9 +528,17 @@ export const logSet = mutation({
       .collect();
     const setNumber = existingLogs.length + 1;
     const shouldOpenRest = recipeDefinition.processKind === 'rest_after_log';
+    const loggedAt = Date.now();
+    const derivedLoadFields = await resolveDerivedSetLoadFields(ctx, {
+      loggedAt,
+      metrics: normalizedMetrics,
+      profileId: profile._id,
+      sessionExercise,
+    });
 
     await ctx.db.insert('liveSetLogs', {
-      loggedAt: Date.now(),
+      ...derivedLoadFields,
+      loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
       recipeKey: sessionExercise.recipeKey,
@@ -583,9 +594,17 @@ export const updateSet = mutation({
 
     const sessionExercise = await requireSessionExercise(ctx, session, profile._id, setLog.sessionExerciseId);
     const normalizedMetrics = normalizeMetricsOrThrow(sessionExercise.recipeKey, args.metrics);
+    const loggedAt = Date.now();
+    const derivedLoadFields = await resolveDerivedSetLoadFields(ctx, {
+      loggedAt,
+      metrics: normalizedMetrics,
+      profileId: profile._id,
+      sessionExercise,
+    });
 
     await ctx.db.patch(setLog._id, {
-      loggedAt: Date.now(),
+      ...derivedLoadFields,
+      loggedAt,
       metrics: normalizedMetrics,
       warmup: args.warmup,
     });
@@ -893,9 +912,17 @@ export const finishLiveCardio = mutation({
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
     const setNumber = existingLogs.length + 1;
+    const loggedAt = Date.now();
+    const derivedLoadFields = await resolveDerivedSetLoadFields(ctx, {
+      loggedAt,
+      metrics: normalizedMetrics,
+      profileId: profile._id,
+      sessionExercise,
+    });
 
     await ctx.db.insert('liveSetLogs', {
-      loggedAt: Date.now(),
+      ...derivedLoadFields,
+      loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
       recipeKey: sessionExercise.recipeKey,
@@ -958,6 +985,61 @@ function normalizeMetricsOrThrow(
   metrics: Record<string, number>,
 ) {
   return validateRecipeMetrics(recipeKey, metrics);
+}
+
+async function resolveDerivedSetLoadFields(
+  ctx: MutationCtx,
+  args: {
+    loggedAt: number;
+    metrics: Record<string, number>;
+    profileId: Id<'profiles'>;
+    sessionExercise: SessionExerciseWithRecipe;
+  },
+) {
+  const totalReps = roundMetric(
+    (args.metrics.reps ?? 0) + (args.metrics.leftReps ?? 0) + (args.metrics.rightReps ?? 0),
+  );
+
+  if (totalReps <= 0) {
+    return {};
+  }
+
+  if (!isBodyweightLoadRecipeKey(args.sessionExercise.recipeKey)) {
+    return {};
+  }
+
+  const catalogExercise = await ctx.db.get(args.sessionExercise.exerciseCatalogId);
+  const bodyweightLoadFactor = catalogExercise?.bodyweightLoadFactor ?? null;
+
+  if (!catalogExercise || bodyweightLoadFactor === null) {
+    return {};
+  }
+
+  const latestBodyweightRows = await ctx.db
+    .query('bodyMeasurements')
+    .withIndex('by_profile_id_and_metric_key_and_observed_at', q =>
+      q.eq('profileId', args.profileId).eq('metricKey', 'body_weight').lte('observedAt', args.loggedAt),
+    )
+    .order('desc')
+    .take(1);
+  const latestBodyweight = latestBodyweightRows[0]?.value;
+
+  if (latestBodyweight === undefined) {
+    return {};
+  }
+
+  const baseEffectiveLoadKg = latestBodyweight * bodyweightLoadFactor;
+  const derivedEffectiveLoadKg =
+    args.sessionExercise.recipeKey === 'assist_bodyweight'
+      ? Math.max(0, baseEffectiveLoadKg - (args.metrics.assistLoad ?? 0))
+      : args.sessionExercise.recipeKey === 'added_bodyweight'
+        ? baseEffectiveLoadKg + (args.metrics.addedLoad ?? 0)
+        : baseEffectiveLoadKg;
+
+  return {
+    derivedBodyweightKg: roundMetric(latestBodyweight),
+    derivedEffectiveLoadKg: roundMetric(derivedEffectiveLoadKg),
+  };
 }
 
 async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessions'>) {

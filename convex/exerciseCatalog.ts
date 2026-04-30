@@ -3,6 +3,7 @@ import { internalMutation, mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
+import { resolveBodyweightLoadFactor } from '../domains/workout/bodyweight-load-factors';
 import { resolveCatalogRecipeKey, type RecipeKey } from '../domains/workout/recipes';
 import { recipeKeyOrNullValidator } from './workoutValidators';
 
@@ -160,9 +161,18 @@ export const importCatalogBatch = internalMutation({
         .query('exerciseCatalog')
         .withIndex('by_exercise_id', q => q.eq('exerciseId', row.exerciseId))
         .unique();
+      const resolvedRecipeKey = row.recipeKey ?? null;
+      const resolvedBodyweightLoadFactor = resolveBodyweightLoadFactor({
+        canonicalFamily: row.canonicalFamily,
+        exerciseId: row.exerciseId,
+        isHold: row.isHold,
+        recipeKey: resolvedRecipeKey,
+        usesBodyweight: row.usesBodyweight,
+      });
       const patch = {
         ...row,
-        recipeKey: row.recipeKey ?? null,
+        ...(resolvedBodyweightLoadFactor === null ? {} : { bodyweightLoadFactor: resolvedBodyweightLoadFactor }),
+        recipeKey: resolvedRecipeKey,
         updatedAt: Date.now(),
       };
 

@@ -80,7 +80,10 @@ export const getWeeklyMuscleStats = query({
       });
 
       const setReps = getSetRepCount(log.metrics);
-      const setVolume = getSetVolume(log.metrics);
+      const setVolume = getSetVolume({
+        derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+        metrics: log.metrics,
+      });
       totalSets += 1;
       totalReps += setReps;
       totalVolume += setVolume;

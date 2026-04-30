@@ -17,11 +17,10 @@ import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
-import { getFirstName, pickHomeGreeting } from './home-greetings';
 
 type HomeSurfaceProps = {
-  displayName: string;
   hasActiveSession: boolean;
+  homeHeadline: string;
   onOpenWorkout: () => void;
 };
 
@@ -39,8 +38,8 @@ type WeeklyBreakdownStats = {
 };
 
 export function HomeSurface({
-  displayName,
   hasActiveSession,
+  homeHeadline,
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
@@ -49,8 +48,6 @@ export function HomeSurface({
   const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
   const [isStarting, setIsStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const firstName = getFirstName(displayName);
-  const [headline] = useState(() => pickHomeGreeting(firstName));
   const glassControls = getGlassControlTokens(theme);
 
   const weekRange = getCurrentWeekRange();
@@ -148,7 +145,8 @@ export function HomeSurface({
         styles.content,
         {
           paddingBottom: theme.spacing.xxxl + theme.spacing.sm,
-          paddingTop: theme.spacing.sm,
+          paddingHorizontal: theme.spacing.lg,
+          paddingTop: theme.spacing.xl,
         },
       ]}
       showsVerticalScrollIndicator={false}
@@ -156,20 +154,11 @@ export function HomeSurface({
     >
       <View style={styles.header}>
         <ReedText style={styles.headerHeadline} variant="title">
-          {headline}
+          {homeHeadline}
         </ReedText>
       </View>
 
       <GlassSurface style={styles.card}>
-        <View style={styles.cardHeader}>
-          <ReedText variant="section">{hasActiveSession ? 'Session in progress' : 'Start your next session'}</ReedText>
-          <ReedText tone="muted">
-            {hasActiveSession
-              ? 'Jump back into your active timeline and continue logging.'
-              : 'Create a live workout and keep this weekly board moving.'}
-          </ReedText>
-        </View>
-
         <Pressable
           accessibilityLabel={hasActiveSession ? 'Continue current session' : 'Start a new session'}
           disabled={isStarting}
@@ -189,7 +178,7 @@ export function HomeSurface({
             ]}
           >
             <ReedText style={[styles.startButtonLabel, { color: theme.colors.accentPrimaryText }]} variant="section">
-              {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Session'}
+              {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Instant Session'}
             </ReedText>
           </View>
         </Pressable>
@@ -697,7 +686,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: 14,
+    gap: 16,
   },
   header: {
     gap: 4,
@@ -708,7 +697,6 @@ const styles = StyleSheet.create({
   },
   card: {
     borderRadius: reedRadii.xl,
-    marginHorizontal: 2,
   },
   cardHeader: {
     alignItems: 'center',

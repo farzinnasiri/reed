@@ -515,8 +515,17 @@ function isLegacyEmptyMetricRecipe(value: string) {
   return normalized.length === 0 || normalized === 'legacy-empty';
 }
 
-function getVolumeComparisonScalar(recipeKey: RecipeKey, metrics: Record<string, number>) {
-  const reps = finiteOrZero(metrics.reps);
+function getVolumeComparisonScalar(
+  recipeKey: RecipeKey,
+  metrics: Record<string, number>,
+  derivedEffectiveLoadKg?: number | null,
+) {
+  const reps = getSetRepCount(metrics);
+  const normalizedDerivedLoad = finiteOrZero(derivedEffectiveLoadKg ?? 0);
+
+  if (reps > 0 && normalizedDerivedLoad > 0) {
+    return roundMetric(normalizedDerivedLoad * reps);
+  }
 
   if (recipeKey === 'unilateral_load_pair') {
     return roundMetric((finiteOrZero(metrics.leftLoad) + finiteOrZero(metrics.rightLoad)) * reps);
@@ -589,14 +598,18 @@ export function resolveCatalogRecipeKey(input: {
   return null;
 }
 
-export function getComparisonScalarForRecipe(recipeKey: RecipeKey, metrics: Record<string, number>) {
+export function getComparisonScalarForRecipe(
+  recipeKey: RecipeKey,
+  metrics: Record<string, number>,
+  derivedEffectiveLoadKg?: number | null,
+) {
   const comparisonKind = recipeComparisonKinds[recipeKey];
 
   switch (comparisonKind) {
     case 'volume':
-      return getVolumeComparisonScalar(recipeKey, metrics);
+      return getVolumeComparisonScalar(recipeKey, metrics, derivedEffectiveLoadKg);
     case 'reps':
-      return roundMetric(finiteOrZero(metrics.reps) + finiteOrZero(metrics.leftReps) + finiteOrZero(metrics.rightReps));
+      return getSetRepCount(metrics);
     case 'duration':
       return roundMetric(
         finiteOrZero(metrics.duration) + finiteOrZero(metrics.leftDuration) + finiteOrZero(metrics.rightDuration),
@@ -685,6 +698,11 @@ const formatRpe = (value: number) => roundMetric(value).toString();
 
 function finiteOrZero(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+export function getSetRepCount(metrics: Record<string, number>) {
+  const reps = finiteOrZero(metrics.reps) + finiteOrZero(metrics.leftReps) + finiteOrZero(metrics.rightReps);
+  return roundMetric(reps);
 }
 
 export function roundMetric(value: number) {

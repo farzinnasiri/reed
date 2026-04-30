@@ -10,23 +10,38 @@ import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { AuthEntry } from '@/components/home/auth-entry';
 import { SignedInShell } from '@/components/home/signed-in-shell';
+import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
+import { LoveLetter } from '@/components/onboarding/love-letter';
 import { useReedTheme } from '@/design/provider';
 import type { AuthMode, AppMode } from '@/components/home/types';
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
-  const { data: session, isPending } = authClient.useSession();
-  const viewerProfile = useQuery(api.profiles.viewer, session ? {} : 'skip');
+  const { data: session, isPending: isAuthPending } = authClient.useSession();
+  const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
   const ensureViewerProfile = useMutation(api.profiles.ensureViewerProfile);
   const { theme } = useReedTheme();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [appMode, setAppMode] = useState<AppMode>('workout');
-  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+  const [welcomeName, setWelcomeName] = useState<string | null>(null);
+  const [hasDismissedOnboarding, setHasDismissedOnboarding] = useState(false);
+  const [hasCompletedOnboardingLocally, setHasCompletedOnboardingLocally] = useState(false);
+
+  const viewerProfile = viewer ?? null;
+  const needsOnboarding = Boolean(
+    session &&
+      viewerProfile &&
+      !viewerProfile.onboardingCompletedAt &&
+      !hasDismissedOnboarding &&
+      !hasCompletedOnboardingLocally,
+  );
+  
+  const isPending = isAuthPending;
 
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
@@ -50,6 +65,14 @@ export default function HomeScreen() {
     }
   }, [params.mode, session]);
 
+  useEffect(() => {
+    if (!session) {
+      setHasCompletedOnboardingLocally(false);
+      setHasDismissedOnboarding(false);
+      setWelcomeName(null);
+    }
+  }, [session]);
+
   async function runAuthAction(action: () => Promise<void>) {
     setIsWorking(true);
     setFeedback(null);
@@ -67,11 +90,6 @@ export default function HomeScreen() {
   async function handleSignUp() {
     const nextEmail = email.trim().toLowerCase();
 
-    if (!name.trim()) {
-      setErrorMessage('Name is required.');
-      return;
-    }
-
     if (!nextEmail) {
       setErrorMessage('Email is required.');
       return;
@@ -83,8 +101,9 @@ export default function HomeScreen() {
     }
 
     await runAuthAction(async () => {
+      const fallbackName = nextEmail.split('@')[0]?.trim() || 'User';
       const result = await authClient.signUp.email({
-        name: name.trim(),
+        name: fallbackName,
         email: nextEmail,
         password,
       });
@@ -163,7 +182,7 @@ export default function HomeScreen() {
             </View>
           </GlassSurface>
         </View>
-      ) : session && viewerProfile === undefined ? (
+      ) : session && viewer === undefined ? (
         <View
           style={[
             styles.loadingScreen,
@@ -180,6 +199,38 @@ export default function HomeScreen() {
             </View>
           </GlassSurface>
         </View>
+      ) : session && viewer === null ? (
+        <View
+          style={[
+            styles.loadingScreen,
+            {
+              paddingHorizontal: theme.spacing.lg,
+              paddingVertical: theme.spacing.xl,
+            },
+          ]}
+        >
+          <GlassSurface>
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+              <ReedText tone="muted">Finishing your account setup.</ReedText>
+            </View>
+          </GlassSurface>
+        </View>
+      ) : session && welcomeName ? (
+        <LoveLetter
+          displayName={welcomeName}
+          onContinue={() => setWelcomeName(null)}
+        />
+      ) : session && needsOnboarding ? (
+        <OnboardingFlow
+          onComplete={async draft => {
+            setHasCompletedOnboardingLocally(true);
+            setWelcomeName(draft.displayName);
+          }}
+          onDecline={async () => {
+            setHasDismissedOnboarding(true);
+          }}
+        />
       ) : session ? (
         <SignedInShell
           appMode={appMode}
@@ -208,10 +259,8 @@ export default function HomeScreen() {
               isExpoGo={isExpoGo}
               isWorking={isWorking}
               mode={mode}
-              name={name}
               onChangeEmail={setEmail}
               onChangeMode={setMode}
-              onChangeName={setName}
               onChangePassword={setPassword}
               onGoogleSignIn={handleGoogleSignIn}
               onSubmit={mode === 'sign-up' ? handleSignUp : handleSignIn}

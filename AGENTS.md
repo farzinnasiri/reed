@@ -4,11 +4,10 @@ The role of this file is to describe common mistakes and confusion points that a
 
 ## Surprise Notes
 
-1. The workspace was renamed from `/Users/farzin/MyProjects/wokrout-counter` to `/Users/farzin/MyProjects/reed` on 2026-04-17. Older notes or scripts may still refer to the old directory name.
-2. The previous static prototype was intentionally preserved under `legacy/`. Treat it as a reference artifact, not the active app runtime.
-3. Convex generated files under `convex/_generated/` do not exist until `npx convex dev` or `npx convex codegen` runs against a configured deployment. Avoid assuming those files are present in a fresh clone.
-4. GitHub CLI auth may be invalid in some local sessions even if an account appears configured. Verify `gh auth status` before planning repo creation or push steps.
-5. Better Auth's Expo social flow in this project does not use `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` or `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; server-side Google credentials plus the Convex site callback are the active integration path.
+1. Convex generated files under `convex/_generated/` do not exist until `npx convex dev` or `npx convex codegen` runs against a configured deployment. Avoid assuming those files are present in a fresh clone.
+2 . GitHub CLI auth may be invalid in some local sessions even if an account appears configured. Verify `gh auth status` before planning repo creation or push steps.
+3. Better Auth's Expo social flow in this project does not use `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` or `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; server-side Google credentials plus the Convex site callback are the active integration path.
+4. When removing a field from an existing Convex table schema, dev deployment data may still contain legacy documents and block `convex codegen`/deploy with schema validation errors. Use a widen-migrate-narrow cleanup step rather than assuming local dev data is empty.
 
 ## Keep These Invariants
 
@@ -41,15 +40,14 @@ The role of this file is to describe common mistakes and confusion points that a
 1. Prefer `npm` scripts for install, Expo, and Convex workflows.
 2. Never commit secrets or env files (`.env`, `.env.local`, `.env.convex.local`), never read them, only ask the user.
 3. Keep `convex/_generated/` out of git; it is deployment-generated state.
+4. **Frontend / design work:** Read `DESIGN.md` before implementing or modifying any UI component, screen layout, animation, or colour. It is the single source of truth for tokens, glassmorphism, motion, and component contracts.
 
 ## Known Confusion Points
 
-1. `app/` is the active runtime. `legacy/` is not part of the Expo Router app.
-2. The root TypeScript config excludes `convex/` because Convex auth plumbing references generated types that are only available after codegen. Do not treat this as permission to ignore backend correctness; run Convex codegen before finalizing backend work.
-3. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
-4. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
-5. For the workout tab, `legacy/2/` is not only a visual reference. Its swipe-card, wheel-picker, and rest-loop interaction model is the intended baseline unless the developer explicitly says otherwise; do not reinterpret it as a conventional tap-to-log form flow.
-6. React Native Web in this project warns on deprecated `pointerEvents` props and `shadow*` style props. Use `style.pointerEvents` and `boxShadow` on web-facing style helpers instead of emitting legacy paths.
+1. The root TypeScript config excludes `convex/` because Convex auth plumbing references generated types that are only available after codegen. Do not treat this as permission to ignore backend correctness; run Convex codegen before finalizing backend work.
+2. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
+3. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
+4. React Native Web in this project warns on deprecated `pointerEvents` props and `shadow*` style props. Use `style.pointerEvents` and `boxShadow` on web-facing style helpers instead of emitting legacy paths.
 
 ## Required Validation Before Finalizing
 
@@ -57,6 +55,8 @@ The role of this file is to describe common mistakes and confusion points that a
 2. `npm run typecheck`
 3. `npm run doctor`
 4. `npm run convex:codegen` after Convex deployment/env is configured
+
+Checkout the makefile for common tasks
 
 ## Development Phase and Collaboration
 

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import {
   cancelRestTimerBackgroundAlertsAsync,
+  ensureRestTimerAlertPermissionsAsync,
   scheduleRestTimerBackgroundAlertAsync,
 } from '@/lib/rest-timer-alerts';
 import type { RestCard } from './workout-surface.types';
@@ -20,6 +21,7 @@ export function useRestBackgroundAlerts({
   restRemaining,
 }: UseRestBackgroundAlertsParams) {
   const [appState, setAppState] = useState(AppState.currentState);
+  const hasCheckedPermissionRef = useRef(false);
   const previousAppStateRef = useRef(AppState.currentState);
   const previousRestAlertKeyRef = useRef<string | null>(null);
 
@@ -29,6 +31,19 @@ export function useRestBackgroundAlerts({
       subscription.remove();
     };
   }, []);
+
+  useEffect(() => {
+    if (cardMode !== 'rest' || !restCard?.isRunning || hasCheckedPermissionRef.current) {
+      return;
+    }
+
+    hasCheckedPermissionRef.current = true;
+    void ensureRestTimerAlertPermissionsAsync().then(status => {
+      if (status === 'permission_denied') {
+        onPermissionDenied();
+      }
+    });
+  }, [cardMode, onPermissionDenied, restCard?.isRunning]);
 
   useEffect(() => {
     const nextRestAlert =
