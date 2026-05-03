@@ -166,7 +166,6 @@ export const completeOnboarding = mutation({
       aiContextSummary,
       baseline: args.baseline,
       constraints: args.constraints,
-      createdAt: now,
       goalDetails: args.goalDetails,
       profileId: profile._id,
       profilingConsent: true as const,
@@ -186,7 +185,6 @@ export const completeOnboarding = mutation({
     if (existingTrainingProfile) {
       await ctx.db.patch(existingTrainingProfile._id, {
         ...trainingProfile,
-        createdAt: existingTrainingProfile.createdAt,
         source: existingTrainingProfile.source,
         version: existingTrainingProfile.version,
       });

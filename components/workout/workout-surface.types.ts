@@ -19,7 +19,7 @@ export type WorkoutPage = 'timeline' | 'exercise';
 export type TimelineSet = {
   metrics: MetricValues;
   restSeconds: number | null;
-  setLogId: Id<'liveSetLogs'>;
+  setLogId: Id<'activityLogs'>;
   setNumber: number;
   summary: string;
   warmup: boolean;
@@ -37,7 +37,7 @@ export type TimelineRow = {
 export type EditingSet = {
   metrics: MetricValues;
   sessionExerciseId: Id<'liveSessionExercises'>;
-  setLogId: Id<'liveSetLogs'>;
+  setLogId: Id<'activityLogs'>;
   setNumber: number;
   warmup: boolean;
 };

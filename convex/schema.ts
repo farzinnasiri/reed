@@ -99,10 +99,21 @@ export default defineSchema({
   exerciseFavorites: defineTable({
     profileId: v.id('profiles'),
     exerciseCatalogId: v.id('exerciseCatalog'),
-    createdAt: v.number(),
   })
     .index('by_profile_id', ['profileId'])
     .index('by_profile_id_and_exercise_catalog_id', ['profileId', 'exerciseCatalogId']),
+  quickLogPresets: defineTable({
+    exerciseCatalogId: v.id('exerciseCatalog'),
+    group: v.union(v.literal('strength'), v.literal('cardio'), v.literal('recovery')),
+    inputKind: v.union(v.literal('reps'), v.literal('duration'), v.literal('duration_or_distance')),
+    isEnabled: v.boolean(),
+    key: v.string(),
+    label: v.string(),
+    recipeKey: recipeKeyValidator,
+    sortOrder: v.number(),
+  })
+    .index('by_enabled_and_sort_order', ['isEnabled', 'sortOrder'])
+    .index('by_key', ['key']),
   liveSessions: defineTable({
     profileId: v.id('profiles'),
     status: v.union(v.literal('active'), v.literal('ended')),
@@ -126,20 +137,23 @@ export default defineSchema({
   })
     .index('by_session_id_and_position', ['sessionId', 'position'])
     .index('by_profile_id_and_added_at', ['profileId', 'addedAt']),
-  liveSetLogs: defineTable({
-    sessionId: v.id('liveSessions'),
-    sessionExerciseId: v.id('liveSessionExercises'),
-    profileId: v.id('profiles'),
-    loggedAt: v.number(),
-    setNumber: v.number(),
-    warmup: v.boolean(),
-    recipeKey: recipeKeyValidator,
-    metrics: setMetricsValidator,
+  activityLogs: defineTable({
     derivedBodyweightKg: v.optional(v.number()),
     derivedEffectiveLoadKg: v.optional(v.number()),
+    exerciseCatalogId: v.id('exerciseCatalog'),
+    loggedAt: v.number(),
+    metrics: setMetricsValidator,
+    profileId: v.id('profiles'),
+    recipeKey: recipeKeyValidator,
     restSeconds: v.optional(v.number()),
+    sessionExerciseId: v.optional(v.id('liveSessionExercises')),
+    sessionId: v.optional(v.id('liveSessions')),
+    setNumber: v.number(),
+    source: v.union(v.literal('live_session'), v.literal('quick_log')),
+    warmup: v.boolean(),
   })
     .index('by_session_id_and_set_number', ['sessionId', 'setNumber'])
     .index('by_session_exercise_id_and_set_number', ['sessionExerciseId', 'setNumber'])
-    .index('by_profile_id_and_logged_at', ['profileId', 'loggedAt']),
+    .index('by_profile_id_and_logged_at', ['profileId', 'loggedAt'])
+    .index('by_profile_id_and_source_and_logged_at', ['profileId', 'source', 'loggedAt']),
 });

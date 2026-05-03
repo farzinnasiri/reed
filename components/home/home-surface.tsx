@@ -12,11 +12,13 @@ import { api } from '@/convex/_generated/api';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
+import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
+import { QuickLogSheet } from './quick-log-sheet';
 
 type HomeSurfaceProps = {
   hasActiveSession: boolean;
@@ -47,6 +49,7 @@ export function HomeSurface({
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
   const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
   const [isStarting, setIsStarting] = useState(false);
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const glassControls = getGlassControlTokens(theme);
 
@@ -184,7 +187,17 @@ export function HomeSurface({
         </Pressable>
 
         {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
+
+        <ReedButton
+          accessibilityLabel="Open quick log"
+          elevated={false}
+          label="Quick Log"
+          onPress={() => setIsQuickLogOpen(true)}
+          variant="secondary"
+        />
       </GlassSurface>
+
+      <QuickLogSheet onClose={() => setIsQuickLogOpen(false)} visible={isQuickLogOpen} />
 
       <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>
@@ -229,7 +242,7 @@ export function HomeSurface({
               ]}
             >
               <SummaryMetric
-                label="Sets"
+                label="Activities"
                 showDivider
                 value={{ value: formatWholeNumber(weeklyStats.totalSets) }}
               />
@@ -248,7 +261,7 @@ export function HomeSurface({
               rankedGroups.length === 0 ? (
                 <View style={styles.emptyState}>
                   <ReedText tone="muted">
-                    No sets logged this week yet. Start a session to populate your muscle board.
+                    No activity logged this week yet. Start a session or quick log something small.
                   </ReedText>
                 </View>
               ) : (

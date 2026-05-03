@@ -30,7 +30,7 @@ type TimelinePageProps = {
   isWorking: boolean;
   onAddExercise: () => void;
   onClearFinishSessionConfirm: () => void;
-  onDeleteSet: (setLogId: Id<'liveSetLogs'>) => void;
+  onDeleteSet: (setLogId: Id<'activityLogs'>) => void;
   onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;

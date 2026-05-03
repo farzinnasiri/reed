@@ -26,12 +26,24 @@ export function SettingsSurface({ onEditingProfileChange }: SettingsSurfaceProps
   const glassControls = getGlassControlTokens(theme);
   const viewerProfile = useQuery(api.profiles.viewer, {});
   const onboardingEditorData = useQuery(api.profiles.viewerTrainingProfile, {});
+  const completeOnboarding = useMutation(api.profiles.completeOnboarding);
   const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
-  const editDraft = useMemo(
-    () => (onboardingEditorData ? draftFromTrainingProfile(onboardingEditorData, viewerProfile?.displayName ?? '') : null),
-    [onboardingEditorData, viewerProfile?.displayName],
-  );
+  const editDraft = useMemo(() => {
+    if (onboardingEditorData) {
+      return draftFromTrainingProfile(onboardingEditorData, viewerProfile?.displayName ?? '');
+    }
+
+    if (onboardingEditorData === null) {
+      return {
+        ...EMPTY_DRAFT,
+        displayName: viewerProfile?.displayName ?? session?.user.name ?? '',
+        profilingConsent: true,
+      };
+    }
+
+    return null;
+  }, [onboardingEditorData, session?.user.name, viewerProfile?.displayName]);
   const [deletePassword, setDeletePassword] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -155,7 +167,12 @@ export function SettingsSurface({ onEditingProfileChange }: SettingsSurfaceProps
           onEditingProfileChange?.(false);
         }}
         onSaveProfile={async draft => {
-          await updateTrainingProfile(buildCompleteOnboardingPayload(draft));
+          const payload = buildCompleteOnboardingPayload(draft);
+          if (onboardingEditorData) {
+            await updateTrainingProfile(payload);
+          } else {
+            await completeOnboarding(payload);
+          }
         }}
         reviewContinueLabel="Save changes"
       />
@@ -203,8 +220,8 @@ export function SettingsSurface({ onEditingProfileChange }: SettingsSurfaceProps
           Update the assumptions Reed uses for recommendations, substitutions, and future coaching context.
         </ReedText>
         <ReedButton
-          disabled={onboardingEditorData === undefined || onboardingEditorData === null}
-          label={onboardingEditorData ? 'Edit training profile' : 'Profile not created yet'}
+          disabled={onboardingEditorData === undefined}
+          label={onboardingEditorData ? 'Edit training profile' : 'Create training profile'}
           onPress={() => {
             setIsEditingProfile(true);
             onEditingProfileChange?.(true);

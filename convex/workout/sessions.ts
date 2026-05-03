@@ -50,12 +50,12 @@ export const getCurrent = query({
     const allLogs = await Promise.all(
       sessionExercises.map(sessionExercise =>
         ctx.db
-          .query('liveSetLogs')
+          .query('activityLogs')
           .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
           .collect(),
       ),
     );
-    const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'liveSetLogs'>[]>(
+    const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>(
       sessionExercises.map((sessionExercise, index) => [sessionExercise._id, allLogs[index]]),
     );
 
@@ -238,7 +238,7 @@ export const getLatestEndedSummary = query({
 function buildRestCard(
   restProcess: RestProcess,
   sessionExercises: SessionExerciseWithRecipe[],
-  logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'liveSetLogs'>[]>,
+  logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>,
 ) {
   const restExercise = sessionExercises.find(entry => entry._id === restProcess.sessionExerciseId);
   if (!restExercise) {
@@ -279,7 +279,7 @@ export const removeExercise = mutation({
     const remainingExercises = sessionExercises.filter(entry => entry._id !== sessionExercise._id);
 
     const logs = await ctx.db
-      .query('liveSetLogs')
+      .query('activityLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
 
@@ -404,7 +404,7 @@ export const finishSession = mutation({
       // Defensive: delete any orphan set logs that may have been created
       // through a race before the exercise row was removed.
       const orphanLogs = await ctx.db
-        .query('liveSetLogs')
+        .query('activityLogs')
         .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id))
         .collect();
       for (const log of orphanLogs) {
@@ -523,7 +523,7 @@ export const logSet = mutation({
 
     const normalizedMetrics = normalizeMetricsOrThrow(sessionExercise.recipeKey, args.metrics);
     const existingLogs = await ctx.db
-      .query('liveSetLogs')
+      .query('activityLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
     const setNumber = existingLogs.length + 1;
@@ -536,8 +536,9 @@ export const logSet = mutation({
       sessionExercise,
     });
 
-    await ctx.db.insert('liveSetLogs', {
+    await ctx.db.insert('activityLogs', {
       ...derivedLoadFields,
+      exerciseCatalogId: sessionExercise.exerciseCatalogId,
       loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
@@ -546,6 +547,7 @@ export const logSet = mutation({
       sessionExerciseId: sessionExercise._id,
       sessionId: session._id,
       setNumber,
+      source: 'live_session',
       warmup: args.warmup,
     });
 
@@ -575,7 +577,7 @@ export const logSet = mutation({
 export const updateSet = mutation({
   args: {
     metrics: setMetricsValidator,
-    setLogId: v.id('liveSetLogs'),
+    setLogId: v.id('activityLogs'),
     warmup: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -588,7 +590,7 @@ export const updateSet = mutation({
 
     const setLog = await ctx.db.get(args.setLogId);
 
-    if (!setLog || setLog.profileId !== profile._id || setLog.sessionId !== session._id) {
+    if (!setLog || setLog.profileId !== profile._id || setLog.sessionId !== session._id || !setLog.sessionExerciseId) {
       throw new ConvexError('That set is not part of the current session.');
     }
 
@@ -621,7 +623,7 @@ export const updateSet = mutation({
 });
 
 export const deleteSet = mutation({
-  args: { setLogId: v.id('liveSetLogs') },
+  args: { setLogId: v.id('activityLogs') },
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
@@ -632,14 +634,14 @@ export const deleteSet = mutation({
 
     const setLog = await ctx.db.get(args.setLogId);
 
-    if (!setLog || setLog.profileId !== profile._id || setLog.sessionId !== session._id) {
+    if (!setLog || setLog.profileId !== profile._id || setLog.sessionId !== session._id || !setLog.sessionExerciseId) {
       throw new ConvexError('That set is not part of the current session.');
     }
 
     await requireSessionExercise(ctx, session, profile._id, setLog.sessionExerciseId);
 
     const siblingLogs = await ctx.db
-      .query('liveSetLogs')
+      .query('activityLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', setLog.sessionExerciseId))
       .collect();
 
@@ -908,7 +910,7 @@ export const finishLiveCardio = mutation({
     };
     const normalizedMetrics = normalizeMetricsOrThrow(sessionExercise.recipeKey, metrics);
     const existingLogs = await ctx.db
-      .query('liveSetLogs')
+      .query('activityLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
     const setNumber = existingLogs.length + 1;
@@ -920,8 +922,9 @@ export const finishLiveCardio = mutation({
       sessionExercise,
     });
 
-    await ctx.db.insert('liveSetLogs', {
+    await ctx.db.insert('activityLogs', {
       ...derivedLoadFields,
+      exerciseCatalogId: sessionExercise.exerciseCatalogId,
       loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
@@ -929,6 +932,7 @@ export const finishLiveCardio = mutation({
       sessionExerciseId: sessionExercise._id,
       sessionId: session._id,
       setNumber,
+      source: 'live_session',
       warmup: false,
     });
 
@@ -1051,7 +1055,7 @@ async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessio
   const allLogs = await Promise.all(
     sessionExercises.map(sessionExercise =>
       ctx.db
-        .query('liveSetLogs')
+        .query('activityLogs')
         .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
         .collect(),
     ),

@@ -475,7 +475,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     });
   }
 
-  async function handleDeleteSet(setLogId: Id<'liveSetLogs'>) {
+  async function handleDeleteSet(setLogId: Id<'activityLogs'>) {
     await runMutation(async () => {
       await deleteSet({ setLogId });
       if (editingSet?.setLogId === setLogId) {

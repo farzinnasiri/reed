@@ -141,7 +141,6 @@ export const trainingProfileValidator = v.object({
     details: v.record(v.string(), constraintDetailValidator),
   }),
   aiContextSummary: v.optional(v.string()),
-  createdAt: v.number(),
   goalDetails: v.record(v.string(), goalDetailValidator),
   profileId: v.id('profiles'),
   profilingConsent: v.literal(true),

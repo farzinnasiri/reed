@@ -36,7 +36,7 @@ export async function writeRestSecondsToCurrentSetLog(
   }
 
   const setLog = await ctx.db
-    .query('liveSetLogs')
+    .query('activityLogs')
     .withIndex('by_session_exercise_id_and_set_number', q =>
       q.eq('sessionExerciseId', restProcess.sessionExerciseId).eq('setNumber', afterSetNumber),
     )

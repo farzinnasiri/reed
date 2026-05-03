@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, View, type ColorValue } from 'react-native';
+import { Platform, Pressable, View, type ColorValue, type ViewStyle } from 'react-native';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
@@ -24,11 +24,20 @@ export function WorkoutSessionStatusStrip({
   const workSlotLabelColor = getWorkSlotLabelColor(status.workSlotKind, theme.colors.textPrimary);
   const workSlotIconColor = getWorkSlotIconColor(status.workSlotKind, theme.colors.textMuted);
   const workSlotIcon = getWorkSlotIcon(status.workSlotKind);
+  const pillShadowStyle: ViewStyle =
+    Platform.OS === 'web'
+      ? {
+          boxShadow:
+            theme.mode === 'dark'
+              ? '0px 24px 30px -22px rgba(2, 6, 23, 0.34)'
+              : '0px 18px 24px -20px rgba(15, 23, 42, 0.08)',
+        }
+      : theme.shadows.card;
 
   return (
     <GlassSurface
       contentStyle={styles.statusStripContent}
-      style={[styles.statusStripShell, theme.shadows.card]}
+      style={[styles.statusStripShell, pillShadowStyle]}
     >
       <View style={styles.statusStripRow}>
         <Pressable

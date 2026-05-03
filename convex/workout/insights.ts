@@ -29,7 +29,7 @@ export const getCurrent = query({
       await Promise.all(
         sessionExercises.map(sessionExercise =>
           ctx.db
-            .query('liveSetLogs')
+            .query('activityLogs')
             .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
             .collect(),
         ),
@@ -57,7 +57,7 @@ export const getCurrent = query({
       await Promise.all(
         historicalSessions.map(historicalSession =>
           ctx.db
-            .query('liveSetLogs')
+            .query('activityLogs')
             .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', historicalSession._id))
             .collect(),
         ),
@@ -65,12 +65,16 @@ export const getCurrent = query({
     ).flat();
     const historicalSessionExercises = await loadDocsById(
       ctx,
-      uniqueIds(historicalLogs.map(log => log.sessionExerciseId)),
+      uniqueIds(
+        historicalLogs
+          .map(log => log.sessionExerciseId)
+          .filter((id): id is Id<'liveSessionExercises'> => id !== undefined),
+      ),
     );
 
     return buildLiveSessionInsights({
       historicalEntries: historicalLogs.flatMap(log => {
-        const sessionExercise = historicalSessionExercises.get(log.sessionExerciseId);
+        const sessionExercise = log.sessionExerciseId ? historicalSessionExercises.get(log.sessionExerciseId) : null;
         if (!sessionExercise) {
           return [];
         }

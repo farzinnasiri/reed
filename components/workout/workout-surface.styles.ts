@@ -273,7 +273,9 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   statusStripShell: {
-    marginBottom: 2,
+    borderRadius: reedRadii.pill,
+    marginBottom: 8,
+    marginHorizontal: 2,
   },
   statusStripContent: {
     gap: 0,

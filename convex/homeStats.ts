@@ -39,23 +39,15 @@ export const getWeeklyMuscleStats = query({
     const weekEndAt = args.weekEndAt;
 
     const weeklyLogs = await ctx.db
-      .query('liveSetLogs')
+      .query('activityLogs')
       .withIndex('by_profile_id_and_logged_at', q =>
         q.eq('profileId', profile._id).gte('loggedAt', weekStartAt).lt('loggedAt', weekEndAt),
       )
       .collect();
 
-    const sessionExerciseMap = await loadDocsById(
-      ctx,
-      getUniqueIds(weeklyLogs.map(log => log.sessionExerciseId)),
-    );
     const catalogMap = await loadDocsById(
       ctx,
-      getUniqueIds(
-        Array.from(sessionExerciseMap.values())
-          .map(sessionExercise => sessionExercise?.exerciseCatalogId)
-          .filter((catalogId): catalogId is Id<'exerciseCatalog'> => catalogId !== undefined),
-      ),
+      getUniqueIds(weeklyLogs.map(log => log.exerciseCatalogId)),
     );
 
     const totalsByGroup = new Map<WeeklyMuscleGroupId, GroupTotals<WeeklyMuscleGroupId>>();
@@ -68,8 +60,7 @@ export const getWeeklyMuscleStats = query({
     let totalVolume = 0;
 
     for (const log of weeklyLogs) {
-      const sessionExercise = sessionExerciseMap.get(log.sessionExerciseId);
-      const catalogExercise = sessionExercise ? catalogMap.get(sessionExercise.exerciseCatalogId) : null;
+      const catalogExercise = catalogMap.get(log.exerciseCatalogId) ?? null;
       const targetGroups = resolveWeeklyMuscleGroups({
         isCardio: Boolean(catalogExercise?.isCardio),
         mainMuscleGroups: catalogExercise?.mainMuscleGroups ?? [],
@@ -172,9 +163,7 @@ export const getWeeklyMuscleStats = query({
   },
 });
 
-async function loadDocsById<
-  TableName extends 'exerciseCatalog' | 'liveSessionExercises',
->(
+async function loadDocsById<TableName extends 'exerciseCatalog'>(
   ctx: QueryCtx,
   ids: Id<TableName>[],
 ) {

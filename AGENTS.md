@@ -2,6 +2,31 @@
 
 The role of this file is to describe common mistakes and confusion points that agents might encounter as they work in the project. If you ever encounter something in the project that surprises you, please alert the developer working with you and indicate that this is the case in the agent MD file to help prevent future agents from having the same issue.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs live as markdown files under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context repo: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### When to invoke skills
+
+These skills do not auto-trigger. Use them explicitly when the situation matches.
+
+| Skill | Invoke when... |
+|:------|:---------------|
+| `/to-issues` | You have a PRD or plan and want it broken into vertical-slice implementation issues under `.scratch/`. |
+| `/triage` | A new issue or bug report arrives and you want it moved through the state machine (`needs-triage` → `ready-for-agent` / `ready-for-human`). |
+| `/tdd` | You want to build a feature or fix a bug test-first (red-green-refactor). |
+| `/diagnose` | Something is broken, throwing, or slow and the cause is not obvious. |
+
 ## Surprise Notes
 
 1. Convex generated files under `convex/_generated/` do not exist until `npx convex dev` or `npx convex codegen` runs against a configured deployment. Avoid assuming those files are present in a fresh clone.
