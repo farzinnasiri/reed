@@ -557,6 +557,39 @@ export function getRecipeInitialMetrics(recipeKey: RecipeKey, previousMetrics?: 
   return initialMetrics;
 }
 
+export function prepareRecipeCaptureInput(
+  recipeKey: RecipeKey,
+  previousMetrics?: Record<string, number> | null,
+) {
+  const definition = getRecipeDefinition(recipeKey);
+
+  return {
+    fields: getRecipeFieldDefinitions(recipeKey),
+    initialMetrics: getRecipeInitialMetrics(recipeKey, previousMetrics),
+    layoutKind: definition.layoutKind,
+    previousMetrics: previousMetrics ?? null,
+    processKind: definition.processKind,
+    recipeKey,
+  };
+}
+
+export function prepareLiveCardioInput(recipeKey: LiveCardioRecipeKey) {
+  const definition = getRecipeDefinition(recipeKey);
+  const initialMetrics = getRecipeInitialMetrics(recipeKey);
+  const trackedFields = getLiveCardioTrackedFields(recipeKey);
+
+  return {
+    initialMetrics,
+    layoutKind: definition.layoutKind,
+    processKind: definition.processKind,
+    recipeKey,
+    trackedFields,
+    trackedMetrics: Object.fromEntries(
+      trackedFields.map(field => [field.key, initialMetrics[field.key] ?? field.defaultValue]),
+    ),
+  };
+}
+
 export function getLiveCardioTrackedFields(recipeKey: RecipeKey) {
   if (recipeRegistry[recipeKey].processKind !== 'live_cardio') {
     return [];

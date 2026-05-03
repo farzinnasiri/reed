@@ -336,3 +336,126 @@ function toWeeklyMuscleGroupId(granularGroup: WeeklyGranularMuscleGroupId): Week
 function finiteOrZero(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
+
+export type WeeklyStatsLogInput = {
+  derivedEffectiveLoadKg?: number | null;
+  exerciseCatalogId: string;
+  metrics: Record<string, number>;
+};
+
+export type WeeklyStatsExerciseInput = {
+  exerciseCatalogId: string;
+  isCardio: boolean;
+  mainMuscleGroups: string[];
+};
+
+type WeeklyStatsGroupTotals<GroupId extends string> = {
+  groupId: GroupId;
+  reps: number;
+  setCount: number;
+  volume: number;
+};
+
+export function buildWeeklyMuscleStats(args: {
+  exercises: WeeklyStatsExerciseInput[];
+  logs: WeeklyStatsLogInput[];
+  weekEndAt: number;
+  weekStartAt: number;
+}) {
+  const exerciseById = new Map(args.exercises.map(exercise => [exercise.exerciseCatalogId, exercise]));
+  const totalsByGroup = new Map<WeeklyMuscleGroupId, WeeklyStatsGroupTotals<WeeklyMuscleGroupId>>();
+  const totalsByGranularGroup = new Map<
+    WeeklyGranularMuscleGroupId,
+    WeeklyStatsGroupTotals<WeeklyGranularMuscleGroupId>
+  >();
+  let totalSets = 0;
+  let totalReps = 0;
+  let totalVolume = 0;
+
+  for (const log of args.logs) {
+    const catalogExercise = exerciseById.get(log.exerciseCatalogId) ?? null;
+    const targetGroups = resolveWeeklyMuscleGroups({
+      isCardio: Boolean(catalogExercise?.isCardio),
+      mainMuscleGroups: catalogExercise?.mainMuscleGroups ?? [],
+    });
+    const targetGranularGroups = resolveWeeklyGranularMuscleGroups({
+      isCardio: Boolean(catalogExercise?.isCardio),
+      mainMuscleGroups: catalogExercise?.mainMuscleGroups ?? [],
+    });
+
+    const setReps = getSetRepCount(log.metrics);
+    const setVolume = getSetVolume({
+      derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+      metrics: log.metrics,
+    });
+    totalSets += 1;
+    totalReps += setReps;
+    totalVolume += setVolume;
+
+    addWeeklyStatsTotals(totalsByGroup, targetGroups, setReps, setVolume);
+    addWeeklyStatsTotals(totalsByGranularGroup, targetGranularGroups, setReps, setVolume);
+  }
+
+  return {
+    groups: buildOrderedWeeklyStatsRows(totalsByGroup, weeklyPrimaryMuscleGroupOrder, weeklyMuscleGroupLabels),
+    granularGroups: buildOrderedWeeklyStatsRows(
+      totalsByGranularGroup,
+      weeklyGranularMuscleGroupOrder,
+      weeklyGranularMuscleGroupLabels,
+    ),
+    totalReps: roundMetric(totalReps),
+    totalSets,
+    totalVolume: roundMetric(totalVolume),
+    weekEndAt: args.weekEndAt,
+    weekStartAt: args.weekStartAt,
+  };
+}
+
+function addWeeklyStatsTotals<GroupId extends string>(
+  totalsByGroup: Map<GroupId, WeeklyStatsGroupTotals<GroupId>>,
+  groupIds: GroupId[],
+  setReps: number,
+  setVolume: number,
+) {
+  for (const groupId of groupIds) {
+    const existing = totalsByGroup.get(groupId);
+    if (existing) {
+      existing.reps = roundMetric(existing.reps + setReps);
+      existing.setCount += 1;
+      existing.volume = roundMetric(existing.volume + setVolume);
+      continue;
+    }
+
+    totalsByGroup.set(groupId, {
+      groupId,
+      reps: setReps,
+      setCount: 1,
+      volume: setVolume,
+    });
+  }
+}
+
+function buildOrderedWeeklyStatsRows<GroupId extends string>(
+  totalsByGroup: Map<GroupId, WeeklyStatsGroupTotals<GroupId>>,
+  primaryOrder: readonly GroupId[],
+  labels: Record<GroupId, string>,
+) {
+  return [
+    ...primaryOrder.map(groupId => {
+      const group = totalsByGroup.get(groupId);
+      return {
+        groupId,
+        label: labels[groupId],
+        reps: group?.reps ?? 0,
+        setCount: group?.setCount ?? 0,
+        volume: group?.volume ?? 0,
+      };
+    }),
+    ...Array.from(totalsByGroup.values())
+      .filter(group => !primaryOrder.includes(group.groupId))
+      .map(group => ({
+        ...group,
+        label: labels[group.groupId],
+      })),
+  ];
+}

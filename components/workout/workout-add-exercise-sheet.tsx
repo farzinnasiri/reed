@@ -1,17 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
-import { useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
-import { api } from '@/convex/_generated/api';
-import { getGlassControlTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
+import { getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
-import type { AddExerciseSheetData, CatalogItem } from './workout-surface.types';
+import type { CatalogItem } from './workout-surface.types';
+import { useAddExerciseSearchSession, type AddExerciseFilterSectionKey } from './use-add-exercise-search-session';
 
 type AddExerciseSheetProps = {
   isOpen: boolean;
@@ -21,8 +20,6 @@ type AddExerciseSheetProps = {
   onClose: () => void;
   onToggleFavorite: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
 };
-
-type FilterSectionKey = 'muscles' | 'equipment';
 
 export function AddExerciseSheet({
   isOpen,
@@ -35,46 +32,42 @@ export function AddExerciseSheet({
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
   const scrim = getGlassScrimTokens(theme);
-  const frostedSheetSurfaceStyle = useMemo(
-    () => ({
-      backgroundColor: theme.mode === 'dark' ? 'rgba(24, 24, 27, 0.76)' : 'rgba(255, 255, 255, 0.72)',
-      borderColor: theme.mode === 'dark' ? 'rgba(255, 255, 255, 0.09)' : 'rgba(255, 255, 255, 0.78)',
-    }),
-    [theme.mode],
-  );
+  const frostedSheetSurfaceStyle = useMemo(() => {
+    const pane = getGlassPaneTokens(theme);
+    return {
+      backgroundColor: pane.backgroundColor,
+      borderColor: pane.borderColor,
+    };
+  }, [theme]);
   const { height } = useWindowDimensions();
   const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const filterSheetProgress = useRef(new Animated.Value(0)).current;
-  const [searchText, setSearchText] = useState('');
-  const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
-  const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
-  const [selectedExerciseIds, setSelectedExerciseIds] = useState<Id<'exerciseCatalog'>[]>([]);
+  const {
+    activeFilterCount,
+    activeFilterSection,
+    effectiveData,
+    equipmentSearchText,
+    filterSectionOptions,
+    hasSearchContext,
+    muscleSearchText,
+    resetSearchSession,
+    searchText,
+    selectedCount,
+    selectedEquipment,
+    selectedExerciseIds,
+    selectedExerciseIdsSet,
+    selectedMuscleGroups,
+    setActiveFilterSection,
+    setEquipmentSearchText,
+    setMuscleSearchText,
+    setSearchText,
+    setSelectedEquipment,
+    setSelectedMuscleGroups,
+    toggleSelectedExercise,
+  } = useAddExerciseSearchSession(isOpen);
   const [isSheetMounted, setIsSheetMounted] = useState(isOpen);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [isFilterSheetMounted, setIsFilterSheetMounted] = useState(false);
-  const [muscleSearchText, setMuscleSearchText] = useState('');
-  const [equipmentSearchText, setEquipmentSearchText] = useState('');
-  const [activeFilterSection, setActiveFilterSection] = useState<FilterSectionKey>('muscles');
-  const data = useQuery(
-    api.exerciseCatalog.searchForAddSheet,
-    isOpen
-      ? {
-          equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
-          muscleGroups: selectedMuscleGroups.length > 0 ? selectedMuscleGroups : undefined,
-          query: searchText.trim() || undefined,
-        }
-      : 'skip',
-  );
-  // Keep the last successful payload while a follow-up query resolves so the
-  // sheet doesn't flicker to empty between keystrokes/filter changes.
-  const [stableData, setStableData] = useState<AddExerciseSheetData | undefined>(data);
-  const effectiveData = data ?? stableData;
-  const selectedExerciseIdsSet = useMemo(() => new Set(selectedExerciseIds), [selectedExerciseIds]);
-  const hasSearchContext =
-    searchText.trim().length > 0 ||
-    selectedMuscleGroups.length > 0 ||
-    selectedEquipment.length > 0;
-  const activeFilterCount = selectedMuscleGroups.length + selectedEquipment.length;
   const filteredMuscleOptions = useMemo(
     () => filterOptions(effectiveData?.muscleGroupOptions ?? [], muscleSearchText),
     [effectiveData?.muscleGroupOptions, muscleSearchText],
@@ -83,22 +76,6 @@ export function AddExerciseSheet({
     () => filterOptions(effectiveData?.equipmentOptions ?? [], equipmentSearchText),
     [effectiveData?.equipmentOptions, equipmentSearchText],
   );
-  const selectedCount = selectedExerciseIds.length;
-  const filterSectionOptions = useMemo(
-    () => [
-      {
-        label:
-          selectedMuscleGroups.length > 0 ? `Muscles (${selectedMuscleGroups.length})` : 'Muscles',
-        value: 'muscles' as const,
-      },
-      {
-        label: selectedEquipment.length > 0 ? `Equipment (${selectedEquipment.length})` : 'Equipment',
-        value: 'equipment' as const,
-      },
-    ],
-    [selectedEquipment.length, selectedMuscleGroups.length],
-  );
-
   useEffect(() => {
     if (isOpen) {
       setIsSheetMounted(true);
@@ -115,21 +92,9 @@ export function AddExerciseSheet({
       }
 
       setIsSheetMounted(false);
-      setSearchText('');
-      setSelectedMuscleGroups([]);
-      setSelectedEquipment([]);
-      setSelectedExerciseIds([]);
-      setMuscleSearchText('');
-      setEquipmentSearchText('');
-      setActiveFilterSection('muscles');
+      resetSearchSession();
     });
   }, [isOpen, sheetProgress]);
-
-  useEffect(() => {
-    if (data) {
-      setStableData(current => (current === data ? current : data));
-    }
-  }, [data]);
 
   useEffect(() => {
     if (isFilterSheetOpen) {
@@ -146,14 +111,6 @@ export function AddExerciseSheet({
       }
     });
   }, [filterSheetProgress, isFilterSheetOpen]);
-
-  function toggleSelectedExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
-    setSelectedExerciseIds(current =>
-      current.includes(exerciseCatalogId)
-        ? current.filter(id => id !== exerciseCatalogId)
-        : [...current, exerciseCatalogId],
-    );
-  }
 
   function handleAddBulk() {
     if (selectedExerciseIds.length === 0 || isWorking) {
@@ -390,7 +347,7 @@ export function AddExerciseSheet({
                   </View>
 
                   <View style={styles.filterSheetTabs}>
-                    <SegmentedControl<FilterSectionKey>
+                    <SegmentedControl<AddExerciseFilterSectionKey>
                       compact
                       onChange={setActiveFilterSection}
                       options={filterSectionOptions}

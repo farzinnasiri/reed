@@ -1,9 +1,10 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from './_generated/server';
-import type { Doc, Id } from './_generated/dataModel';
+import type { Doc } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
-import { roundMetric } from '../domains/workout/recipes';
+import { buildQuickLogMetrics } from '../domains/workout/quick-log-intake';
+import { insertQuickLogActivity } from './workout/setLogging';
 
 type PresetSeed = {
   key: string;
@@ -133,23 +134,12 @@ export const log = mutation({
 
     const metrics = buildMetrics(preset, args);
     const loggedAt = Date.now();
-    const derivedLoadFields = await resolveQuickDerivedLoad(ctx, {
+
+    await insertQuickLogActivity(ctx, {
       loggedAt,
       metrics,
       preset,
       profileId: profile._id,
-    });
-
-    await ctx.db.insert('activityLogs', {
-      ...derivedLoadFields,
-      exerciseCatalogId: preset.exerciseCatalogId,
-      loggedAt,
-      metrics,
-      profileId: profile._id,
-      recipeKey: preset.recipeKey,
-      setNumber: 1,
-      source: 'quick_log',
-      warmup: false,
     });
 
     return { logged: true };
@@ -160,70 +150,11 @@ function buildMetrics(
   preset: Doc<'quickLogPresets'>,
   args: { distanceKm: number | null; durationSeconds: number | null; reps: number | null },
 ) {
-  if (preset.inputKind === 'reps') {
-    if (args.reps === null || args.reps < 1 || args.reps > 500) {
-      throw new ConvexError('Enter reps between 1 and 500.');
-    }
-    return { reps: Math.round(args.reps) };
+  try {
+    return buildQuickLogMetrics(preset.inputKind, args);
+  } catch (error) {
+    throw new ConvexError(error instanceof Error ? error.message : 'Quick log input is invalid.');
   }
-
-  if (preset.inputKind === 'duration') {
-    if (args.durationSeconds === null || args.durationSeconds < 1 || args.durationSeconds > 24 * 60 * 60) {
-      throw new ConvexError('Enter a duration.');
-    }
-    return { duration: Math.round(args.durationSeconds) };
-  }
-
-  const duration = args.durationSeconds;
-  const distance = args.distanceKm;
-  if ((duration === null || duration <= 0) && (distance === null || distance <= 0)) {
-    throw new ConvexError('Enter duration or distance.');
-  }
-  const metrics: Record<string, number> = {};
-  if (duration !== null && duration > 0) {
-    metrics.duration = Math.round(duration);
-  }
-  if (distance !== null && distance > 0) {
-    metrics.distance = roundMetric(distance);
-  }
-  return metrics;
-}
-
-async function resolveQuickDerivedLoad(
-  ctx: MutationCtx,
-  args: {
-    loggedAt: number;
-    metrics: Record<string, number>;
-    preset: Doc<'quickLogPresets'>;
-    profileId: Id<'profiles'>;
-  },
-) {
-  if (args.preset.inputKind !== 'reps' || !args.metrics.reps) {
-    return {};
-  }
-
-  const exercise = await ctx.db.get(args.preset.exerciseCatalogId);
-  const bodyweightLoadFactor = exercise?.bodyweightLoadFactor ?? null;
-  if (bodyweightLoadFactor === null) {
-    return {};
-  }
-
-  const latestBodyweightRows = await ctx.db
-    .query('bodyMeasurements')
-    .withIndex('by_profile_id_and_metric_key_and_observed_at', q =>
-      q.eq('profileId', args.profileId).eq('metricKey', 'body_weight').lte('observedAt', args.loggedAt),
-    )
-    .order('desc')
-    .take(1);
-  const bodyweight = latestBodyweightRows[0]?.value;
-  if (bodyweight === undefined) {
-    return {};
-  }
-
-  return {
-    derivedBodyweightKg: roundMetric(bodyweight),
-    derivedEffectiveLoadKg: roundMetric(bodyweight * bodyweightLoadFactor),
-  };
 }
 
 async function upsertExercise(ctx: MutationCtx, exercise: PresetSeed['exercise']) {
