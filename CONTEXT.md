@@ -8,6 +8,8 @@ A fitness operating system. End-to-end simplicity. The user logs; the system han
 
 The brand and product. An adaptive instrument panel — not a tracker, not a community app, not a dashboard. The brand persona is **Reed**, an AI coach with access to the user's complete training data.
 
+> **Product / UX work:** Read `DESIGN-PRINCIPLES.md` before any product discussion, UX critique, or design decision. It defines how Reed should feel, sound, and behave.
+
 ---
 
 ## Modules vs Chrome

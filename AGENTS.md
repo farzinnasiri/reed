@@ -16,6 +16,11 @@ Default canonical labels: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 
 Single-context repo: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
 
+### Product docs
+
+- **Design principles:** `DESIGN-PRINCIPLES.md` at the repo root. Read before any product/UX/design discussion.
+- **Roadmap:** `docs/ROADMAP.md` for high-level product priorities and release blockers.
+
 ### When to invoke skills
 
 These skills do not auto-trigger. Use them explicitly when the situation matches.
