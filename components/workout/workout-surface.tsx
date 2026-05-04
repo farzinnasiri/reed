@@ -815,6 +815,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         onReorderTimeline={handleReorderTimeline}
         onRemoveExercise={handleRemoveExercise}
         onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
+        showHeader={false}
         timeline={session.timeline}
       />
     ) : (
