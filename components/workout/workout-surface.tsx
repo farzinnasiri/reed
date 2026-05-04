@@ -310,9 +310,9 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   const insightsStatus = sessionInsights?.statusStrip
     ? {
-        ...sessionInsights.statusStrip,
-        durationLabel: elapsedLabel ?? sessionInsights.statusStrip.durationLabel,
-      }
+      ...sessionInsights.statusStrip,
+      durationLabel: elapsedLabel ?? sessionInsights.statusStrip.durationLabel,
+    }
     : fallbackStatus;
 
   const closeAddSheet = () => {
@@ -607,12 +607,12 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       const endedStatus = endedSessionTimeline
         ? buildEndedStatusStrip(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt, endedSessionTimeline.timeline)
         : {
-            completedSetsLabel: '0 sets',
-            durationLabel: '0m',
-            microLineTokens: [],
-            workSlotKind: 'active' as const,
-            workSlotLabel: 'Completed',
-          };
+          completedSetsLabel: '0 sets',
+          durationLabel: '0m',
+          microLineTokens: [],
+          workSlotKind: 'active' as const,
+          workSlotLabel: 'Completed',
+        };
 
       return renderSessionChrome({
         children: endedSessionTimeline === undefined ? (
@@ -635,15 +635,15 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             isConfirmingFinishSession={false}
             isReadOnly
             isWorking={false}
-            onAddExercise={() => {}}
-            onClearFinishSessionConfirm={() => {}}
-            onDeleteSet={() => {}}
-            onFinishSession={() => {}}
-            onOpenExercise={() => {}}
-            onOpenSet={() => {}}
+            onAddExercise={() => { }}
+            onClearFinishSessionConfirm={() => { }}
+            onDeleteSet={() => { }}
+            onFinishSession={() => { }}
+            onOpenExercise={() => { }}
+            onOpenSet={() => { }}
             onReorderTimeline={async () => false}
-            onRemoveExercise={() => {}}
-            onToggleFinishSessionConfirm={() => {}}
+            onRemoveExercise={() => { }}
+            onToggleFinishSessionConfirm={() => { }}
             showHeader={false}
             timeline={endedSessionTimeline.timeline}
           />
@@ -717,61 +717,61 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             </View>
           ) : endedSessionsPage.summaries.length > 0 ? (
             <>
-            <View style={styles.lastSessionList}>
-              {endedSessionsPage.summaries.map((item, index) => (
-                <Pressable
-                  accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
-                  key={item.sessionId}
-                  onPress={() => {
-                    setIsEndedInsightsOpen(false);
-                    setSelectedEndedSessionId(item.sessionId);
-                  }}
-                  style={({ pressed }) => [
-                    styles.sessionSummaryRow,
-                    index < endedSessionsPage.summaries.length - 1
-                      ? { borderBottomColor: theme.colors.controlBorder }
-                      : { borderBottomWidth: 0 },
-                    getTapScaleStyle(pressed),
-                  ]}
-                >
-                  <View style={styles.sessionSummaryCopy}>
-                    <View style={styles.sessionDateRow}>
-                      <ReedText numberOfLines={1} variant="bodyStrong">{formatSessionDate(item.startedAt)}</ReedText>
-                      <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
+              <View style={styles.lastSessionList}>
+                {endedSessionsPage.summaries.map((item, index) => (
+                  <Pressable
+                    accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
+                    key={item.sessionId}
+                    onPress={() => {
+                      setIsEndedInsightsOpen(false);
+                      setSelectedEndedSessionId(item.sessionId);
+                    }}
+                    style={({ pressed }) => [
+                      styles.sessionSummaryRow,
+                      index < endedSessionsPage.summaries.length - 1
+                        ? { borderBottomColor: theme.colors.controlBorder }
+                        : { borderBottomWidth: 0 },
+                      getTapScaleStyle(pressed),
+                    ]}
+                  >
+                    <View style={styles.sessionSummaryCopy}>
+                      <View style={styles.sessionDateRow}>
+                        <ReedText numberOfLines={1} variant="bodyStrong">{formatSessionDate(item.startedAt)}</ReedText>
+                        <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
+                      </View>
+                      <ReedText numberOfLines={1} tone="muted" variant="caption">
+                        {item.exercises.slice(0, 3).map(exercise => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
+                      </ReedText>
                     </View>
-                    <ReedText numberOfLines={1} tone="muted" variant="caption">
-                      {item.exercises.slice(0, 3).map(exercise => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
-                    </ReedText>
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-            {(sessionPageCursorStack.length > 0 || endedSessionsPage.nextBeforeStartedAt) ? (
-              <View style={styles.sessionPaginationRow}>
-                <Pressable
-                  accessibilityLabel="Show newer sessions"
-                  disabled={sessionPageCursorStack.length === 0}
-                  onPress={() => setSessionPageCursorStack(current => current.slice(0, -1))}
-                  style={({ pressed }) => [styles.sessionPageControl, { opacity: sessionPageCursorStack.length === 0 ? 0.35 : 1 }, getTapScaleStyle(pressed, sessionPageCursorStack.length === 0)]}
-                >
-                  <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={15} />
-                  <ReedText tone="muted" variant="caption">Newer</ReedText>
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Show earlier sessions"
-                  disabled={!endedSessionsPage.nextBeforeStartedAt}
-                  onPress={() => {
-                    if (endedSessionsPage.nextBeforeStartedAt) {
-                      setSessionPageCursorStack(current => [...current, endedSessionsPage.nextBeforeStartedAt!]);
-                    }
-                  }}
-                  style={({ pressed }) => [styles.sessionPageControl, { opacity: endedSessionsPage.nextBeforeStartedAt ? 1 : 0.35 }, getTapScaleStyle(pressed, !endedSessionsPage.nextBeforeStartedAt)]}
-                >
-                  <ReedText tone="muted" variant="caption">Earlier</ReedText>
-                  <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={15} />
-                </Pressable>
+                  </Pressable>
+                ))}
               </View>
-            ) : null}
+              {(sessionPageCursorStack.length > 0 || endedSessionsPage.nextBeforeStartedAt) ? (
+                <View style={styles.sessionPaginationRow}>
+                  <Pressable
+                    accessibilityLabel="Show newer sessions"
+                    disabled={sessionPageCursorStack.length === 0}
+                    onPress={() => setSessionPageCursorStack(current => current.slice(0, -1))}
+                    style={({ pressed }) => [styles.sessionPageControl, { opacity: sessionPageCursorStack.length === 0 ? 0.35 : 1 }, getTapScaleStyle(pressed, sessionPageCursorStack.length === 0)]}
+                  >
+                    <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={15} />
+                    <ReedText tone="muted" variant="caption">Newer</ReedText>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel="Show earlier sessions"
+                    disabled={!endedSessionsPage.nextBeforeStartedAt}
+                    onPress={() => {
+                      if (endedSessionsPage.nextBeforeStartedAt) {
+                        setSessionPageCursorStack(current => [...current, endedSessionsPage.nextBeforeStartedAt!]);
+                      }
+                    }}
+                    style={({ pressed }) => [styles.sessionPageControl, { opacity: endedSessionsPage.nextBeforeStartedAt ? 1 : 0.35 }, getTapScaleStyle(pressed, !endedSessionsPage.nextBeforeStartedAt)]}
+                  >
+                    <ReedText tone="muted" variant="caption">Earlier</ReedText>
+                    <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={15} />
+                  </Pressable>
+                </View>
+              ) : null}
             </>
           ) : completedExercises.length > 0 ? (
             <ReedText tone="muted" variant="caption">Earlier sessions will appear here.</ReedText>

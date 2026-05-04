@@ -372,204 +372,204 @@ export function TimelinePage({
                       },
                     ]}
                   >
-                <View style={styles.timelineRailColumn}>
-                  {!isFirst ? (
-                    <View
-                      style={[
-                        styles.timelineRailSegmentTop,
-                        {
-                          backgroundColor: theme.colors.controlBorder,
-                        },
-                      ]}
-                    />
-                  ) : null}
-                  <View
-                    style={[
-                      styles.timelineNodeMarkerFixed,
-                      {
-                        backgroundColor:
-                          item.state === 'capture'
-                            ? theme.colors.accentPrimary
-                            : item.state === 'rest'
-                              ? theme.colors.dangerText
-                            : theme.colors.canvasSecondary,
-                        borderColor:
-                          item.state === 'idle'
-                            ? theme.colors.controlBorder
-                            : item.state === 'capture'
-                              ? theme.colors.accentPrimary
-                              : item.state === 'rest'
-                                ? theme.colors.dangerText
-                                : theme.colors.textPrimary,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      color={
-                        item.state === 'idle'
-                          ? String(theme.colors.textMuted)
-                          : item.state === 'capture'
-                            ? '#ffffff'
-                            : String(theme.colors.canvasSecondary)
-                      }
-                      name={
-                        item.state === 'rest'
-                          ? 'timer-outline'
-                          : item.state === 'live_tracking'
-                            ? 'pulse'
-                          : item.state === 'logged'
-                            ? 'checkmark'
-                            : 'ellipse'
-                      }
-                      size={12}
-                    />
-                  </View>
-                  {hasTimelineStem ? (
-                    <View
-                      style={[
-                        styles.timelineRailSegmentBottom,
-                        {
-                          backgroundColor: theme.colors.controlBorder,
-                        },
-                      ]}
-                    />
-                  ) : null}
-                </View>
-
-                <View
-                  style={[
-                    styles.timelineLineCopy,
-                    {
-                      backgroundColor: glassControls.shellBackgroundColor,
-                      borderColor: glassControls.shellBorderColor,
-                    },
-                  ]}
-                >
-                  <Pressable
-                    accessibilityLabel={`Open ${item.exerciseName}`}
-                    disabled={isWorking || isReadOnly}
-                    onPress={() => {
-                      setConfirmExerciseDeleteId(null);
-                      onOpenExercise(item.sessionExerciseId);
-                    }}
-                    style={({ pressed }) => [getTapScaleStyle(pressed, isWorking)]}
-                  >
-                    <View style={styles.timelineLineHeader}>
-                      <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
-                        {item.exerciseName}
-                      </ReedText>
-                      <View style={styles.timelineRowActions}>
-                        <Pressable
-                          accessibilityLabel={isExpanded ? `Collapse ${item.exerciseName}` : `Expand ${item.exerciseName}`}
-                          disabled={isWorking}
-                          onPress={event => {
-                            event.stopPropagation();
-                            runReedLayoutAnimation();
-                            setExpandedExercises(current => ({
-                              ...current,
-                              [exerciseKey]: !isExpanded,
-                            }));
-                          }}
-                          style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
-                        >
-                          <Ionicons
-                            color={String(theme.colors.textMuted)}
-                            name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                            size={18}
-                          />
-                        </Pressable>
-                        {isReadOnly ? null : <TimelineDragHandle
-                          disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
-                          isDragging={isDraggingRow}
-                          onDragEnd={() => {
-                            void handleDragEnd();
-                          }}
-                          onDragMove={handleDragMove}
-                          onDragStart={() => handleDragStart(item.sessionExerciseId)}
-                        />}
-                        {isReadOnly ? null : <Pressable
-                          accessibilityLabel={
-                            confirmExerciseDeleteId === item.sessionExerciseId
-                              ? `Confirm remove ${item.exerciseName}`
-                              : `Remove ${item.exerciseName}`
+                    <View style={styles.timelineRailColumn}>
+                      {!isFirst ? (
+                        <View
+                          style={[
+                            styles.timelineRailSegmentTop,
+                            {
+                              backgroundColor: theme.colors.controlBorder,
+                            },
+                          ]}
+                        />
+                      ) : null}
+                      <View
+                        style={[
+                          styles.timelineNodeMarkerFixed,
+                          {
+                            backgroundColor:
+                              item.state === 'capture'
+                                ? theme.colors.accentPrimary
+                                : item.state === 'rest'
+                                  ? theme.colors.dangerText
+                                  : theme.colors.canvasSecondary,
+                            borderColor:
+                              item.state === 'idle'
+                                ? theme.colors.controlBorder
+                                : item.state === 'capture'
+                                  ? theme.colors.accentPrimary
+                                  : item.state === 'rest'
+                                    ? theme.colors.dangerText
+                                    : theme.colors.textPrimary,
+                          },
+                        ]}
+                      >
+                        <Ionicons
+                          color={
+                            item.state === 'idle'
+                              ? String(theme.colors.textMuted)
+                              : item.state === 'capture'
+                                ? '#ffffff'
+                                : String(theme.colors.canvasSecondary)
                           }
-                          disabled={isWorking}
-                          onPress={event => {
-                            event.stopPropagation();
-
-                            if (confirmExerciseDeleteId === item.sessionExerciseId) {
-                              setConfirmExerciseDeleteId(null);
-                              onRemoveExercise(item.sessionExerciseId);
-                              return;
-                            }
-
-                            setConfirmExerciseDeleteId(item.sessionExerciseId);
-                          }}
-                          style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
-                        >
-                          <Ionicons
-                            color={String(
-                              confirmExerciseDeleteId === item.sessionExerciseId
-                                ? theme.colors.dangerText
-                                : theme.colors.textMuted,
-                            )}
-                            name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
-                            size={18}
-                          />
-                        </Pressable>}
+                          name={
+                            item.state === 'rest'
+                              ? 'timer-outline'
+                              : item.state === 'live_tracking'
+                                ? 'pulse'
+                                : item.state === 'logged'
+                                  ? 'checkmark'
+                                  : 'ellipse'
+                          }
+                          size={12}
+                        />
                       </View>
-                    </View>
-                  </Pressable>
-                  <View style={styles.timelineBadgeRow}>
-                    <View style={styles.timelineSetCountInline}>
-                      <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={14} />
-                      <ReedText tone="muted" variant="body">
-                        {item.setCount} {item.setCount === 1 ? 'set' : 'sets'}
-                      </ReedText>
+                      {hasTimelineStem ? (
+                        <View
+                          style={[
+                            styles.timelineRailSegmentBottom,
+                            {
+                              backgroundColor: theme.colors.controlBorder,
+                            },
+                          ]}
+                        />
+                      ) : null}
                     </View>
 
-                    {isRestingForRow ? (
-                      <View style={styles.timelineSetCountInline}>
-                        <Ionicons color={String(theme.colors.dangerText)} name="time-outline" size={14} />
-                        <ReedText tone="danger" variant="body">
-                          Rest {formatClock(activeRestSeconds)}
-                        </ReedText>
+                    <View
+                      style={[
+                        styles.timelineLineCopy,
+                        {
+                          backgroundColor: glassControls.shellBackgroundColor,
+                          borderColor: glassControls.shellBorderColor,
+                        },
+                      ]}
+                    >
+                      <Pressable
+                        accessibilityLabel={`Open ${item.exerciseName}`}
+                        disabled={isWorking || isReadOnly}
+                        onPress={() => {
+                          setConfirmExerciseDeleteId(null);
+                          onOpenExercise(item.sessionExerciseId);
+                        }}
+                        style={({ pressed }) => [getTapScaleStyle(pressed, isWorking)]}
+                      >
+                        <View style={styles.timelineLineHeader}>
+                          <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
+                            {item.exerciseName}
+                          </ReedText>
+                          <View style={styles.timelineRowActions}>
+                            <Pressable
+                              accessibilityLabel={isExpanded ? `Collapse ${item.exerciseName}` : `Expand ${item.exerciseName}`}
+                              disabled={isWorking}
+                              onPress={event => {
+                                event.stopPropagation();
+                                runReedLayoutAnimation();
+                                setExpandedExercises(current => ({
+                                  ...current,
+                                  [exerciseKey]: !isExpanded,
+                                }));
+                              }}
+                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
+                            >
+                              <Ionicons
+                                color={String(theme.colors.textMuted)}
+                                name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                                size={18}
+                              />
+                            </Pressable>
+                            {isReadOnly ? null : <TimelineDragHandle
+                              disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
+                              isDragging={isDraggingRow}
+                              onDragEnd={() => {
+                                void handleDragEnd();
+                              }}
+                              onDragMove={handleDragMove}
+                              onDragStart={() => handleDragStart(item.sessionExerciseId)}
+                            />}
+                            {isReadOnly ? null : <Pressable
+                              accessibilityLabel={
+                                confirmExerciseDeleteId === item.sessionExerciseId
+                                  ? `Confirm remove ${item.exerciseName}`
+                                  : `Remove ${item.exerciseName}`
+                              }
+                              disabled={isWorking}
+                              onPress={event => {
+                                event.stopPropagation();
+
+                                if (confirmExerciseDeleteId === item.sessionExerciseId) {
+                                  setConfirmExerciseDeleteId(null);
+                                  onRemoveExercise(item.sessionExerciseId);
+                                  return;
+                                }
+
+                                setConfirmExerciseDeleteId(item.sessionExerciseId);
+                              }}
+                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
+                            >
+                              <Ionicons
+                                color={String(
+                                  confirmExerciseDeleteId === item.sessionExerciseId
+                                    ? theme.colors.dangerText
+                                    : theme.colors.textMuted,
+                                )}
+                                name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
+                                size={18}
+                              />
+                            </Pressable>}
+                          </View>
+                        </View>
+                      </Pressable>
+                      <View style={styles.timelineBadgeRow}>
+                        <View style={styles.timelineSetCountInline}>
+                          <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={14} />
+                          <ReedText tone="muted" variant="body">
+                            {item.setCount} {item.setCount === 1 ? 'set' : 'sets'}
+                          </ReedText>
+                        </View>
+
+                        {isRestingForRow ? (
+                          <View style={styles.timelineSetCountInline}>
+                            <Ionicons color={String(theme.colors.dangerText)} name="time-outline" size={14} />
+                            <ReedText tone="danger" variant="body">
+                              Rest {formatClock(activeRestSeconds)}
+                            </ReedText>
+                          </View>
+                        ) : null}
                       </View>
-                    ) : null}
-                  </View>
 
-                  <AnimatedSetList expanded={isExpanded}>
-                    <View style={styles.timelineSetList}>
-                      {item.sets.length === 0 ? (
-                        <ReedText tone="muted" variant="body">
-                          No sets logged yet.
-                        </ReedText>
-                      ) : (
-                        item.sets.map(setEntry => {
-                          const hasActiveRestForSet =
-                            isRestingForRow &&
-                            activeRestAfterSetNumber === setEntry.setNumber &&
-                            typeof activeRestSeconds === 'number';
-                          const displayedRestSeconds = hasActiveRestForSet ? activeRestSeconds : setEntry.restSeconds;
+                      <AnimatedSetList expanded={isExpanded}>
+                        <View style={styles.timelineSetList}>
+                          {item.sets.length === 0 ? (
+                            <ReedText tone="muted" variant="body">
+                              No sets logged yet.
+                            </ReedText>
+                          ) : (
+                            item.sets.map(setEntry => {
+                              const hasActiveRestForSet =
+                                isRestingForRow &&
+                                activeRestAfterSetNumber === setEntry.setNumber &&
+                                typeof activeRestSeconds === 'number';
+                              const displayedRestSeconds = hasActiveRestForSet ? activeRestSeconds : setEntry.restSeconds;
 
-                          return (
-                            <TimelineSetRow
-                              canDelete={!isWorking && !isReadOnly}
-                              canOpen={!isReadOnly}
-                              highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
-                              key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
-                              onDelete={() => onDeleteSet(setEntry.setLogId)}
-                              onOpen={() => onOpenSet(item.sessionExerciseId, setEntry)}
-                              restLabel={displayedRestSeconds !== null ? `Rest ${formatClock(displayedRestSeconds)}` : null}
-                              setEntry={setEntry}
-                              showRestAsActive={hasActiveRestForSet}
-                            />
-                          );
-                        })
-                      )}
+                              return (
+                                <TimelineSetRow
+                                  canDelete={!isWorking && !isReadOnly}
+                                  canOpen={!isReadOnly}
+                                  highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
+                                  key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
+                                  onDelete={() => onDeleteSet(setEntry.setLogId)}
+                                  onOpen={() => onOpenSet(item.sessionExerciseId, setEntry)}
+                                  restLabel={displayedRestSeconds !== null ? `Rest ${formatClock(displayedRestSeconds)}` : null}
+                                  setEntry={setEntry}
+                                  showRestAsActive={hasActiveRestForSet}
+                                />
+                              );
+                            })
+                          )}
+                        </View>
+                      </AnimatedSetList>
                     </View>
-                  </AnimatedSetList>
-                </View>
                   </View>
                 </AnimatedTimelineRow>
               </View>
