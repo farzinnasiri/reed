@@ -21,7 +21,7 @@ Reed surfaces are either **modules** (deep, stateful, domain-heavy) or **chrome*
 | Workout | Module | Deep session logging, rest timers, live cardio, insights |
 | Chat / Reed | Module | AI coaching interface |
 | Home | Chrome | Launcher/dashboard |
-| Settings | Chrome | Preferences, user account |
+| Profile | Chrome | User identity, body/status, goals, Training Profile, preferences |
 
 > **Rule:** A surface with internal pages, sheets, or complex local state is a module.
 
@@ -43,9 +43,11 @@ A shared subdomain, not just auth. Read by Workout, Reed, and analytics.
 
 ## Profile
 
-The user's identity and account. Equivalent to a `users` table.
+The user's one-stop surface for identity and user-related state. Profile includes account identity, body/status, goals, Training Profile, high-level Training Knowledge, and preferences.
 
 > One `profile` has exactly one `trainingProfile`.
+>
+> Settings are a utility inside Profile, not a primary surface.
 
 ---
 
@@ -129,6 +131,33 @@ Current: in-place mutation. **Open decision:** whether to preserve edit history.
 | Training history (immutable facts) | User subdomain |
 | Session structure (order, rest, context) | Workout module |
 | Quick logs (no session) | User subdomain |
+
+---
+
+## Training Knowledge
+
+The product meaning derived from User subdomain facts. Training Knowledge is the shared interpretation layer for dashboards, Session Insights, and Reed.
+
+Sources:
+
+- `activityLogs` for performed work
+- `bodyMeasurements` for body status trends
+- `trainingProfiles` for goals, constraints, and baseline
+- `strengthAssessments` / `cardioAssessments` for anchors
+- future PR ledgers for materialized performance bests
+
+Rules:
+
+- Dashboards and Reed should not reimplement training math independently.
+- Activity Logs are facts; Training Knowledge is the calculated meaning.
+- Reed should ask constrained Training Knowledge questions, not inspect raw tables directly.
+- Time-window and exercise-specific queries must use indexed or materialized paths.
+
+Example questions:
+
+- “What did the user do in the past week?”
+- “How has bodyweight changed in the past 3 months?”
+- “What was the Squat PR two weeks ago, and what is it now?”
 
 ---
 

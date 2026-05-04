@@ -26,17 +26,24 @@ type TimelinePageProps = {
   activeRestSeconds: number | null;
   elapsedLabel: string | null;
   errorMessage: string | null;
+  headerSubtitle?: string;
+  isReadOnly?: boolean;
   isConfirmingFinishSession: boolean;
   isWorking: boolean;
   onAddExercise: () => void;
+  onBack?: () => void;
   onClearFinishSessionConfirm: () => void;
   onDeleteSet: (setLogId: Id<'activityLogs'>) => void;
   onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
+  onOpenInsights?: () => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;
   onReorderTimeline: (orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) => Promise<boolean>;
   onRemoveExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onToggleFinishSessionConfirm: () => void;
+  showHeader?: boolean;
+  title?: string;
+  contentTopInset?: number;
   timeline: TimelineRow[];
 };
 
@@ -48,17 +55,24 @@ export function TimelinePage({
   activeRestSeconds,
   elapsedLabel,
   errorMessage,
+  headerSubtitle,
+  isReadOnly = false,
   isConfirmingFinishSession,
   isWorking,
   onAddExercise,
+  onBack,
   onClearFinishSessionConfirm,
   onDeleteSet,
   onFinishSession,
   onOpenExercise,
+  onOpenInsights,
   onOpenSet,
   onReorderTimeline,
   onRemoveExercise,
   onToggleFinishSessionConfirm,
+  showHeader = true,
+  contentTopInset,
+  title = 'Timeline',
   timeline,
 }: TimelinePageProps) {
   const { theme } = useReedTheme();
@@ -278,15 +292,33 @@ export function TimelinePage({
 
   return (
     <View style={styles.timelinePage}>
-      <View style={styles.timelineHeader}>
-        <ReedText variant="section">Timeline</ReedText>
-        <ReedText tone="muted" variant="body">
-          {displayTimeline.length} {displayTimeline.length === 1 ? 'exercise' : 'exercises'}
-        </ReedText>
-      </View>
+      {showHeader ? (
+        <Pressable
+          accessibilityLabel={onOpenInsights ? 'Open session insights' : undefined}
+          disabled={!onOpenInsights}
+          onPress={onOpenInsights}
+          style={({ pressed }) => [styles.timelineHeader, getTapScaleStyle(pressed, !onOpenInsights)]}
+        >
+          {onBack ? (
+            <Pressable accessibilityLabel="Back to sessions" onPress={onBack} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
+              <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
+            </Pressable>
+          ) : null}
+          <View style={styles.timelineHeaderCopy}>
+            <ReedText variant="section">{title}</ReedText>
+            <ReedText tone="muted" variant="body">
+              {headerSubtitle ?? `${displayTimeline.length} ${displayTimeline.length === 1 ? 'exercise' : 'exercises'}`}
+            </ReedText>
+          </View>
+          {onOpenInsights ? <Ionicons color={String(theme.colors.textMuted)} name="stats-chart-outline" size={18} /> : null}
+        </Pressable>
+      ) : null}
 
       <ScrollView
-        contentContainerStyle={styles.timelineRailContentDocked}
+        contentContainerStyle={[
+          styles.timelineRailContentDocked,
+          contentTopInset !== undefined ? { paddingTop: contentTopInset } : undefined,
+        ]}
         scrollEnabled={!draggingExerciseId}
         showsVerticalScrollIndicator={false}
         style={styles.timelineRailScroll}
@@ -415,7 +447,7 @@ export function TimelinePage({
                 >
                   <Pressable
                     accessibilityLabel={`Open ${item.exerciseName}`}
-                    disabled={isWorking}
+                    disabled={isWorking || isReadOnly}
                     onPress={() => {
                       setConfirmExerciseDeleteId(null);
                       onOpenExercise(item.sessionExerciseId);
@@ -446,7 +478,7 @@ export function TimelinePage({
                             size={18}
                           />
                         </Pressable>
-                        <TimelineDragHandle
+                        {isReadOnly ? null : <TimelineDragHandle
                           disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
                           isDragging={isDraggingRow}
                           onDragEnd={() => {
@@ -454,8 +486,8 @@ export function TimelinePage({
                           }}
                           onDragMove={handleDragMove}
                           onDragStart={() => handleDragStart(item.sessionExerciseId)}
-                        />
-                        <Pressable
+                        />}
+                        {isReadOnly ? null : <Pressable
                           accessibilityLabel={
                             confirmExerciseDeleteId === item.sessionExerciseId
                               ? `Confirm remove ${item.exerciseName}`
@@ -484,7 +516,7 @@ export function TimelinePage({
                             name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
                             size={18}
                           />
-                        </Pressable>
+                        </Pressable>}
                       </View>
                     </View>
                   </Pressable>
@@ -522,8 +554,8 @@ export function TimelinePage({
 
                           return (
                             <TimelineSetRow
-                              canDelete={!isWorking}
-                              canOpen
+                              canDelete={!isWorking && !isReadOnly}
+                              canOpen={!isReadOnly}
                               highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
                               key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
                               onDelete={() => onDeleteSet(setEntry.setLogId)}
@@ -546,7 +578,7 @@ export function TimelinePage({
         )}
       </ScrollView>
 
-      <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
+      {isReadOnly ? null : <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
         <View
           style={[
             styles.timelineBottomDockPanel,
@@ -600,9 +632,9 @@ export function TimelinePage({
             </Pressable>
           </View>
         </View>
-      </View>
+      </View>}
 
-      {isConfirmingFinishSession ? (
+      {!isReadOnly && isConfirmingFinishSession ? (
         <View
           style={[
             styles.timelineFinishModalOverlay,

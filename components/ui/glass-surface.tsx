@@ -8,6 +8,7 @@ type GlassSurfaceTone = 'default' | 'danger';
 
 type GlassSurfaceProps = ViewProps & {
   contentStyle?: StyleProp<ViewStyle>;
+  elevated?: boolean;
   style?: StyleProp<ViewStyle>;
   tone?: GlassSurfaceTone;
 };
@@ -15,6 +16,7 @@ type GlassSurfaceProps = ViewProps & {
 export function GlassSurface({
   children,
   contentStyle,
+  elevated = true,
   style,
   tone = 'default',
   ...props
@@ -22,12 +24,15 @@ export function GlassSurface({
   const { theme } = useReedTheme();
   const canUseBlur = canUseGlassBlur();
   const pane = getGlassPaneTokens(theme, tone);
+  const flattenedShellStyle = StyleSheet.flatten(style);
+  const outerBorderRadius =
+    typeof flattenedShellStyle?.borderRadius === 'number' ? flattenedShellStyle.borderRadius : reedRadii.xl;
+  const wrapperFlexStyle = flattenedShellStyle?.flex !== undefined ? { flex: flattenedShellStyle.flex } : undefined;
 
-  return (
+  const shell = (
     <View
       style={[
         styles.shell,
-        pane.shadowStyle,
         {
           backgroundColor: pane.backgroundColor,
           borderColor: pane.borderColor,
@@ -55,6 +60,26 @@ export function GlassSurface({
         ]}
       />
       <View style={[styles.content, contentStyle]}>{children}</View>
+    </View>
+  );
+
+  if (!elevated) {
+    return shell;
+  }
+
+  return (
+    <View
+      style={[
+        {
+          backgroundColor: String(theme.colors.canvasSecondary),
+          borderRadius: outerBorderRadius,
+          pointerEvents: 'box-none',
+        },
+        wrapperFlexStyle,
+        pane.shadowStyle,
+      ]}
+    >
+      {shell}
     </View>
   );
 }

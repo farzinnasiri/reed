@@ -417,20 +417,25 @@ function addWeeklyStatsTotals<GroupId extends string>(
   setReps: number,
   setVolume: number,
 ) {
+  const divisor = Math.max(1, groupIds.length);
+  const repsContribution = roundMetric(setReps / divisor);
+  const setContribution = roundMetric(1 / divisor);
+  const volumeContribution = roundMetric(setVolume / divisor);
+
   for (const groupId of groupIds) {
     const existing = totalsByGroup.get(groupId);
     if (existing) {
-      existing.reps = roundMetric(existing.reps + setReps);
-      existing.setCount += 1;
-      existing.volume = roundMetric(existing.volume + setVolume);
+      existing.reps = roundMetric(existing.reps + repsContribution);
+      existing.setCount = roundMetric(existing.setCount + setContribution);
+      existing.volume = roundMetric(existing.volume + volumeContribution);
       continue;
     }
 
     totalsByGroup.set(groupId, {
       groupId,
-      reps: setReps,
-      setCount: 1,
-      volume: setVolume,
+      reps: repsContribution,
+      setCount: setContribution,
+      volume: volumeContribution,
     });
   }
 }

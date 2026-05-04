@@ -123,3 +123,22 @@ Validation:
 
 - `npm run typecheck` passed after the cleanup.
 
+## Follow-up — Training Knowledge direction and test surface
+
+Changed:
+
+- Added Training Knowledge to `CONTEXT.md` as the shared interpretation layer for dashboards, Session Insights, and Reed.
+- Added `docs/plans/2026-05-04-training-knowledge-interface-plan.md`.
+- Moved Live Session Set deletion/renumbering behind the Set Logging module.
+
+Validation:
+
+- `npm run typecheck` passed.
+- `npm run doctor` passed.
+
+Reflection:
+
+- Locality improved: Set create/update/delete lifecycle now crosses the Set Logging seam.
+- Leverage improved: future PR ledger and Reed tool adapters have one Activity lifecycle seam to observe.
+- Remaining risk: Training Knowledge is documented and partially expressed in weekly summary, but not yet a dedicated `domains/training-knowledge` module. Next slice should move shared meaning there deliberately instead of letting Workout naming leak into Reed-facing concepts.
+

@@ -8,13 +8,13 @@ export const styles = StyleSheet.create({
   },
   activeWorkoutShell: {
     flex: 1,
-    gap: 12,
     minHeight: 0,
-    paddingTop: 8,
   },
   activeWorkoutPage: {
     flex: 1,
+    marginTop: 8,
     minHeight: 0,
+    overflow: 'hidden',
   },
   loadingState: {
     alignItems: 'center',
@@ -24,8 +24,11 @@ export const styles = StyleSheet.create({
   },
   startState: {
     flex: 1,
-    gap: 16,
-    paddingBottom: 22,
+  },
+  startStateScroll: {
+    gap: 24,
+    paddingBottom: 132,
+    paddingHorizontal: 20,
     paddingTop: 8,
   },
   startTopRow: {
@@ -35,11 +38,26 @@ export const styles = StyleSheet.create({
     marginBottom: 14,
   },
   startContent: {
-    alignItems: 'center',
     gap: 16,
-    paddingBottom: 8,
-    paddingHorizontal: 16,
-    paddingTop: 12,
+  },
+  startHeroSurface: {
+    marginTop: 2,
+  },
+  startHeroContent: {
+    gap: 0,
+    padding: 18,
+  },
+  startHeroTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  startHeroButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.md,
+    height: 54,
+    justifyContent: 'center',
+    width: 54,
   },
   startContentCentered: {
     flex: 1,
@@ -54,29 +72,87 @@ export const styles = StyleSheet.create({
     width: 40,
   },
   startCopy: {
-    alignItems: 'center',
-    gap: 6,
+    flex: 1,
+    gap: 4,
   },
   startHistory: {
-    borderTopWidth: 1,
+    gap: 10,
     marginTop: 2,
-    paddingTop: 10,
   },
   startHistoryHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
   },
   startHistoryRow: {
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 2,
-    minHeight: 48,
     justifyContent: 'center',
-    paddingVertical: 7,
+    minHeight: 52,
+    paddingVertical: 8,
   },
   startHistoryTitle: {
     flexShrink: 1,
+  },
+  trainingShelf: {
+    gap: 10,
+  },
+  trainingShelfHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  trainingShelfCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  lastSessionList: {
+    gap: 2,
+  },
+  loadingInline: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 52,
+  },
+  sessionHeaderActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  sessionPageControl: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    minHeight: 40,
+    paddingHorizontal: 4,
+  },
+  sessionPagerButton: {
+    alignItems: 'center',
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  sessionPaginationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 10,
+  },
+  sessionSummaryRow: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: 3,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingVertical: 10,
+  },
+  sessionSummaryCopy: {
+    gap: 3,
+  },
+  sessionDateRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
   },
   timelinePage: {
     flex: 1,
@@ -103,7 +179,12 @@ export const styles = StyleSheet.create({
   timelineHeader: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: 12,
     justifyContent: 'space-between',
+  },
+  timelineHeaderCopy: {
+    flex: 1,
+    gap: 2,
   },
   timelineRailScroll: {
     flex: 1,
@@ -272,9 +353,15 @@ export const styles = StyleSheet.create({
     lineHeight: 26,
     textAlign: 'center',
   },
+  statusStripFloating: {
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 8,
+    zIndex: 10,
+  },
   statusStripShell: {
-    borderRadius: reedRadii.pill,
-    marginBottom: 8,
+    borderRadius: 24,
     marginHorizontal: 2,
   },
   statusStripContent: {
@@ -676,15 +763,16 @@ export const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   timelineFinishModalCard: {
-    borderRadius: reedRadii.lg,
-    maxWidth: 340,
-    width: '84%',
+    borderRadius: reedRadii.xl,
+    maxWidth: 420,
+    minWidth: 320,
+    width: '88%',
   },
   timelineFinishModalCardContent: {
-    gap: 14,
-    paddingHorizontal: 18,
-    paddingBottom: 18,
-    paddingTop: 16,
+    gap: 20,
+    paddingHorizontal: 28,
+    paddingBottom: 28,
+    paddingTop: 26,
   },
   timelineFinishModalTitle: {
     textAlign: 'center',
@@ -694,17 +782,17 @@ export const styles = StyleSheet.create({
   },
   timelineFinishModalActions: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     marginTop: 2,
   },
   timelineFinishModalButton: {
     alignItems: 'center',
-    borderRadius: reedRadii.sm,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 44,
-    paddingHorizontal: 12,
+    minHeight: 56,
+    paddingHorizontal: 16,
   },
   inlineError: {
     marginTop: 12,

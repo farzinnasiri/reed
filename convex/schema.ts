@@ -155,5 +155,6 @@ export default defineSchema({
     .index('by_session_id_and_set_number', ['sessionId', 'setNumber'])
     .index('by_session_exercise_id_and_set_number', ['sessionExerciseId', 'setNumber'])
     .index('by_profile_id_and_logged_at', ['profileId', 'loggedAt'])
+    .index('by_profile_id_and_exercise_catalog_id_and_logged_at', ['profileId', 'exerciseCatalogId', 'loggedAt'])
     .index('by_profile_id_and_source_and_logged_at', ['profileId', 'source', 'loggedAt']),
 });

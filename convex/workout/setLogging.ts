@@ -88,6 +88,32 @@ export async function patchLiveSessionSetActivity(
   });
 }
 
+export async function deleteLiveSessionSetActivity(
+  ctx: MutationCtx,
+  setLog: Doc<'activityLogs'> & { sessionExerciseId: Id<'liveSessionExercises'> },
+) {
+  const siblingLogs = await ctx.db
+    .query('activityLogs')
+    .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', setLog.sessionExerciseId))
+    .collect();
+
+  for (const sibling of siblingLogs) {
+    if (sibling._id === setLog._id) {
+      continue;
+    }
+    if (sibling.setNumber > setLog.setNumber) {
+      await ctx.db.patch(sibling._id, { setNumber: sibling.setNumber - 1 });
+    }
+  }
+
+  await ctx.db.delete(setLog._id);
+
+  return {
+    deletedSetNumber: setLog.setNumber,
+    sessionExerciseId: setLog.sessionExerciseId,
+  };
+}
+
 export async function insertQuickLogActivity(
   ctx: MutationCtx,
   args: {

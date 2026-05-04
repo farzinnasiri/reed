@@ -48,7 +48,7 @@ const GOAL_CONTENT: Record<PrimaryGoal, GoalContent> = {
   },
   improve_conditioning: {
     title: 'How do you prefer to push your lungs?',
-    subtitle: "I'll anchor your conditioning sessions around this modality.",
+    subtitle: "I'll anchor your conditioning sessions around these modalities. Pick up to 5.",
   },
   move_without_pain: {
     title: '',
@@ -154,20 +154,30 @@ function renderSupportSport({ detail, patchDetail }: RendererProps) {
 }
 
 function renderImproveConditioning({ detail, patchDetail }: RendererProps) {
+  const selectedModalities =
+    detail.focusAreas.length > 0
+      ? detail.focusAreas
+      : detail.detail
+        ? [detail.detail]
+        : [];
+
   return (
     <View style={styles.section}>
       <GroupedChipSelect
         groups={CONDITIONING_GROUPS}
-        max={1}
+        max={5}
         onChange={selected => {
-          const val = selected[0] ?? null;
-          patchDetail({ detail: val, customDetail: val === 'other' ? detail.customDetail : null });
+          const hasOther = selected.includes('other');
+          patchDetail({
+            customDetail: hasOther ? detail.customDetail : null,
+            detail: selected[0] ?? null,
+            focusAreas: selected,
+          });
         }}
-        // Detail represents the single chosen string here for legacy reasons, mapping it array for GroupedChipSelect
-        selected={detail.detail ? [detail.detail] : []}
+        selected={selectedModalities}
       />
 
-      {detail.detail === 'other' ? (
+      {selectedModalities.includes('other') ? (
         <View style={styles.followField}>
           <ReedText variant="bodyStrong">What is it?</ReedText>
           <ReedInput

@@ -3,7 +3,7 @@ import { query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
-import { buildWeeklyMuscleStats } from '../domains/workout/weekly-muscle-stats';
+import { summarizeTrainingWindow } from '../domains/trainingKnowledge/trainingHistory';
 
 export const getWeeklyMuscleStats = query({
   args: {
@@ -31,7 +31,7 @@ export const getWeeklyMuscleStats = query({
       getUniqueIds(weeklyLogs.map(log => log.exerciseCatalogId)),
     );
 
-    return buildWeeklyMuscleStats({
+    return summarizeTrainingWindow({
       exercises: Array.from(catalogMap.entries()).flatMap(([exerciseCatalogId, exercise]) => {
         if (!exercise) {
           return [];
@@ -40,6 +40,7 @@ export const getWeeklyMuscleStats = query({
         return [
           {
             exerciseCatalogId: exerciseCatalogId as string,
+            exerciseName: exercise.name,
             isCardio: exercise.isCardio,
             mainMuscleGroups: exercise.mainMuscleGroups,
           },
@@ -48,11 +49,15 @@ export const getWeeklyMuscleStats = query({
       logs: weeklyLogs.map(log => ({
         derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
         exerciseCatalogId: log.exerciseCatalogId as string,
+        loggedAt: log.loggedAt,
         metrics: log.metrics,
+        recipeKey: log.recipeKey,
+        source: log.source,
       })),
-      weekEndAt,
-      weekStartAt,
-    });
+      now: Date.now(),
+      windowEndAt: weekEndAt,
+      windowStartAt: weekStartAt,
+    }).work;
   },
 });
 

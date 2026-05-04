@@ -723,8 +723,7 @@ function getSnapshotTiles(summary: LiveSessionSummary) {
     {
       icon: 'time-outline',
       key: 'rest',
-      label: 'Rest',
-      subLabel: '(total)',
+      label: 'Total rest',
       value: summary.recovery.totalRestSeconds > 0 ? formatClock(summary.recovery.totalRestSeconds) : '—',
     },
   ];
@@ -734,15 +733,15 @@ function getSnapshotTiles(summary: LiveSessionSummary) {
       ? {
           icon: 'bag-handle-outline' as const,
           key: 'load',
-          label: 'Load',
-          value: formatCompactLoad(summary.output.totalLoadKg).replace(' kg', 'kg'),
+          label: 'Load (kg)',
+          value: Math.round(summary.output.totalLoadKg).toLocaleString('en-US'),
         }
       : summary.output.totalDistanceKm > 0
         ? {
             icon: 'walk-outline' as const,
             key: 'distance',
-            label: 'Distance',
-            value: formatCompactDistance(summary.output.totalDistanceKm).replace(' km', 'km'),
+            label: 'Distance (km)',
+            value: formatCompactNumber(summary.output.totalDistanceKm, 1),
           }
         : summary.output.totalHoldSeconds > 0
           ? {
@@ -1084,15 +1083,17 @@ function SnapshotTile({
       ]}
     >
       <Ionicons color={String(theme.colors.textMuted)} name={icon} size={16} />
-      <ReedText
-        adjustsFontSizeToFit
-        minimumFontScale={0.64}
-        numberOfLines={1}
-        style={styles.sessionInsightsSnapshotValue}
-        variant="section"
-      >
-        {value}
-      </ReedText>
+      <View style={{ width: '100%', alignItems: 'center' }}>
+        <ReedText
+          adjustsFontSizeToFit
+          minimumFontScale={0.5}
+          numberOfLines={1}
+          style={styles.sessionInsightsSnapshotValue}
+          variant="section"
+        >
+          {value}
+        </ReedText>
+      </View>
       <ReedText style={styles.sessionInsightsSnapshotLabel} tone="muted" variant="caption">
         {label}
       </ReedText>

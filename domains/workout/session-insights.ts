@@ -1,3 +1,4 @@
+import { detectSessionRecords, type ActivityRecordInput } from '../trainingKnowledge/personalRecords';
 import {
   getComparisonScalarForRecipe,
   getRecipeDefinition,
@@ -39,13 +40,20 @@ type SessionInsightsLog = {
   sessionExerciseId: string;
   setLogId: string;
   setNumber: number;
+  warmup: boolean;
 };
 
 type HistoricalPerformanceEntry = {
+  activityLogId: string;
   derivedEffectiveLoadKg?: number | null;
   exerciseCatalogId: string;
+  exerciseName: string;
+  loggedAt: number;
   metrics: Record<string, number>;
+  profileId: string;
   recipeKey: RecipeKey;
+  sessionId: string | null;
+  warmup: boolean;
 };
 
 type MeasurableModality = 'cardio' | 'holds' | 'load';
@@ -526,21 +534,32 @@ function buildModalityBreakdown(args: {
 }
 
 function buildPerformance(historicalEntries: HistoricalPerformanceEntry[], enrichedSets: EnrichedSet[]) {
-  const historicalBest = new Map<string, number>();
-  for (const entry of historicalEntries) {
-    const score = getComparisonScalarForRecipe(
-      entry.recipeKey,
-      entry.metrics,
-      entry.derivedEffectiveLoadKg ?? null,
-    );
-    if (score <= 0) {
-      continue;
-    }
-    historicalBest.set(
-      entry.exerciseCatalogId,
-      Math.max(historicalBest.get(entry.exerciseCatalogId) ?? 0, score),
-    );
-  }
+  const sessionRecordResult = detectSessionRecords({
+    historicalActivities: historicalEntries.map(entry => ({
+      activityLogId: entry.activityLogId,
+      derivedEffectiveLoadKg: entry.derivedEffectiveLoadKg ?? null,
+      exerciseCatalogId: entry.exerciseCatalogId,
+      exerciseName: entry.exerciseName,
+      loggedAt: entry.loggedAt,
+      metrics: entry.metrics,
+      profileId: entry.profileId,
+      recipeKey: entry.recipeKey,
+      sessionId: entry.sessionId,
+      warmup: entry.warmup,
+    })),
+    sessionActivities: enrichedSets.map(setEntry => ({
+      activityLogId: setEntry.log.setLogId,
+      derivedEffectiveLoadKg: setEntry.log.derivedEffectiveLoadKg ?? null,
+      exerciseCatalogId: setEntry.exercise.exerciseCatalogId,
+      exerciseName: setEntry.exercise.exerciseName,
+      loggedAt: setEntry.log.loggedAt,
+      metrics: setEntry.log.metrics,
+      profileId: 'session',
+      recipeKey: setEntry.log.recipeKey,
+      sessionId: null,
+      warmup: setEntry.log.warmup,
+    } satisfies ActivityRecordInput)),
+  });
 
   const currentBest = new Map<string, { exerciseName: string; score: number }>();
   const topSets: TopSet[] = [];
@@ -566,25 +585,15 @@ function buildPerformance(historicalEntries: HistoricalPerformanceEntry[], enric
     }
   }
 
-  const prExercises: string[] = [];
-  const nearPrExercises: string[] = [];
-
-  for (const [exerciseCatalogId, current] of currentBest) {
-    const previousBest = historicalBest.get(exerciseCatalogId) ?? 0;
-    if (previousBest === 0 || current.score > previousBest) {
-      prExercises.push(current.exerciseName);
-      continue;
-    }
-    if (current.score >= previousBest * 0.95) {
-      nearPrExercises.push(current.exerciseName);
-    }
-  }
-
   return {
-    nearPrExercises: nearPrExercises.sort(),
-    prExercises: prExercises.sort(),
+    nearPrExercises: uniqueSorted(sessionRecordResult.nearRecords.map(record => record.exerciseName)),
+    prExercises: uniqueSorted(sessionRecordResult.records.map(record => record.exerciseName)),
     topSets: topSets.sort((left, right) => right.score - left.score).slice(0, 3),
   };
+}
+
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values)).sort();
 }
 
 function buildRecoveryAnalysis(

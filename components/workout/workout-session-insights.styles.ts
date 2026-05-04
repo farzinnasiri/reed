@@ -102,9 +102,9 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsSnapshotValue: {
     fontFamily: 'Outfit_800ExtraBold',
-    fontSize: 24,
+    fontSize: 19.4,
     letterSpacing: -0.35,
-    lineHeight: 28,
+    lineHeight: 22.6,
     marginTop: 8,
     textAlign: 'center',
   },

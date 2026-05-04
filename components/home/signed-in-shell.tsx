@@ -16,7 +16,7 @@ import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { WorkoutSurface } from '@/components/workout/workout-surface';
-import { SettingsSurface } from './settings-surface';
+import { ProfileSurface } from './profile-surface';
 import { HomeSurface } from './home-surface';
 import { getFirstName, pickHomeGreeting } from './home-greetings';
 import type { AppMode } from './types';
@@ -66,7 +66,7 @@ export function SignedInShell({
   );
 
   useEffect(() => {
-    if (appMode !== 'settings' && isEditingSettingsProfile) {
+    if (appMode !== 'user' && isEditingSettingsProfile) {
       setIsEditingSettingsProfile(false);
     }
   }, [appMode, isEditingSettingsProfile]);
@@ -110,7 +110,7 @@ export function SignedInShell({
       isActive: appMode === 'workout',
     },
     {
-      accessibilityLabel: 'Chat',
+      accessibilityLabel: 'Reed',
       icon: (
         <Ionicons
           color={String(appMode === 'chat' ? theme.colors.accentPrimary : theme.colors.textMuted)}
@@ -122,16 +122,16 @@ export function SignedInShell({
       isActive: appMode === 'chat',
     },
     {
-      accessibilityLabel: 'Settings',
+      accessibilityLabel: 'Profile',
       icon: (
         <Ionicons
-          color={String(appMode === 'settings' ? theme.colors.accentPrimary : theme.colors.textMuted)}
-          name={appMode === 'settings' ? 'settings' : 'settings-outline'}
+          color={String(appMode === 'user' ? theme.colors.accentPrimary : theme.colors.textMuted)}
+          name={appMode === 'user' ? 'person' : 'person-outline'}
           size={22}
         />
       ),
-      id: 'settings',
-      isActive: appMode === 'settings',
+      id: 'user',
+      isActive: appMode === 'user',
     },
   ];
 
@@ -162,8 +162,8 @@ export function SignedInShell({
         );
       case 'chat':
         return <CoachSurface displayName={displayName} dockReservedSpace={dockReservedSpace} />;
-      case 'settings':
-        return <SettingsSurface onEditingProfileChange={setIsEditingSettingsProfile} />;
+      case 'user':
+        return <ProfileSurface displayName={displayName} onEditingProfileChange={setIsEditingSettingsProfile} />;
       default:
         return null;
     }

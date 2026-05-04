@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, AppState, Pressable, ScrollView, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
+import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
@@ -45,6 +46,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const session = useQuery(api.liveSessions.getCurrent, {});
   const sessionInsights = useQuery(api.liveSessionInsights.getCurrent, {});
   const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
+  const [sessionPageCursorStack, setSessionPageCursorStack] = useState<number[]>([]);
+  const sessionPageBeforeStartedAt = sessionPageCursorStack.at(-1) ?? null;
+  const [selectedEndedSessionId, setSelectedEndedSessionId] = useState<Id<'liveSessions'> | null>(null);
+  const [isEndedInsightsOpen, setIsEndedInsightsOpen] = useState(false);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  const endedSessionsPage = useQuery(api.liveSessions.listEndedSummaries, {
+    beforeStartedAt: sessionPageBeforeStartedAt ?? undefined,
+    limit: 5,
+  });
+  const endedSessionInsights = useQuery(
+    api.liveSessionInsights.getForSession,
+    selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
+  );
+  const endedSessionTimeline = useQuery(
+    api.liveSessions.getEndedTimeline,
+    selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
+  );
   const startSession = useMutation(api.liveSessions.start);
   const addExercise = useMutation(api.liveSessions.addExercise);
   const reorderExercises = useMutation(api.liveSessions.reorderExercises);
@@ -78,6 +96,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
+  const [statusStripHeight, setStatusStripHeight] = useState(60);
   const previousRestRemainingRef = useRef<number | null>(null);
   const currentRestRemainingRef = useRef(restRemaining);
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
@@ -540,6 +559,39 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     });
   }
 
+  function renderSessionChrome({
+    children,
+    onBack,
+    onOpenInsights,
+    overlays,
+    status,
+  }: {
+    children: ReactNode;
+    onBack: () => void;
+    onOpenInsights: () => void;
+    overlays?: ReactNode;
+    status: LiveSessionStatusStrip;
+  }) {
+    return (
+      <View style={styles.root}>
+        <View style={styles.activeWorkoutShell}>
+          <View style={styles.activeWorkoutPage}>{children}</View>
+          <View
+            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + 8)}
+            style={styles.statusStripFloating}
+          >
+            <WorkoutSessionStatusStrip
+              onBack={onBack}
+              onOpenInsights={onOpenInsights}
+              status={status}
+            />
+          </View>
+        </View>
+        {overlays}
+      </View>
+    );
+  }
+
   if (session === undefined) {
     return (
       <View style={styles.loadingState}>
@@ -551,84 +603,192 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   if (session === null) {
     const completedExercises = latestEndedSummary?.exercises ?? [];
 
+    if (selectedEndedSessionId) {
+      const endedStatus = endedSessionTimeline
+        ? buildEndedStatusStrip(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt, endedSessionTimeline.timeline)
+        : {
+            completedSetsLabel: '0 sets',
+            durationLabel: '0m',
+            microLineTokens: [],
+            workSlotKind: 'active' as const,
+            workSlotLabel: 'Completed',
+          };
+
+      return renderSessionChrome({
+        children: endedSessionTimeline === undefined ? (
+          <View style={styles.loadingInline}>
+            <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+            <ReedText tone="muted" variant="caption">Loading session.</ReedText>
+          </View>
+        ) : endedSessionTimeline === null ? (
+          <View style={styles.trainingShelf}>
+            <ReedText variant="bodyStrong">Session unavailable.</ReedText>
+          </View>
+        ) : (
+          <TimelinePage
+            activeRestAfterSetNumber={null}
+            activeRestExerciseId={null}
+            activeRestSeconds={null}
+            contentTopInset={statusStripHeight}
+            elapsedLabel={formatEndedDuration(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt)}
+            errorMessage={null}
+            isConfirmingFinishSession={false}
+            isReadOnly
+            isWorking={false}
+            onAddExercise={() => {}}
+            onClearFinishSessionConfirm={() => {}}
+            onDeleteSet={() => {}}
+            onFinishSession={() => {}}
+            onOpenExercise={() => {}}
+            onOpenSet={() => {}}
+            onReorderTimeline={async () => false}
+            onRemoveExercise={() => {}}
+            onToggleFinishSessionConfirm={() => {}}
+            showHeader={false}
+            timeline={endedSessionTimeline.timeline}
+          />
+        ),
+        onBack: () => {
+          setIsEndedInsightsOpen(false);
+          setSelectedEndedSessionId(null);
+        },
+        onOpenInsights: () => setIsEndedInsightsOpen(true),
+        overlays: endedSessionInsights ? (
+          <WorkoutSessionInsightsSheet
+            fullInsights={endedSessionInsights.fullInsights as LiveSessionFullInsights}
+            isOpen={isEndedInsightsOpen}
+            onClose={() => setIsEndedInsightsOpen(false)}
+            summary={endedSessionInsights.summary as LiveSessionSummary}
+          />
+        ) : null,
+        status: endedStatus,
+      });
+    }
+
     return (
-      <View style={styles.startState}>
+      <ScrollView contentContainerStyle={styles.startStateScroll} showsVerticalScrollIndicator={false} style={styles.startState}>
         {showStartBackButton ? (
           <View style={styles.startTopRow}>
-            <Pressable onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
+            <Pressable accessibilityLabel="Exit workout" onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
               <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
             </Pressable>
           </View>
         ) : null}
 
-        <View style={[styles.startContent, completedExercises.length === 0 ? styles.startContentCentered : null]}>
-          <View
-            style={[
-              styles.startIcon,
-              {
-                backgroundColor: theme.colors.controlActiveFill,
-                borderColor: theme.colors.controlActiveBorder,
-              },
-            ]}
-          >
-            <Ionicons color={String(theme.colors.textPrimary)} name="barbell-outline" size={22} />
-          </View>
-          <View style={styles.startCopy}>
-            <ReedText variant="section">Start session</ReedText>
-            <ReedText tone="muted">Create a live workout to build your timeline.</ReedText>
-          </View>
-          <Pressable
-            onPress={handleStartSession}
-            style={({ pressed }) => [
-              styles.primaryAction,
-              theme.shadows.controlActive,
-              {
-                backgroundColor: theme.colors.accentPrimary,
-                ...getTapScaleStyle(pressed, isWorking),
-              },
-            ]}
-          >
-            <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-              {isWorking ? 'Starting…' : 'Start session'}
-            </ReedText>
-          </Pressable>
-        </View>
-
-        {completedExercises.length > 0 ? (
-          <View style={styles.startHistory}>
-            <View style={styles.startHistoryHeader}>
-              <ReedText variant="bodyStrong">Last session</ReedText>
-              <ReedText tone="muted" variant="caption">
-                {completedExercises.length} {completedExercises.length === 1 ? 'exercise' : 'exercises'}
-              </ReedText>
+        <GlassSurface contentStyle={styles.startHeroContent} style={styles.startHeroSurface}>
+          <View style={styles.startHeroTopRow}>
+            <View style={styles.startCopy}>
+              <ReedText variant="section">Start session</ReedText>
+              <ReedText tone="muted">Start empty. Add exercises as you train.</ReedText>
             </View>
-            {completedExercises.map((item, index) => (
-              <View
-                key={`${item.exerciseName}-${index}`}
-                style={[
-                  styles.startHistoryRow,
-                  {
-                    borderBottomColor: theme.colors.controlBorder,
-                  },
-                ]}
-              >
-                <ReedText numberOfLines={1} style={styles.startHistoryTitle} variant="bodyStrong">
-                  {item.exerciseName}
-                </ReedText>
-                <ReedText numberOfLines={1} tone="muted" variant="caption">
-                  {item.lastLoggedSummary ?? `${item.setCount} ${item.setCount === 1 ? 'set' : 'sets'}`}
-                </ReedText>
-              </View>
-            ))}
+            <Pressable
+              accessibilityLabel="Start a live workout session"
+              onPress={handleStartSession}
+              style={({ pressed }) => [
+                styles.startHeroButton,
+                {
+                  backgroundColor: theme.colors.accentPrimary,
+                  ...getTapScaleStyle(pressed, isWorking),
+                },
+              ]}
+            >
+              <Ionicons color={String(theme.colors.accentPrimaryText)} name="arrow-forward" size={18} />
+            </Pressable>
           </View>
-        ) : null}
+        </GlassSurface>
+
+        <View style={styles.startHistory}>
+          <View style={styles.startHistoryHeader}>
+            <ReedText variant="bodyStrong">Sessions</ReedText>
+            <View style={styles.sessionHeaderActions}>
+              <Pressable
+                accessibilityLabel={isHistoryExpanded ? 'Collapse sessions' : 'Expand sessions'}
+                onPress={() => setIsHistoryExpanded(current => !current)}
+                style={({ pressed }) => [styles.sessionPagerButton, getTapScaleStyle(pressed)]}
+              >
+                <Ionicons color={String(theme.colors.textMuted)} name={isHistoryExpanded ? 'chevron-up' : 'chevron-down'} size={18} />
+              </Pressable>
+            </View>
+          </View>
+          {!isHistoryExpanded ? null : endedSessionsPage === undefined ? (
+            <View style={styles.loadingInline}>
+              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+              <ReedText tone="muted" variant="caption">Loading sessions.</ReedText>
+            </View>
+          ) : endedSessionsPage.summaries.length > 0 ? (
+            <>
+            <View style={styles.lastSessionList}>
+              {endedSessionsPage.summaries.map((item, index) => (
+                <Pressable
+                  accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
+                  key={item.sessionId}
+                  onPress={() => {
+                    setIsEndedInsightsOpen(false);
+                    setSelectedEndedSessionId(item.sessionId);
+                  }}
+                  style={({ pressed }) => [
+                    styles.sessionSummaryRow,
+                    index < endedSessionsPage.summaries.length - 1
+                      ? { borderBottomColor: theme.colors.controlBorder }
+                      : { borderBottomWidth: 0 },
+                    getTapScaleStyle(pressed),
+                  ]}
+                >
+                  <View style={styles.sessionSummaryCopy}>
+                    <View style={styles.sessionDateRow}>
+                      <ReedText numberOfLines={1} variant="bodyStrong">{formatSessionDate(item.startedAt)}</ReedText>
+                      <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
+                    </View>
+                    <ReedText numberOfLines={1} tone="muted" variant="caption">
+                      {item.exercises.slice(0, 3).map(exercise => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
+                    </ReedText>
+                  </View>
+                </Pressable>
+              ))}
+            </View>
+            {(sessionPageCursorStack.length > 0 || endedSessionsPage.nextBeforeStartedAt) ? (
+              <View style={styles.sessionPaginationRow}>
+                <Pressable
+                  accessibilityLabel="Show newer sessions"
+                  disabled={sessionPageCursorStack.length === 0}
+                  onPress={() => setSessionPageCursorStack(current => current.slice(0, -1))}
+                  style={({ pressed }) => [styles.sessionPageControl, { opacity: sessionPageCursorStack.length === 0 ? 0.35 : 1 }, getTapScaleStyle(pressed, sessionPageCursorStack.length === 0)]}
+                >
+                  <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={15} />
+                  <ReedText tone="muted" variant="caption">Newer</ReedText>
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Show earlier sessions"
+                  disabled={!endedSessionsPage.nextBeforeStartedAt}
+                  onPress={() => {
+                    if (endedSessionsPage.nextBeforeStartedAt) {
+                      setSessionPageCursorStack(current => [...current, endedSessionsPage.nextBeforeStartedAt!]);
+                    }
+                  }}
+                  style={({ pressed }) => [styles.sessionPageControl, { opacity: endedSessionsPage.nextBeforeStartedAt ? 1 : 0.35 }, getTapScaleStyle(pressed, !endedSessionsPage.nextBeforeStartedAt)]}
+                >
+                  <ReedText tone="muted" variant="caption">Earlier</ReedText>
+                  <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={15} />
+                </Pressable>
+              </View>
+            ) : null}
+            </>
+          ) : completedExercises.length > 0 ? (
+            <ReedText tone="muted" variant="caption">Earlier sessions will appear here.</ReedText>
+          ) : (
+            <View style={styles.trainingShelf}>
+              <ReedText variant="bodyStrong">Reed is ready when you are.</ReedText>
+              <ReedText tone="muted" variant="caption">Log a few sessions and this page will surface patterns, records, and useful repeats.</ReedText>
+            </View>
+          )}
+        </View>
 
         {errorMessage ? (
           <ReedText style={styles.inlineError} tone="danger">
             {errorMessage}
           </ReedText>
         ) : null}
-      </View>
+      </ScrollView>
     );
   }
 
@@ -638,6 +798,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         activeRestAfterSetNumber={restRuntime ? restRuntime.nextSetNumber - 1 : null}
         activeRestExerciseId={restRuntime?.sessionExerciseId ?? null}
         activeRestSeconds={restRuntime ? restRemaining : null}
+        contentTopInset={statusStripHeight}
         elapsedLabel={elapsedLabel}
         errorMessage={errorMessage}
         isConfirmingFinishSession={isConfirmingFinishSession}
@@ -658,6 +819,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       />
     ) : (
       <ExercisePage
+        contentTopInset={statusStripHeight}
         capture={{
           card: captureCard,
           editingSetNumber: activeSetEditor?.setNumber ?? null,
@@ -724,37 +886,68 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     setPage('timeline');
   }
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.activeWorkoutShell}>
-        <WorkoutSessionStatusStrip
-          onBack={handleStatusStripBack}
-          onOpenInsights={() => setIsInsightsOpen(true)}
-          status={insightsStatus}
+  return renderSessionChrome({
+    children: renderWorkoutPage(page),
+    onBack: handleStatusStripBack,
+    onOpenInsights: () => setIsInsightsOpen(true),
+    overlays: (
+      <>
+        <AddExerciseSheet
+          isOpen={isAddSheetOpen}
+          isWorking={isWorking}
+          onAddBulk={handleAddExercisesBulk}
+          onAddSingle={handleAddExercise}
+          onClose={closeAddSheet}
+          onToggleFavorite={handleToggleFavorite}
         />
 
-        <View style={styles.activeWorkoutPage}>{renderWorkoutPage(page)}</View>
-      </View>
+        {sessionInsights ? (
+          <WorkoutSessionInsightsSheet
+            fullInsights={sessionInsights.fullInsights as LiveSessionFullInsights}
+            isOpen={isInsightsOpen}
+            onClose={() => setIsInsightsOpen(false)}
+            summary={sessionInsights.summary as LiveSessionSummary}
+          />
+        ) : null}
+      </>
+    ),
+    status: insightsStatus,
+  });
+}
 
-      <AddExerciseSheet
-        isOpen={isAddSheetOpen}
-        isWorking={isWorking}
-        onAddBulk={handleAddExercisesBulk}
-        onAddSingle={handleAddExercise}
-        onClose={closeAddSheet}
-        onToggleFavorite={handleToggleFavorite}
-      />
+function formatSessionDate(timestamp: number) {
+  return new Intl.DateTimeFormat('en', {
+    day: 'numeric',
+    month: 'short',
+    weekday: 'short',
+  }).format(new Date(timestamp));
+}
 
-      {sessionInsights ? (
-        <WorkoutSessionInsightsSheet
-          fullInsights={sessionInsights.fullInsights as LiveSessionFullInsights}
-          isOpen={isInsightsOpen}
-          onClose={() => setIsInsightsOpen(false)}
-          summary={sessionInsights.summary as LiveSessionSummary}
-        />
-      ) : null}
-    </View>
-  );
+function formatSessionDuration(startedAt: number, endedAt: number) {
+  const minutes = Math.max(1, Math.round((endedAt - startedAt) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+function formatEndedDuration(startedAt: number, endedAt: number) {
+  const minutes = Math.max(0, Math.round((endedAt - startedAt) / 60000));
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+}
+
+function buildEndedStatusStrip(startedAt: number, endedAt: number, timeline: TimelineRow[]): LiveSessionStatusStrip {
+  const completedSets = timeline.reduce((total, row) => total + row.setCount, 0);
+  return {
+    completedSetsLabel: `${completedSets} ${completedSets === 1 ? 'set' : 'sets'}`,
+    durationLabel: formatEndedDuration(startedAt, endedAt),
+    microLineTokens: [],
+    workSlotKind: 'active',
+    workSlotLabel: 'Completed',
+  };
 }
 
 function getNextTimelineExerciseId(

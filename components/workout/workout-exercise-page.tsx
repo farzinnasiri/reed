@@ -15,6 +15,7 @@ import { WorkoutExerciseRestView } from './workout-exercise-rest-view';
 import { WorkoutLiveCardioCard } from './workout-live-cardio-card';
 
 type ExercisePageProps = {
+  contentTopInset?: number;
   navigation: {
     onBackToTimeline: () => void;
   };
@@ -59,7 +60,7 @@ type ExercisePageProps = {
   };
 };
 
-export function ExercisePage({ navigation, capture, liveCardio, rest }: ExercisePageProps) {
+export function ExercisePage({ contentTopInset, navigation, capture, liveCardio, rest }: ExercisePageProps) {
   const { width } = useWindowDimensions();
   const title =
     liveCardio.card?.exerciseName ??
@@ -87,7 +88,7 @@ export function ExercisePage({ navigation, capture, liveCardio, rest }: Exercise
   const showLiveCardioView = Boolean(liveCardio.finishSummary || liveCardio.card || showLiveCardioCaptureStart);
 
   return (
-    <View style={styles.exercisePage}>
+    <View style={[styles.exercisePage, contentTopInset !== undefined ? { paddingTop: contentTopInset } : undefined]}>
       <View style={styles.exerciseTopRow}>
         {/* The session status strip is the canonical back affordance for this nested surface. */}
         <ReedText numberOfLines={1} style={styles.exerciseTitle} variant="title">

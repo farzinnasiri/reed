@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
@@ -14,13 +14,15 @@ import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { buildCompleteOnboardingPayload } from '@/components/onboarding/step-review';
 import { EMPTY_DRAFT, type OnboardingDraft } from '@/components/onboarding/types';
 import { useReedTheme } from '@/design/provider';
+import { getTapScaleStyle } from '@/design/motion';
 import { reedRadii } from '@/design/system';
 
 type SettingsSurfaceProps = {
+  onBack?: () => void;
   onEditingProfileChange?: (isEditing: boolean) => void;
 };
 
-export function SettingsSurface({ onEditingProfileChange }: SettingsSurfaceProps) {
+export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurfaceProps) {
   const { data: session } = authClient.useSession();
   const { preference, setPreference, theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
@@ -190,11 +192,30 @@ export function SettingsSurface({ onEditingProfileChange }: SettingsSurfaceProps
         },
       ]}
       showsVerticalScrollIndicator={false}
+      style={{ flex: 1 }}
     >
       <View style={styles.headerBlock}>
-        <View style={styles.headerCopy}>
-          <ReedText variant="brand">Account</ReedText>
-          <ReedText variant="display">Settings</ReedText>
+        <View style={styles.settingsHeaderRow}>
+          <View style={styles.settingsBackButtonSlot}>
+            {onBack ? (
+              <Pressable
+                accessibilityLabel="Back to profile"
+                onPress={onBack}
+                style={({ pressed }) => [
+                  styles.settingsBackButton,
+                  {
+                    backgroundColor: glassControls.shellBackgroundColor,
+                    borderColor: glassControls.shellBorderColor,
+                  },
+                  getTapScaleStyle(pressed),
+                ]}
+              >
+                <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
+              </Pressable>
+            ) : null}
+          </View>
+          <ReedText variant="display" style={{ flex: 1, textAlign: 'center' }}>Settings</ReedText>
+          <View style={styles.settingsBackButtonSlot} />
         </View>
       </View>
 
@@ -450,8 +471,21 @@ const styles = StyleSheet.create({
   headerBlock: {
     gap: 8,
   },
-  headerCopy: {
-    gap: 4,
+  settingsHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+  },
+  settingsBackButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  settingsBackButtonSlot: {
+    height: 44,
+    width: 44,
   },
   feedbackBlock: {
     gap: 6,

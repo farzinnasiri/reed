@@ -20,6 +20,7 @@ import {
   summarizeMetrics,
 } from '../../domains/workout/recipes';
 import {
+  deleteLiveSessionSetActivity,
   insertLiveSessionSetActivity,
   normalizeSetMetrics,
   patchLiveSessionSetActivity,
@@ -96,10 +97,96 @@ export const getLatestEndedSummary = query({
       return {
         ...summary,
         endedAt: endedSession.endedAt ?? endedSession.startedAt,
+        sessionId: endedSession._id,
+        startedAt: endedSession.startedAt,
       };
     }
 
     return null;
+  },
+});
+
+export const getEndedTimeline = query({
+  args: { sessionId: v.id('liveSessions') },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.profileId !== profile._id || session.status !== 'ended') {
+      return null;
+    }
+
+    const sessionExercises = (await ctx.db
+      .query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+      .collect()) as SessionExerciseWithRecipe[];
+    const allLogs = await Promise.all(
+      sessionExercises.map(sessionExercise =>
+        ctx.db
+          .query('activityLogs')
+          .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
+          .collect(),
+      ),
+    );
+    const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>(
+      sessionExercises.map((sessionExercise, index) => [sessionExercise._id, allLogs[index]]),
+    );
+    const state = buildCurrentLiveSessionState({
+      logsByExercise,
+      session: { ...session, activeProcess: null, activeSessionExerciseId: undefined, status: 'active' },
+      sessionExercises,
+    });
+
+    return {
+      endedAt: session.endedAt ?? session.startedAt,
+      exerciseCount: state.timeline.length,
+      startedAt: session.startedAt,
+      timeline: state.timeline.map(item => ({
+        ...item,
+        state: item.setCount > 0 ? 'logged' as const : 'idle' as const,
+      })),
+    };
+  },
+});
+
+export const listEndedSummaries = query({
+  args: {
+    beforeStartedAt: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const limit = Math.max(1, Math.min(args.limit ?? 5, 12));
+    const beforeStartedAt = args.beforeStartedAt ?? Date.now() + 1;
+    const endedSessions = await ctx.db
+      .query('liveSessions')
+      .withIndex('by_profile_id_and_status_and_started_at', q =>
+        q
+          .eq('profileId', profile._id)
+          .eq('status', 'ended')
+          .lt('startedAt', beforeStartedAt),
+      )
+      .order('desc')
+      .take(limit + 1);
+    const pageSessions = endedSessions.slice(0, limit);
+    const summaries = [];
+
+    for (const endedSession of pageSessions) {
+      const summary = await buildEndedSessionSummary(ctx, endedSession._id);
+      if (summary.exerciseCount === 0) {
+        continue;
+      }
+      summaries.push({
+        ...summary,
+        endedAt: endedSession.endedAt ?? endedSession.startedAt,
+        sessionId: endedSession._id,
+        startedAt: endedSession.startedAt,
+      });
+    }
+
+    return {
+      nextBeforeStartedAt: endedSessions.length > limit ? pageSessions.at(-1)?.startedAt ?? null : null,
+      summaries,
+    };
   },
 });
 
@@ -468,30 +555,16 @@ export const deleteSet = mutation({
 
     await requireSessionExercise(ctx, session, profile._id, setLog.sessionExerciseId);
 
-    const siblingLogs = await ctx.db
-      .query('activityLogs')
-      .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', setLog.sessionExerciseId))
-      .collect();
-
-    for (const sibling of siblingLogs) {
-      if (sibling._id === setLog._id) {
-        continue;
-      }
-      if (sibling.setNumber > setLog.setNumber) {
-        await ctx.db.patch(sibling._id, { setNumber: sibling.setNumber - 1 });
-      }
-    }
-
-    await ctx.db.delete(setLog._id);
-
-    await ctx.db.patch(session._id, {
-      activeSessionExerciseId: setLog.sessionExerciseId,
+    const result = await deleteLiveSessionSetActivity(ctx, {
+      ...setLog,
+      sessionExerciseId: setLog.sessionExerciseId,
     });
 
-    return {
-      deletedSetNumber: setLog.setNumber,
-      sessionExerciseId: setLog.sessionExerciseId,
-    };
+    await ctx.db.patch(session._id, {
+      activeSessionExerciseId: result.sessionExerciseId,
+    });
+
+    return result;
   },
 });
 

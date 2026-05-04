@@ -60,7 +60,7 @@ export default function HomeScreen() {
       return;
     }
 
-    if (params.mode === 'home' || params.mode === 'workout' || params.mode === 'chat' || params.mode === 'settings') {
+    if (params.mode === 'home' || params.mode === 'workout' || params.mode === 'chat' || params.mode === 'user') {
       setAppMode(params.mode);
     }
   }, [params.mode, session]);
