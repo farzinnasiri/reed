@@ -28,7 +28,6 @@ export const styles = StyleSheet.create({
     paddingTop: 2,
   },
   sessionInsightsHandle: {
-    backgroundColor: 'rgba(148, 163, 184, 0.55)',
     borderRadius: reedRadii.pill,
     height: 4,
     width: 44,
@@ -238,22 +237,6 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
   },
-  sessionInsightsBreakdownMetricSwitch: {
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  sessionInsightsBreakdownMetricOption: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 30,
-    minWidth: 58,
-    paddingHorizontal: 10,
-  },
-  sessionInsightsBreakdownMetricOptionText: {
-    fontFamily: 'Outfit_600SemiBold',
-  },
   sessionInsightsBreakdownChart: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -396,5 +379,36 @@ export const styles = StyleSheet.create({
     height: 28,
     justifyContent: 'center',
     width: 28,
+  },
+  sessionInsightsSnapshotGridCompact: {
+    flexWrap: 'wrap',
+  },
+  sessionInsightsSnapshotTileCompact: {
+    flexBasis: '47%',
+    flexGrow: 1,
+    flex: undefined,
+  },
+  sessionInsightsHighlightsSummaryShellCompact: {
+    flexDirection: 'column',
+  },
+  sessionInsightsHighlightsSummaryCellCompact: {
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-start',
+    minHeight: undefined,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sessionInsightsHighlightsSummaryTextStackCompact: {
+    flex: 1,
+    minWidth: 0,
+  },
+  sessionInsightsHighlightsSummaryDividerCompact: {
+    alignSelf: 'stretch',
+    height: 1,
+    width: undefined,
+  },
+  sessionInsightsBreakdownRowCompact: {
+    flexDirection: 'column',
   },
 });

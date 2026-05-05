@@ -18,6 +18,7 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { ReedThemeProvider, useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 import { convex, missingPublicEnv } from '@/lib/convex';
 
 export {
@@ -127,7 +128,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   missingSurface: {
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
   },
   missingItem: {

@@ -21,20 +21,22 @@ export function GlassSurface({
   tone = 'default',
   ...props
 }: GlassSurfaceProps) {
-  const { theme } = useReedTheme();
-  const canUseBlur = canUseGlassBlur();
+  const { reducedTransparency, theme } = useReedTheme();
+  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
   const pane = getGlassPaneTokens(theme, tone);
   const flattenedShellStyle = StyleSheet.flatten(style);
   const outerBorderRadius =
     typeof flattenedShellStyle?.borderRadius === 'number' ? flattenedShellStyle.borderRadius : reedRadii.xl;
   const wrapperFlexStyle = flattenedShellStyle?.flex !== undefined ? { flex: flattenedShellStyle.flex } : undefined;
 
+  const shellBackground = canUseBlur ? pane.backgroundColor : pane.fallbackBackgroundColor;
+
   const shell = (
     <View
       style={[
         styles.shell,
         {
-          backgroundColor: pane.backgroundColor,
+          backgroundColor: shellBackground,
           borderColor: pane.borderColor,
         },
         style,
@@ -53,7 +55,7 @@ export function GlassSurface({
           StyleSheet.absoluteFill,
           { pointerEvents: 'none' },
           {
-            backgroundColor: canUseBlur ? 'transparent' : pane.backgroundColor,
+            backgroundColor: canUseBlur ? 'transparent' : shellBackground,
             borderColor: pane.borderColor,
           },
           styles.highlight,

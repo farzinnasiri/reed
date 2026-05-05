@@ -38,6 +38,8 @@ type SequenceEntry =
 function buildSequence(draft: OnboardingDraft, includeConsent = true): SequenceEntry[] {
   const seq: SequenceEntry[] = [
     { kind: 'step', step: 'name' },
+    { kind: 'step', step: 'gesture-demo' },
+    { kind: 'step', step: 'reed-intro' },
     ...(includeConsent ? [{ kind: 'step' as const, step: 'consent' as const }] : []),
     { kind: 'step', step: 'baseline' },
     { kind: 'step', step: 'training-reality' },

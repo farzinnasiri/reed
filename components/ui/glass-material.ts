@@ -10,6 +10,7 @@ type GlassPaneTokens = {
   backgroundColor: string;
   blurIntensity: number;
   borderColor: string;
+  fallbackBackgroundColor: string;
   shadowStyle: ViewStyle;
 };
 
@@ -37,12 +38,20 @@ export function canUseGlassBlur() {
   return Platform.OS === 'ios' || Platform.OS === 'web';
 }
 
+export function getSolidGlassCardTokens(theme: ReedTheme) {
+  return {
+    backgroundColor: String(theme.colors.glassFallback),
+    borderColor: String(theme.colors.glassHighlight),
+  };
+}
+
 export function getGlassPaneTokens(theme: ReedTheme, tone: GlassTone = 'default'): GlassPaneTokens {
   if (tone === 'danger') {
     return {
       backgroundColor: String(theme.colors.dangerFill),
       blurIntensity: theme.mode === 'dark' ? 52 : 66,
       borderColor: String(theme.colors.dangerBorder),
+      fallbackBackgroundColor: String(theme.colors.dangerFill),
       shadowStyle: createGlassShadowStyle(theme),
     };
   }
@@ -51,6 +60,7 @@ export function getGlassPaneTokens(theme: ReedTheme, tone: GlassTone = 'default'
     backgroundColor: String(theme.colors.glassFill),
     blurIntensity: theme.mode === 'dark' ? 52 : 66,
     borderColor: String(theme.colors.glassHighlight),
+    fallbackBackgroundColor: String(theme.colors.glassFallback),
     shadowStyle: createGlassShadowStyle(theme),
   };
 }

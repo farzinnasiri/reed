@@ -135,6 +135,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   checkbox: {
+    // 4px intentionally below reedRadii.sm(12) for a tight checkbox corner
     borderRadius: 4,
     borderWidth: 1.5,
     height: 18,

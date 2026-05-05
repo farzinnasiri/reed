@@ -1,30 +1,46 @@
 import { Pressable, StyleSheet, type PressableProps } from 'react-native';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 
 type ReedIconButtonProps = Omit<PressableProps, 'style'> & {
   children: React.ReactNode;
-  variant?: 'default' | 'ghost';
+  shape?: 'rounded' | 'pill';
+  variant?: 'default' | 'ghost' | 'glass';
 };
 
 export function ReedIconButton({
   children,
   disabled,
+  shape = 'rounded',
   variant = 'default',
   ...props
 }: ReedIconButtonProps) {
   const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
 
   return (
     <Pressable
+      accessibilityRole="button"
       disabled={disabled}
       style={({ pressed }) => [
         styles.base,
         variant === 'default' ? theme.shadows.controlActive : null,
+        shape === 'pill' ? styles.pill : null,
         {
-          backgroundColor: variant === 'ghost' ? 'transparent' : theme.colors.controlFill,
-          borderColor: variant === 'ghost' ? 'transparent' : theme.colors.controlBorder,
+          backgroundColor:
+            variant === 'ghost'
+              ? 'transparent'
+              : variant === 'glass'
+                ? glassControls.shellBackgroundColor
+                : theme.colors.controlFill,
+          borderColor:
+            variant === 'ghost'
+              ? 'transparent'
+              : variant === 'glass'
+                ? glassControls.shellBorderColor
+                : theme.colors.controlBorder,
           ...getTapScaleStyle(pressed, disabled),
         },
       ]}
@@ -43,5 +59,8 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     width: 44,
+  },
+  pill: {
+    borderRadius: reedRadii.pill,
   },
 });

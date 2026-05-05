@@ -1,13 +1,15 @@
 // ---------------------------------------------------------------------------
 // OnboardingFlow — top-level orchestrator.
 // Renders the current step and wires navigation + draft callbacks.
-// The sequence is dynamic: Consent → Baseline → Training Reality → Goals → 
+// The sequence is dynamic: Name → Gesture → Reed → Consent → Baseline → Training Reality → Goals →
 // [Goal Details based on rank] → Constraints → Review
 // ---------------------------------------------------------------------------
 
 import { StepBaseline } from './step-baseline';
 import { StepConsent } from './step-consent';
+import { StepGestureDemo } from './step-gesture-demo';
 import { StepName } from './step-name';
+import { StepReedIntro } from './step-reed-intro';
 import { StepConstraints } from './step-constraints';
 import { StepGoalDetail } from './step-goal-detail';
 import { StepPriorities } from './step-priorities';
@@ -100,6 +102,24 @@ export function OnboardingFlow({
           onUpdateName={value => updateDraft({ displayName: value })}
           stepCount={stepCount}
           stepIndex={stepIndex}
+        />
+      );
+
+    case 'gesture-demo':
+      return (
+        <StepGestureDemo
+          displayName={draft.displayName}
+          onBack={goBack}
+          onContinue={goNext}
+        />
+      );
+
+    case 'reed-intro':
+      return (
+        <StepReedIntro
+          displayName={draft.displayName}
+          onBack={goBack}
+          onContinue={goNext}
         />
       );
 

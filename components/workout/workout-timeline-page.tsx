@@ -75,11 +75,11 @@ export function TimelinePage({
   title = 'Timeline',
   timeline,
 }: TimelinePageProps) {
-  const { theme } = useReedTheme();
+  const { reducedTransparency, theme } = useReedTheme();
   const pane = getGlassPaneTokens(theme);
   const glassControls = getGlassControlTokens(theme);
   const scrim = getGlassScrimTokens(theme);
-  const canUseBlur = canUseGlassBlur();
+  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
   const [confirmExerciseDeleteId, setConfirmExerciseDeleteId] = useState<Id<'liveSessionExercises'> | null>(null);
   const [displayTimeline, setDisplayTimeline] = useState(timeline);

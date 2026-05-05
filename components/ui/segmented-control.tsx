@@ -20,6 +20,7 @@ type SegmentedControlProps<T extends string> = {
   onChange: (value: T) => void;
   options: SegmentedOption<T>[];
   value: T;
+  variant?: 'default' | 'ghost' | 'pill';
 };
 
 const SHELL_PADDING = 4;
@@ -31,6 +32,7 @@ export function SegmentedControl<T extends string>({
   onChange,
   options,
   value,
+  variant = 'default',
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
   const control = getGlassControlTokens(theme);
@@ -50,16 +52,19 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View
+      accessibilityRole="tablist"
       onLayout={event => setShellWidth(event.nativeEvent.layout.width)}
       style={[
-        styles.shell,
-        {
-          backgroundColor: control.shellBackgroundColor,
-          borderColor: control.shellBorderColor,
-        },
+        variant === 'pill' ? styles.pillShell : styles.shell,
+        variant === 'ghost'
+          ? styles.ghostShell
+          : {
+              backgroundColor: control.shellBackgroundColor,
+              borderColor: control.shellBorderColor,
+            },
       ]}
     >
-      {itemWidth > 0 ? (
+      {variant === 'default' && itemWidth > 0 ? (
         <Animated.View
           style={[
             styles.indicator,
@@ -82,12 +87,18 @@ export function SegmentedControl<T extends string>({
         return (
           <Pressable
             accessibilityLabel={option.accessibilityLabel ?? option.label}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isActive }}
             key={option.value}
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.item,
               compact ? styles.itemCompact : null,
+              variant !== 'default' ? styles.pillItem : null,
               shouldStackItems ? styles.itemStacked : null,
+              variant !== 'default' && isActive
+                ? { backgroundColor: theme.colors.controlActiveFill }
+                : null,
               getTapScaleStyle(pressed),
             ]}
           >
@@ -96,9 +107,16 @@ export function SegmentedControl<T extends string>({
               <ReedText
                 style={[
                   shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
-                  { color: isActive ? theme.colors.pillActiveText : theme.colors.textMuted },
+                  {
+                    color:
+                      variant === 'default' && isActive
+                        ? theme.colors.pillActiveText
+                        : isActive
+                          ? theme.colors.textPrimary
+                          : theme.colors.textMuted,
+                  },
                 ]}
-                variant={shouldStackItems ? 'caption' : 'bodyStrong'}
+                variant={compact || shouldStackItems ? 'caption' : 'bodyStrong'}
               >
                 {option.label}
               </ReedText>
@@ -117,6 +135,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: SHELL_PADDING,
     position: 'relative',
+  },
+  pillShell: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  ghostShell: {
+    borderWidth: 0,
+    gap: 8,
   },
   indicator: {
     borderRadius: reedRadii.md,
@@ -139,6 +167,11 @@ const styles = StyleSheet.create({
   },
   itemCompact: {
     minHeight: 40,
+  },
+  pillItem: {
+    borderRadius: reedRadii.pill,
+    minHeight: 44,
+    paddingHorizontal: 10,
   },
   itemStacked: {
     gap: 4,

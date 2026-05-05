@@ -14,6 +14,7 @@ import {
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 import { useRunningTicker } from './use-running-ticker';
 
 const ITEM_HEIGHT = 24;
@@ -643,7 +644,7 @@ const styles = StyleSheet.create({
   },
   durationRunButton: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     height: 46,
     justifyContent: 'center',
@@ -703,7 +704,7 @@ const styles = StyleSheet.create({
     width: PICKER_TOUCH_WIDTH,
   },
   centerIndicator: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     height: 18,
     position: 'absolute',
     right: 18,
@@ -723,6 +724,6 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   tickMark: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
   },
 });

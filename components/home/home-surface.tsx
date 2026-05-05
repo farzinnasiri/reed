@@ -14,7 +14,9 @@ import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
+import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
@@ -45,6 +47,7 @@ export function HomeSurface({
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
+  const { isCompact } = useBreakpoint();
   const startSession = useMutation(api.liveSessions.start);
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
   const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
@@ -267,42 +270,20 @@ export function HomeSurface({
               ) : (
                 <View style={styles.breakdownSection}>
                   <View style={styles.breakdownControlsRow}>
-                    <View
-                      style={[
-                        styles.breakdownMetricSwitch,
-                        {
-                          backgroundColor: glassControls.shellBackgroundColor,
-                          borderColor: glassControls.shellBorderColor,
-                        },
+                    <SegmentedControl<WeeklyBreakdownMetric>
+                      compact
+                      onChange={setMetricMode}
+                      options={[
+                        { label: 'Sets', value: 'sets' },
+                        { label: 'Reps', value: 'reps' },
+                        { label: 'Volume', value: 'volume' },
                       ]}
-                    >
-                      {(['sets', 'reps', 'volume'] as WeeklyBreakdownMetric[]).map(mode => (
-                        <Pressable
-                          key={mode}
-                          onPress={() => setMetricMode(mode)}
-                          style={({ pressed }) => [
-                            styles.breakdownMetricOption,
-                            metricMode === mode
-                              ? {
-                                  backgroundColor: theme.colors.controlActiveFill,
-                                }
-                              : null,
-                            getTapScaleStyle(pressed),
-                          ]}
-                        >
-                          <ReedText
-                            style={styles.breakdownMetricOptionText}
-                            tone={metricMode === mode ? 'default' : 'muted'}
-                            variant="caption"
-                          >
-                            {mode === 'sets' ? 'Sets' : mode === 'reps' ? 'Reps' : 'Volume'}
-                          </ReedText>
-                        </Pressable>
-                      ))}
-                    </View>
+                      value={metricMode}
+                      variant="pill"
+                    />
                   </View>
 
-                  <View style={styles.breakdownOverview}>
+                  <View style={[styles.breakdownOverview, isCompact && styles.breakdownOverviewCompact]}>
                     <WeeklyDonutChart
                       segments={chartSegments.map(segment => ({
                         color: segment.color,
@@ -725,9 +706,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: reedRadii.sm,
     borderWidth: 1,
+    height: 44,
     justifyContent: 'center',
-    minHeight: 34,
-    width: 42,
+    width: 44,
   },
   startButtonShell: {
     borderRadius: reedRadii.lg,
@@ -794,22 +775,6 @@ const styles = StyleSheet.create({
     gap: 10,
     justifyContent: 'center',
   },
-  breakdownMetricSwitch: {
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    overflow: 'hidden',
-  },
-  breakdownMetricOption: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 30,
-    minWidth: 58,
-    paddingHorizontal: 10,
-  },
-  breakdownMetricOptionText: {
-    fontFamily: 'Outfit_600SemiBold',
-  },
   breakdownShapeSection: {
     gap: 6,
   },
@@ -874,5 +839,8 @@ const styles = StyleSheet.create({
   emptyState: {
     minHeight: 80,
     justifyContent: 'center',
+  },
+  breakdownOverviewCompact: {
+    flexDirection: 'column',
   },
 });

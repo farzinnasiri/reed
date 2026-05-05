@@ -11,7 +11,10 @@ import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
+import { ScreenHeader } from '@/components/ui/screen-header';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle } from '@/design/motion';
+import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
@@ -199,6 +202,10 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
 
     return formatGoalStack(trainingProfile.rankedGoals);
   }, [trainingProfile]);
+  const coachNote = useMemo(
+    () => formatCoachNote(trainingProfile, bodyWeight, progressSummary),
+    [bodyWeight, progressSummary, trainingProfile],
+  );
 
   if (isSettingsOpen) {
     return (
@@ -251,26 +258,17 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
       showsVerticalScrollIndicator={false}
       style={styles.root}
     >
-      <View style={styles.headerRow}>
-        <View style={styles.headerCopy}>
-          <ReedText variant="title">Profile</ReedText>
-          <ReedText tone="muted">Facts and progress</ReedText>
-        </View>
-        <Pressable
-          accessibilityLabel="Open settings"
-          onPress={() => setIsSettingsOpen(true)}
-          style={({ pressed }) => [
-            styles.iconButton,
-            {
-              backgroundColor: glassControls.shellBackgroundColor,
-              borderColor: glassControls.shellBorderColor,
-            },
-            getTapScaleStyle(pressed),
-          ]}
-        >
-          <Ionicons color={String(theme.colors.textPrimary)} name="settings-outline" size={18} />
-        </Pressable>
-      </View>
+      <ScreenHeader
+        variant="identity"
+        action={{
+          accessibilityLabel: 'Open settings',
+          iconName: 'settings-outline',
+          onPress: () => setIsSettingsOpen(true),
+        }}
+      >
+        <ReedText variant="title">Profile</ReedText>
+        <ReedText tone="muted">Facts and progress</ReedText>
+      </ScreenHeader>
 
       {viewerTrainingProfile === undefined ? (
         <View style={styles.loadingRow}>
@@ -283,6 +281,8 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
             <ReedText variant="display">{displayName || 'Profile'}</ReedText>
             <ReedText tone="muted">{contextLine}</ReedText>
           </View>
+
+          <CoachNoteCard note={coachNote} />
 
           <LivingFact
             icon="body-outline"
@@ -340,6 +340,21 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
   );
 }
 
+function CoachNoteCard({ note }: { note: { body: string; lead: string } }) {
+  return (
+    <GlassSurface contentStyle={styles.coachNoteContent} style={styles.coachNoteSurface}>
+      <ReedText variant="body" style={styles.coachNoteBody}>
+        <ReedText variant="bodyStrong">{note.lead}</ReedText>
+        {' '}
+        {note.body}
+      </ReedText>
+      <ReedText tone="muted" variant="caption" style={styles.coachNoteSignoff}>
+        Reed
+      </ReedText>
+    </GlassSurface>
+  );
+}
+
 function ProgressSurface({
   metric,
   onChangeMetric,
@@ -358,6 +373,7 @@ function ProgressSurface({
   summary: TrainingWindowSummary | undefined;
 }) {
   const { theme } = useReedTheme();
+  const { isCompact } = useBreakpoint();
   const work = summary?.work;
   const previousWork = previousSummary?.work;
   const groups = useMemo(
@@ -401,34 +417,25 @@ function ProgressSurface({
         <>
           <ActiveDayStrip buckets={activeBuckets} />
 
-          <View style={styles.progressMetricRow}>
+          <View style={[styles.progressMetricRow, isCompact && styles.progressMetricRowCompact]}>
             <ProgressMetricTile label="Active days" value={formatWholeNumber(getActiveDayCount(summary.recentActivities))} />
             <ProgressMetricTile label="Sets" value={formatWholeNumber(work.totalSets)} />
             <ProgressMetricTile label="Load" value={formatVolume(work.totalVolume)} />
           </View>
 
-          <View style={styles.metricSwitch}>
-            {(['sets', 'reps', 'load'] as ProgressMetric[]).map(option => (
-              <Pressable
-                accessibilityLabel={`Show ${option === 'load' ? 'load' : option}`}
-                key={option}
-                onPress={() => onChangeMetric(option)}
-                style={({ pressed }) => [
-                  styles.metricSwitchOption,
-                  {
-                    backgroundColor: metric === option ? theme.colors.controlActiveFill : 'transparent',
-                  },
-                  getTapScaleStyle(pressed),
-                ]}
-              >
-                <ReedText tone={metric === option ? 'default' : 'muted'} variant="caption">
-                  {option === 'load' ? 'Load' : option === 'reps' ? 'Reps' : 'Sets'}
-                </ReedText>
-              </Pressable>
-            ))}
-          </View>
+          <SegmentedControl<ProgressMetric>
+            compact
+            onChange={onChangeMetric}
+            options={[
+              { label: 'Sets', value: 'sets' },
+              { label: 'Reps', value: 'reps' },
+              { label: 'Load', value: 'load' },
+            ]}
+            value={metric}
+            variant="ghost"
+          />
 
-          <View style={styles.trainingVisualRow}>
+          <View style={[styles.trainingVisualRow, isCompact && styles.trainingVisualRowCompact]}>
             <AnalyticsDonut
               centerPrimary={formatMetricSummaryValue(metric, totalMetric)}
               centerPrimaryStyle={styles.progressDonutValue}
@@ -521,53 +528,30 @@ function BestEffortsSurface({
 }
 
 function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) => void; value: ProfilePeriod }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-  const options: Array<{ label: string; value: ProfilePeriod }> = [
-    { label: 'Week', value: 'week' },
-    { label: '30D', value: '30d' },
-    { label: '90D', value: '90d' },
-  ];
-
   return (
-    <View
-      style={[
-        styles.periodControl,
-        {
-          backgroundColor: glassControls.shellBackgroundColor,
-          borderColor: glassControls.shellBorderColor,
-        },
+    <SegmentedControl<ProfilePeriod>
+      compact
+      onChange={onChange}
+      options={[
+        { label: 'Week', value: 'week' },
+        { label: '30D', value: '30d' },
+        { label: '90D', value: '90d' },
       ]}
-    >
-      {options.map(option => {
-        const isActive = option.value === value;
-        return (
-          <Pressable
-            accessibilityLabel={`Show ${option.label}`}
-            key={option.value}
-            onPress={() => onChange(option.value)}
-            style={({ pressed }) => [
-              styles.periodControlOption,
-              { backgroundColor: isActive ? theme.colors.controlActiveFill : 'transparent' },
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            <ReedText tone={isActive ? 'default' : 'muted'} variant="caption">{option.label}</ReedText>
-          </Pressable>
-        );
-      })}
-    </View>
+      value={value}
+      variant="pill"
+    />
   );
 }
 
 function ProgressSkeleton() {
   const { theme } = useReedTheme();
+  const { isCompact } = useBreakpoint();
   const glassControls = getGlassControlTokens(theme);
 
   return (
     <View style={styles.progressSkeleton}>
       <View style={[styles.skeletonLine, { backgroundColor: glassControls.shellBackgroundColor }]} />
-      <View style={styles.progressMetricRow}>
+      <View style={[styles.progressMetricRow, isCompact && styles.progressMetricRowCompact]}>
         {[0, 1, 2].map(index => (
           <View key={index} style={[styles.skeletonMetric, { backgroundColor: glassControls.shellBackgroundColor }]} />
         ))}
@@ -750,27 +734,13 @@ function ProfileDetailSurface({
 }
 
 function DetailHeader({ onBack, title }: { onBack: () => void; title: string }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
   return (
-    <View style={styles.detailHeader}>
-      <Pressable
-        accessibilityLabel="Back to profile"
-        onPress={onBack}
-        style={({ pressed }) => [
-          styles.detailBackButton,
-          {
-            backgroundColor: glassControls.shellBackgroundColor,
-            borderColor: glassControls.shellBorderColor,
-          },
-          getTapScaleStyle(pressed),
-        ]}
-      >
-        <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={16} />
-      </Pressable>
-      <ReedText variant="bodyStrong">{title}</ReedText>
-    </View>
+    <ScreenHeader
+      backAccessibilityLabel="Back to profile"
+      onBack={onBack}
+      title={title}
+      variant="detail"
+    />
   );
 }
 
@@ -970,6 +940,55 @@ function formatGoalFocusLine(trainingProfile: { goalDetails: Record<string, { cu
     });
   const unique = Array.from(new Set(details));
   return unique.length ? unique.slice(0, 4).join(' · ') : 'Add target lifts, skills, or conditioning work.';
+}
+
+function formatCoachNote(
+  trainingProfile: StoredTrainingProfile['trainingProfile'] | null,
+  bodyWeight: { observedAt: number; unit?: string; value: number } | null,
+  summary: TrainingWindowSummary | undefined,
+) {
+  if (!trainingProfile) {
+    return {
+      lead: 'Build the profile first.',
+      body: 'Add goals, body data, and your training setup so coaching can become specific instead of generic.',
+    };
+  }
+
+  const primaryGoal = trainingProfile.rankedGoals[0];
+  const primaryGoalLabel = primaryGoal ? goalLabels[primaryGoal] ?? primaryGoal : 'Training';
+  const weekly = weeklySessionLabels[trainingProfile.trainingReality.weeklySessions] ?? 'your current rhythm';
+
+  if (summary === undefined) {
+    return {
+      lead: `${primaryGoalLabel} is the priority.`,
+      body: `I am checking this week's training against your ${weekly.toLowerCase()} setup before calling the next move.`,
+    };
+  }
+
+  if (summary.activityCount > 0) {
+    const activeDays = getActiveDayCount(summary.recentActivities);
+    const topGroup = [...summary.work.groups].sort((left, right) => right.setCount - left.setCount)[0];
+    const workLine = topGroup && topGroup.setCount > 0
+      ? `${topGroup.label.toLowerCase()} has taken the most work`
+      : `${formatWholeNumber(summary.work.totalSets)} sets are logged`;
+
+    return {
+      lead: `${activeDays} active ${activeDays === 1 ? 'day' : 'days'} this week.`,
+      body: `${workLine}. Keep the next session pointed at ${primaryGoalLabel.toLowerCase()} and avoid adding noise just to fill the week.`,
+    };
+  }
+
+  if (bodyWeight) {
+    return {
+      lead: `${formatBodyMetric(bodyWeight)} bodyweight is logged.`,
+      body: `Now anchor it with training data. One clean session is enough for Reed to start comparing work against your ${weekly.toLowerCase()} target.`,
+    };
+  }
+
+  return {
+    lead: `${primaryGoalLabel} is set.`,
+    body: `Log bodyweight and one training session next. That gives Reed enough signal to turn this note into real coaching.`,
+  };
 }
 
 function getProgressMetricValue(group: TrainingWindowGroup, metric: ProgressMetric) {
@@ -1291,15 +1310,6 @@ const styles = StyleSheet.create({
   fullscreenPanel: {
     flex: 1,
   },
-  headerCopy: {
-    flex: 1,
-    gap: 6,
-  },
-  headerRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 16,
-  },
   actionButton: {
     flex: 1,
   },
@@ -1329,6 +1339,19 @@ const styles = StyleSheet.create({
   bestEffortsSurface: {
     marginTop: 10,
   },
+  coachNoteBody: {
+    flexShrink: 1,
+  },
+  coachNoteContent: {
+    gap: 12,
+    padding: 18,
+  },
+  coachNoteSignoff: {
+    alignSelf: 'flex-end',
+  },
+  coachNoteSurface: {
+    marginBottom: 4,
+  },
   dayBar: {
     borderRadius: reedRadii.pill,
     borderWidth: 1,
@@ -1346,21 +1369,8 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingTop: 2,
   },
-  detailBackButton: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
   detailContent: {
     gap: 16,
-  },
-  detailHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
   },
   detailLead: {
     gap: 6,
@@ -1392,14 +1402,6 @@ const styles = StyleSheet.create({
     gap: 4,
     minHeight: 72,
     padding: 12,
-  },
-  iconButton: {
-    alignItems: 'center',
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
   },
   loadingRow: {
     alignItems: 'center',
@@ -1466,17 +1468,6 @@ const styles = StyleSheet.create({
   legendLabel: {
     flex: 1,
   },
-  metricSwitch: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  metricSwitchOption: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 36,
-  },
   muscleLegend: {
     flex: 1,
     gap: 8,
@@ -1486,20 +1477,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-  },
-  periodControl: {
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 2,
-    padding: 3,
-  },
-  periodControlOption: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    justifyContent: 'center',
-    minHeight: 34,
-    paddingHorizontal: 12,
   },
   periodNote: {
     borderTopWidth: StyleSheet.hairlineWidth,
@@ -1608,5 +1585,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     width: 20,
+  },
+  progressMetricRowCompact: {
+    flexDirection: 'column',
+  },
+  trainingVisualRowCompact: {
+    flexDirection: 'column',
   },
 });

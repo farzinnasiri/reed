@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/glass-material';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type GlassTabPillItem<T extends string> = {
   accessibilityLabel: string;
@@ -28,10 +29,10 @@ const SHELL_VERTICAL_PADDING = 7;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillProps<T>) {
-  const { theme } = useReedTheme();
+  const { reducedTransparency, theme } = useReedTheme();
   const pane = getGlassPaneTokens(theme);
   const control = getGlassControlTokens(theme);
-  const canUseBlur = canUseGlassBlur();
+  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
   const [shellWidth, setShellWidth] = useState(0);
   const activeIndex = Math.max(0, items.findIndex(item => item.isActive));
   const progress = useRef(new Animated.Value(activeIndex)).current;
@@ -132,7 +133,7 @@ function GlassTabPillButton({
 
 const styles = StyleSheet.create({
   shell: {
-    borderRadius: 24,
+    borderRadius: reedRadii.xl,
     borderWidth: 1,
     minHeight: TAB_PILL_MIN_HEIGHT,
     overflow: 'hidden',
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   activeIndicator: {
-    borderRadius: 16,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     bottom: SHELL_VERTICAL_PADDING,
     left: SHELL_HORIZONTAL_PADDING,

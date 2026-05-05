@@ -4,6 +4,7 @@ import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { workoutSemanticPalette } from '@/design/system';
 import { WorkoutMetricPicker } from './workout-metric-picker';
 import { styles } from './workout-surface.styles';
 import type { CaptureCard, MetricValues } from './workout-surface.types';
@@ -45,9 +46,10 @@ export function WorkoutExerciseCaptureView({
   warmup,
 }: CaptureViewProps) {
   const { theme } = useReedTheme();
-  const warmupActiveFill = theme.mode === 'dark' ? 'rgba(251, 191, 36, 0.22)' : 'rgba(245, 158, 11, 0.2)';
-  const warmupActiveBorder = theme.mode === 'dark' ? '#f59e0b' : '#d97706';
-  const warmupActiveText = theme.mode === 'dark' ? '#fde68a' : '#92400e';
+  const warmupPalette = workoutSemanticPalette.warmup;
+  const warmupActiveFill = theme.mode === 'dark' ? warmupPalette.activeFillDark : warmupPalette.activeFillLight;
+  const warmupActiveBorder = theme.mode === 'dark' ? warmupPalette.activeBorderDark : warmupPalette.activeBorderLight;
+  const warmupActiveText = theme.mode === 'dark' ? warmupPalette.activeTextDark : warmupPalette.activeTextLight;
   const { activeSideFields, sharedFields } = getSideFields(captureCard, activeSide);
   const captureFields =
     captureCard.layoutKind === 'unilateral_pair' ? [...activeSideFields, ...sharedFields] : captureCard.fields;

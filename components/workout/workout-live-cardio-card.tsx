@@ -1,4 +1,5 @@
 import { Pressable, View } from 'react-native';
+import { getSolidGlassCardTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import type { RecipeFieldDefinition } from '@/domains/workout/recipes';
 import { getTapScaleStyle } from '@/design/motion';
@@ -41,6 +42,7 @@ export function WorkoutLiveCardioCard({
   ringSize,
 }: WorkoutLiveCardioCardProps) {
   const { theme } = useReedTheme();
+  const solidGlass = getSolidGlassCardTokens(theme);
   const showLiveCardioCaptureStart = captureCard?.processKind === 'live_cardio' && !isEditingSet;
 
   if (liveCardioFinishSummary) {
@@ -48,10 +50,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          {
-            backgroundColor: theme.colors.glassFallback,
-            borderColor: theme.colors.glassHighlight,
-          },
+          solidGlass,
         ]}
       >
         <View style={styles.liveSummaryBody}>
@@ -107,10 +106,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          {
-            backgroundColor: theme.colors.glassFallback,
-            borderColor: theme.colors.glassHighlight,
-          },
+          solidGlass,
         ]}
       >
         <View style={styles.liveCardBody}>
@@ -224,10 +220,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          {
-            backgroundColor: theme.colors.glassFallback,
-            borderColor: theme.colors.glassHighlight,
-          },
+          solidGlass,
         ]}
       >
         <View style={styles.liveCardStartState}>

@@ -20,13 +20,13 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    paddingTop: 40,
+    paddingTop: 36,
   },
   startState: {
     flex: 1,
   },
   startStateScroll: {
-    gap: 24,
+    gap: 28,
     paddingBottom: 132,
     paddingHorizontal: 20,
     paddingTop: 8,
@@ -35,7 +35,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 12,
   },
   startContent: {
     gap: 16,
@@ -45,12 +45,12 @@ export const styles = StyleSheet.create({
   },
   startHeroContent: {
     gap: 0,
-    padding: 18,
+    padding: 16,
   },
   startHeroTopRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
   },
   startHeroButton: {
     alignItems: 'center',
@@ -76,7 +76,7 @@ export const styles = StyleSheet.create({
     gap: 4,
   },
   startHistory: {
-    gap: 10,
+    gap: 12,
     marginTop: 2,
   },
   startHistoryHeader: {
@@ -95,7 +95,7 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
   },
   trainingShelf: {
-    gap: 10,
+    gap: 12,
   },
   trainingShelfHeader: {
     alignItems: 'center',
@@ -104,7 +104,7 @@ export const styles = StyleSheet.create({
   },
   trainingShelfCopy: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
   lastSessionList: {
     gap: 2,
@@ -112,7 +112,7 @@ export const styles = StyleSheet.create({
   loadingInline: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     minHeight: 52,
   },
   sessionHeaderActions: {
@@ -137,17 +137,17 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingTop: 10,
+    paddingTop: 8,
   },
   sessionSummaryRow: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 3,
+    gap: 4,
     justifyContent: 'center',
     minHeight: 56,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   sessionSummaryCopy: {
-    gap: 3,
+    gap: 4,
   },
   sessionDateRow: {
     alignItems: 'center',
@@ -191,13 +191,13 @@ export const styles = StyleSheet.create({
     minHeight: 0,
   },
   timelineRailContentDocked: {
-    gap: 10,
+    gap: 12,
     paddingBottom: 162,
     paddingTop: 8,
   },
   timelineLineItem: {
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
     minHeight: 96,
   },
   timelineRailColumn: {
@@ -242,7 +242,7 @@ export const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 4,
     paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingBottom: 12,
     paddingTop: 12,
   },
   timelineLineHeader: {
@@ -268,7 +268,7 @@ export const styles = StyleSheet.create({
   timelineBadgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 12,
   },
   timelineSetCountInline: {
     alignItems: 'center',
@@ -277,11 +277,11 @@ export const styles = StyleSheet.create({
   },
 
   timelineSetList: {
-    gap: 10,
+    gap: 12,
     marginLeft: 0,
-    marginTop: 10,
+    marginTop: 8,
     paddingBottom: 2,
-    paddingLeft: 6,
+    paddingLeft: 8,
   },
   timelineSetBlock: {
     gap: 4,
@@ -296,7 +296,7 @@ export const styles = StyleSheet.create({
   timelineSetRowContainer: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     minHeight: 34,
   },
   timelineSetPressable: {
@@ -319,7 +319,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
-    paddingLeft: 34,
+    paddingLeft: 28,
   },
   timelineSetDeleteButton: {
     alignItems: 'center',
@@ -332,11 +332,11 @@ export const styles = StyleSheet.create({
     gap: 12,
     justifyContent: 'center',
     minHeight: 240,
-    paddingVertical: 32,
+    paddingVertical: 28,
   },
   exercisePage: {
     flex: 1,
-    gap: 14,
+    gap: 12,
     paddingBottom: 16,
     paddingTop: 2,
   },
@@ -350,7 +350,7 @@ export const styles = StyleSheet.create({
     fontFamily: 'Outfit_800ExtraBold',
     fontSize: 22,
     letterSpacing: -0.3,
-    lineHeight: 26,
+    lineHeight: 28,
     textAlign: 'center',
   },
   statusStripFloating: {
@@ -361,14 +361,14 @@ export const styles = StyleSheet.create({
     zIndex: 10,
   },
   statusStripShell: {
-    borderRadius: 24,
+    borderRadius: reedRadii.xl,
     marginHorizontal: 2,
   },
   statusStripContent: {
     gap: 0,
-    paddingBottom: 9,
-    paddingHorizontal: 10,
-    paddingTop: 9,
+    paddingBottom: 8,
+    paddingHorizontal: 12,
+    paddingTop: 8,
   },
   statusStripRow: {
     alignItems: 'center',
@@ -408,7 +408,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     flexShrink: 1,
-    gap: 5,
+    gap: 4,
     minHeight: 22,
     minWidth: 0,
   },
@@ -441,7 +441,7 @@ export const styles = StyleSheet.create({
   statusStripMicroDot: {
     borderRadius: reedRadii.pill,
     height: 3,
-    marginHorizontal: 10,
+    marginHorizontal: 8,
     width: 3,
   },
   statusStripMicroText: {
@@ -458,11 +458,11 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     justifyContent: 'space-between',
-    marginBottom: 24,
+    marginBottom: 20,
   },
   cardHeaderCopy: {
     flex: 1,
-    gap: 6,
+    gap: 8,
   },
   cardHeaderActions: {
     alignItems: 'center',
@@ -476,7 +476,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 32,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   metricsStack: {
     flex: 1,
@@ -497,17 +497,17 @@ export const styles = StyleSheet.create({
   metricsStackTriple: {
     gap: 12,
     justifyContent: 'flex-start',
-    paddingTop: 6,
+    paddingTop: 8,
   },
   metricsStackDense: {
-    gap: 10,
+    gap: 12,
     justifyContent: 'flex-start',
     paddingBottom: 0,
     paddingTop: 2,
   },
   unilateralSwitchRow: {
     alignSelf: 'center',
-    marginBottom: 10,
+    marginBottom: 8,
     width: '48%',
     minWidth: 170,
     maxWidth: 230,
@@ -518,26 +518,26 @@ export const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
-    paddingBottom: 18,
-    paddingHorizontal: 22,
-    paddingTop: 24,
+    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 20,
   },
   liveCardBody: {
     alignItems: 'center',
     flex: 1,
-    gap: 18,
+    gap: 16,
     justifyContent: 'center',
   },
   liveCardTimerSection: {
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     justifyContent: 'center',
   },
   liveSummaryBody: {
     alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    gap: 18,
+    gap: 16,
   },
   liveSummaryMeta: {
     alignItems: 'center',
@@ -555,7 +555,7 @@ export const styles = StyleSheet.create({
   liveSummaryActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     justifyContent: 'center',
   },
   liveStartHint: {
@@ -588,7 +588,7 @@ export const styles = StyleSheet.create({
   livePrimaryActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     justifyContent: 'center',
   },
   livePrimaryButton: {
@@ -597,8 +597,8 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 46,
     minWidth: 116,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   liveFinishButton: {
     alignItems: 'center',
@@ -608,16 +608,16 @@ export const styles = StyleSheet.create({
     minHeight: 46,
     minWidth: 96,
     paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   liveMetricList: {
     alignSelf: 'stretch',
-    gap: 10,
+    gap: 12,
   },
   liveMetricRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     justifyContent: 'space-between',
   },
   liveMetricCopy: {
@@ -626,7 +626,7 @@ export const styles = StyleSheet.create({
   },
   liveMetricActions: {
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
   },
   liveStepButton: {
     alignItems: 'center',
@@ -635,15 +635,15 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 30,
     minWidth: 44,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 4,
   },
   restBody: {
     alignItems: 'stretch',
     flex: 1,
     justifyContent: 'center',
-    paddingBottom: 10,
-    paddingTop: 6,
+    paddingBottom: 8,
+    paddingTop: 8,
   },
   restMainGroup: {
     justifyContent: 'center',
@@ -660,7 +660,7 @@ export const styles = StyleSheet.create({
   },
   restSteps: {
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
     justifyContent: 'center',
   },
   restStep: {
@@ -670,7 +670,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 60,
     minWidth: 64,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   presetRow: {
     alignItems: 'center',
@@ -695,7 +695,7 @@ export const styles = StyleSheet.create({
     borderRadius: reedRadii.sm,
     justifyContent: 'center',
     minHeight: 52,
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
   },
   secondaryAction: {
     alignItems: 'center',
@@ -708,7 +708,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   timelineBottomDockWrap: {
-    bottom: 10,
+    bottom: 8,
     left: 0,
     position: 'absolute',
     right: 0,
@@ -720,7 +720,7 @@ export const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   timelineBottomDockContent: {
-    gap: 10,
+    gap: 12,
     paddingBottom: 12,
     paddingHorizontal: 12,
     paddingTop: 12,
@@ -772,7 +772,7 @@ export const styles = StyleSheet.create({
     gap: 20,
     paddingHorizontal: 28,
     paddingBottom: 28,
-    paddingTop: 26,
+    paddingTop: 28,
   },
   timelineFinishModalTitle: {
     textAlign: 'center',
@@ -820,7 +820,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 12,
     minHeight: 0,
-    padding: 18,
+    padding: 16,
   },
   sheetBody: {
     flex: 1,
@@ -837,7 +837,7 @@ export const styles = StyleSheet.create({
   filterSummaryRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     minHeight: 22,
     paddingHorizontal: 2,
   },
@@ -859,7 +859,7 @@ export const styles = StyleSheet.create({
   sheetHeaderActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   bulkAddHeaderButton: {
     alignItems: 'center',
@@ -867,7 +867,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 30,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   sheetClose: {
     alignItems: 'center',
@@ -880,9 +880,9 @@ export const styles = StyleSheet.create({
     borderRadius: reedRadii.md,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     minHeight: 48,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   searchInput: {
     flex: 1,
@@ -892,13 +892,13 @@ export const styles = StyleSheet.create({
   },
   searchFilterDivider: {
     alignSelf: 'stretch',
-    marginVertical: 10,
+    marginVertical: 8,
     width: 1,
   },
   searchFilterButton: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 6,
+    gap: 8,
     justifyContent: 'center',
     minHeight: 34,
     minWidth: 84,
@@ -927,7 +927,7 @@ export const styles = StyleSheet.create({
     minHeight: 0,
     paddingHorizontal: 16,
     paddingBottom: 12,
-    paddingTop: 14,
+    paddingTop: 12,
   },
   filterSheetHeader: {
     alignItems: 'center',
@@ -935,19 +935,19 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   filterSheetTabs: {
-    marginTop: 10,
+    marginTop: 8,
   },
   filterSheetHeaderActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 14,
+    gap: 12,
   },
   filterSheetBody: {
     paddingTop: 12,
-    paddingBottom: 18,
+    paddingBottom: 16,
   },
   filterSectionBlock: {
-    gap: 10,
+    gap: 12,
   },
   filterSectionHeaderRow: {
     alignItems: 'center',
@@ -957,7 +957,7 @@ export const styles = StyleSheet.create({
   filterSectionHeaderCopy: {
     flex: 1,
     gap: 2,
-    paddingRight: 10,
+    paddingRight: 12,
   },
   filterSearchShell: {
     alignItems: 'center',
@@ -1002,7 +1002,7 @@ export const styles = StyleSheet.create({
   filterSheetFooterActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     justifyContent: 'flex-end',
   },
   filterFooterSecondaryButton: {
@@ -1020,7 +1020,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 32,
     minWidth: 82,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
   },
   filtersScroll: {
     flexGrow: 0,
@@ -1037,14 +1037,14 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 34,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
   },
   sheetContent: {
-    gap: 18,
+    gap: 16,
     paddingBottom: 8,
   },
   catalogSection: {
-    gap: 10,
+    gap: 12,
   },
   catalogList: {
     gap: 0,
@@ -1058,10 +1058,10 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
     minHeight: 56,
-    paddingLeft: 14,
-    paddingVertical: 10,
+    paddingLeft: 12,
+    paddingVertical: 8,
   },
   catalogRowCopy: {
     flex: 1,
@@ -1071,6 +1071,6 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'stretch',
     justifyContent: 'center',
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
   },
 });

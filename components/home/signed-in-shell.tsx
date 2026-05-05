@@ -1,11 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { GlassTabPill } from '@/components/ui/glass-tab-pill';
+import {
+  REED_CHAT_USER,
+  ReedChatTypingBubble,
+  ReedGiftedChat,
+  VIEWER_CHAT_USER,
+  type ReedChatMessage,
+} from '@/components/ui/reed-chat';
 import {
   TAB_DOCK_BASE_BOTTOM_OFFSET,
   TAB_DOCK_HORIZONTAL_MARGIN,
@@ -21,22 +28,18 @@ import { HomeSurface } from './home-surface';
 import { getFirstName, pickHomeGreeting } from './home-greetings';
 import type { AppMode } from './types';
 
-type ChatMessage = {
-  id: string;
-  role: 'assistant' | 'user';
-  text: string;
-};
-
-const INITIAL_MESSAGES: ChatMessage[] = [
+const INITIAL_MESSAGES: ReedChatMessage[] = [
   {
-    id: 'intro-1',
-    role: 'assistant',
+    _id: 'intro-1',
+    createdAt: new Date(0),
     text: "I'm Reed. When the backend is wired, this is where coaching, check-ins, and voice will live.",
+    user: REED_CHAT_USER,
   },
   {
-    id: 'intro-2',
-    role: 'assistant',
+    _id: 'intro-2',
+    createdAt: new Date(1),
     text: 'For now the interface is local, but the conversation surface is real.',
+    user: REED_CHAT_USER,
   },
 ];
 
@@ -229,222 +232,96 @@ function CoachSurface({
   dockReservedSpace: number;
 }) {
   const { theme } = useReedTheme();
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
-  const [draft, setDraft] = useState('');
+  const [messages, setMessages] = useState<ReedChatMessage[]>(INITIAL_MESSAGES);
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
-  const scrollRef = useRef<ScrollView | null>(null);
-  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    scrollRef.current?.scrollToEnd({ animated: true });
-  }, [messages, isTyping]);
+  const [replyTimeout, setReplyTimeout] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+      if (replyTimeout) {
+        clearTimeout(replyTimeout);
       }
     };
-  }, []);
+  }, [replyTimeout]);
 
-  function handleSend() {
-    const text = draft.trim();
-
-    if (!text) {
+  function handleSend(nextMessages: ReedChatMessage[]) {
+    const sentMessage = nextMessages[0];
+    const text = sentMessage?.text.trim();
+    if (!sentMessage || !text) {
       return;
     }
 
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
+    if (replyTimeout) {
+      clearTimeout(replyTimeout);
     }
 
-    setMessages(current => [
-      ...current,
-      {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        text,
-      },
-    ]);
-    setDraft('');
+    const now = Date.now();
+    setMessages(current => current.concat({
+      ...sentMessage,
+      _id: `user-${now}`,
+      createdAt: new Date(now),
+      user: VIEWER_CHAT_USER,
+    }));
     setIsTyping(true);
 
-    typingTimeoutRef.current = setTimeout(() => {
-      setMessages(current => [
-        ...current,
-        {
-          id: `assistant-${Date.now()}`,
-          role: 'assistant',
-          text: buildCoachReply(text, displayName),
-        },
-      ]);
+    const timeout = setTimeout(() => {
+      setMessages(current => current.concat({
+        _id: `assistant-${Date.now()}`,
+        createdAt: new Date(),
+        text: buildCoachReply(text, displayName),
+        user: REED_CHAT_USER,
+      }));
       setIsTyping(false);
-      typingTimeoutRef.current = null;
+      setReplyTimeout(null);
     }, 900);
+    setReplyTimeout(timeout);
   }
 
   return (
     <View style={styles.chatSurface}>
-      <ScrollView
-        contentContainerStyle={[styles.chatScrollContent, { paddingBottom: dockReservedSpace + 108 }]}
-        ref={scrollRef}
-        showsVerticalScrollIndicator={false}
-        style={styles.chatScroll}
-      >
-        {messages.map(message => (
-          <ChatBubble key={message.id} message={message} />
-        ))}
-        {isTyping ? <TypingIndicator /> : null}
-      </ScrollView>
-
       <View
         style={[
-          styles.composerShell,
-          {
-            backgroundColor: theme.colors.controlFill,
-            bottom: dockReservedSpace + 12,
-            borderColor: theme.colors.controlBorder,
-          },
+          styles.giftedChatWrap,
+          { paddingBottom: dockReservedSpace + 12 },
         ]}
       >
-        <View style={styles.composerRow}>
-          <TextInput
-            autoCorrect={false}
-            multiline
-            onChangeText={setDraft}
-            placeholder="Message Reed"
-            placeholderTextColor={String(theme.colors.textMuted)}
-            spellCheck={false}
-            style={[
-              styles.composerInput,
-              {
-                color: theme.colors.textPrimary,
-                fontFamily: theme.typography.body.fontFamily,
-                includeFontPadding: false,
-              },
-            ]}
-            textAlignVertical="center"
-            value={draft}
-          />
-
-          <View style={styles.composerActions}>
-            <View style={styles.voiceWrap}>
-              <Pressable
-                accessibilityLabel={isListening ? 'Stop voice capture' : 'Start voice capture'}
-                onPress={() => setIsListening(current => !current)}
-                style={({ pressed }) => [
-                  styles.composerActionButton,
-                  getTapScaleStyle(pressed),
-                ]}
-              >
-                <Ionicons
-                  color={String(theme.colors.textPrimary)}
-                  name={isListening ? 'stop' : 'mic-outline'}
-                  size={18}
-                />
-              </Pressable>
-            </View>
-
+        <ReedGiftedChat
+          isAlignedTop
+          isInverted={false}
+          isTyping={isTyping}
+          keyboardShouldPersistTaps="handled"
+          listProps={{
+            contentContainerStyle: styles.giftedChatListContent,
+            showsVerticalScrollIndicator: false,
+          }}
+          messages={messages}
+          messagesContainerStyle={styles.giftedMessagesContainer}
+          onSend={handleSend}
+          renderActions={() => (
             <Pressable
-              accessibilityLabel="Send message"
-              disabled={!draft.trim()}
-              onPress={handleSend}
+              accessibilityLabel={isListening ? 'Stop voice capture' : 'Start voice capture'}
+              onPress={() => setIsListening(current => !current)}
               style={({ pressed }) => [
                 styles.composerActionButton,
-                getTapScaleStyle(pressed, !draft.trim()),
+                getTapScaleStyle(pressed),
               ]}
             >
-              <Ionicons color={String(theme.colors.textPrimary)} name="arrow-up" size={18} />
+              <Ionicons
+                color={String(theme.colors.textPrimary)}
+                name={isListening ? 'stop' : 'mic-outline'}
+                size={18}
+              />
             </Pressable>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function ChatBubble({ message }: { message: ChatMessage }) {
-  const { theme } = useReedTheme();
-  const isAssistant = message.role === 'assistant';
-
-  return (
-    <View style={[styles.messageRow, isAssistant ? styles.messageLeft : styles.messageRight]}>
-      {isAssistant ? (
-        <View
-          style={[
-            styles.assistantAvatar,
-            {
-              backgroundColor: theme.colors.controlFill,
-              borderColor: theme.colors.controlBorder,
-            },
-          ]}
-        >
-          <ReedText variant="bodyStrong">R</ReedText>
-        </View>
-      ) : null}
-
-      <View
-        style={[
-          styles.bubble,
-          isAssistant
-            ? {
-                backgroundColor: theme.colors.controlFill,
-                borderColor: theme.colors.controlBorder,
-              }
-            : {
-                backgroundColor: theme.colors.accentPrimary,
-                borderColor: theme.colors.accentPrimary,
-              },
-        ]}
-      >
-        <ReedText
-          style={{ color: isAssistant ? theme.colors.textPrimary : theme.colors.accentPrimaryText }}
-        >
-          {message.text}
-        </ReedText>
-      </View>
-    </View>
-  );
-}
-
-function TypingIndicator() {
-  const { theme } = useReedTheme();
-
-  return (
-    <View style={[styles.messageRow, styles.messageLeft]}>
-      <View
-        style={[
-          styles.assistantAvatar,
-          {
-            backgroundColor: theme.colors.controlFill,
-            borderColor: theme.colors.controlBorder,
-          },
-        ]}
-      >
-        <ReedText variant="bodyStrong">R</ReedText>
-      </View>
-      <View
-        style={[
-          styles.typingBubble,
-          {
-            backgroundColor: theme.colors.controlFill,
-            borderColor: theme.colors.controlBorder,
-          },
-        ]}
-      >
-        {[0, 1, 2].map(index => (
-          <View
-            key={index}
-            style={[
-              styles.typingDot,
-              {
-                backgroundColor: theme.colors.textMuted,
-                opacity: 0.6,
-              },
-            ]}
-          />
-        ))}
+          )}
+          renderTypingIndicator={() => (isTyping ? <ReedChatTypingBubble /> : null)}
+          textInputProps={{
+            autoCorrect: false,
+            placeholder: 'Message Reed',
+            spellCheck: false,
+          }}
+          user={VIEWER_CHAT_USER}
+        />
       </View>
     </View>
   );
@@ -485,6 +362,17 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  giftedChatWrap: {
+    flex: 1,
+    minHeight: 0,
+  },
+  giftedMessagesContainer: {
+    backgroundColor: 'transparent',
+  },
+  giftedChatListContent: {
+    gap: 14,
+    paddingTop: 10,
+  },
   chatScroll: {
     flex: 1,
   },
@@ -506,7 +394,7 @@ const styles = StyleSheet.create({
   },
   assistantAvatar: {
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: reedRadii.md,
     borderWidth: 1,
     height: 32,
     justifyContent: 'center',
@@ -528,7 +416,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   typingDot: {
-    borderRadius: 99,
+    borderRadius: reedRadii.pill,
     height: 7,
     width: 7,
   },
@@ -558,7 +446,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   voicePulse: {
-    borderRadius: 99,
+    borderRadius: reedRadii.pill,
     height: 30,
     position: 'absolute',
     width: 30,

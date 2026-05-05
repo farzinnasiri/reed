@@ -313,7 +313,7 @@ const styles = StyleSheet.create({
   },
   rankBadge: {
     alignItems: 'center',
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     height: 24,
     justifyContent: 'center',

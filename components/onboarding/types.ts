@@ -7,6 +7,8 @@
 // 'priorities', one per ranked goal that has a follow-up question.
 export type OnboardingBaseStep =
   | 'name'
+  | 'gesture-demo'
+  | 'reed-intro'
   | 'consent'
   | 'baseline'
   | 'training-reality'
@@ -21,6 +23,8 @@ export type OnboardingStep = OnboardingBaseStep;
 
 export const BASE_ONBOARDING_STEPS: readonly OnboardingBaseStep[] = [
   'name',
+  'gesture-demo',
+  'reed-intro',
   'consent',
   'baseline',
   'training-reality',

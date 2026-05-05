@@ -9,6 +9,7 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
+import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { buildCompleteOnboardingPayload } from '@/components/onboarding/step-review';
@@ -195,28 +196,13 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
       style={{ flex: 1 }}
     >
       <View style={styles.headerBlock}>
-        <View style={styles.settingsHeaderRow}>
-          <View style={styles.settingsBackButtonSlot}>
-            {onBack ? (
-              <Pressable
-                accessibilityLabel="Back to profile"
-                onPress={onBack}
-                style={({ pressed }) => [
-                  styles.settingsBackButton,
-                  {
-                    backgroundColor: glassControls.shellBackgroundColor,
-                    borderColor: glassControls.shellBorderColor,
-                  },
-                  getTapScaleStyle(pressed),
-                ]}
-              >
-                <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
-              </Pressable>
-            ) : null}
-          </View>
-          <ReedText variant="display" style={{ flex: 1, textAlign: 'center' }}>Settings</ReedText>
-          <View style={styles.settingsBackButtonSlot} />
-        </View>
+        <ScreenHeader
+          backAccessibilityLabel="Back to profile"
+          onBack={onBack}
+          variant="modal"
+        >
+          Settings
+        </ScreenHeader>
       </View>
 
       <GlassSurface>
@@ -471,35 +457,19 @@ const styles = StyleSheet.create({
   headerBlock: {
     gap: 8,
   },
-  settingsHeaderRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  settingsBackButton: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
-  },
-  settingsBackButtonSlot: {
-    height: 44,
-    width: 44,
-  },
   feedbackBlock: {
-    gap: 6,
+    gap: 8,
   },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 12,
   },
   accountEmailShell: {
     borderRadius: reedRadii.md,
     borderWidth: 1,
     gap: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
 });

@@ -14,6 +14,10 @@ const spacing = {
   xxxl: 48,
 } as const;
 
+export const reedBreakpoints = {
+  compact: 380,
+} as const;
+
 export const reedRadii = {
   sm: 12,
   md: 16,
@@ -30,6 +34,14 @@ export const workoutSemanticPalette = {
     holds: '#7c3aed',
     load: '#c2410c',
     neutral: '#64748b',
+  },
+  warmup: {
+    activeFillDark: 'rgba(251, 191, 36, 0.22)',
+    activeFillLight: 'rgba(245, 158, 11, 0.2)',
+    activeBorderDark: '#f59e0b',
+    activeBorderLight: '#d97706',
+    activeTextDark: '#fde68a',
+    activeTextLight: '#92400e',
   },
   muscleGroups: {
     arms: '#0f766e',
@@ -148,6 +160,7 @@ type ReedTheme = {
     dangerFill: ColorValue;
     dangerBorder: ColorValue;
     overlayScrim: ColorValue;
+    handleFill: ColorValue;
   };
   gradients: {
     background: readonly [ColorValue, ColorValue, ColorValue];
@@ -240,6 +253,7 @@ export const lightTheme: ReedTheme = {
     dangerFill: 'rgba(254, 226, 226, 0.84)',
     dangerBorder: 'rgba(248, 113, 113, 0.24)',
     overlayScrim: 'rgba(248, 250, 255, 0.12)',
+    handleFill: 'rgba(148, 163, 184, 0.55)',
   },
   gradients: {
     background: ['#ffffff', '#f7f7f4', '#f7f7f4'],
@@ -320,6 +334,7 @@ export const darkTheme: ReedTheme = {
     dangerFill: 'rgba(69, 10, 10, 0.68)',
     dangerBorder: 'rgba(248, 113, 113, 0.18)',
     overlayScrim: 'rgba(2, 6, 23, 0.18)',
+    handleFill: 'rgba(148, 163, 184, 0.35)',
   },
   gradients: {
     background: ['#040404', '#040404', '#0a0a0a'],

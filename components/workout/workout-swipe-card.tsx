@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useRef } from 'react';
 import { Animated, PanResponder, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { getSolidGlassCardTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
@@ -38,6 +39,7 @@ export function WorkoutSwipeCard({
   rightLabel,
 }: SwipeCardProps) {
   const { theme } = useReedTheme();
+  const solidGlass = getSolidGlassCardTokens(theme);
   const { width } = useWindowDimensions();
   const translateX = useRef(new Animated.Value(0)).current;
   const entryScale = useRef(new Animated.Value(1)).current;
@@ -256,9 +258,8 @@ export function WorkoutSwipeCard({
         {...panResponder.panHandlers}
         style={[
           styles.card,
+          solidGlass,
           {
-            backgroundColor: theme.colors.glassFallback,
-            borderColor: theme.colors.glassHighlight,
             transform: [{ translateX }, { translateY: entryTranslateY }, { rotate: rotation }, { scale }],
           },
         ]}

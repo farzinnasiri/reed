@@ -14,6 +14,7 @@ import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 // Fixed width for the back link so the Continue button is always the same size.
 const BACK_LINK_WIDTH = 128;
@@ -50,9 +51,9 @@ export function OnboardingShell({
   stepIndex,
   stepCount,
 }: OnboardingShellProps) {
-  const { theme } = useReedTheme();
+  const { reducedTransparency, theme } = useReedTheme();
   const insets = useSafeAreaInsets();
-  const canUseBlur = canUseGlassBlur();
+  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
   const controls = getGlassControlTokens(theme);
 
   const showHeaderBack = backPlacement === 'header' && showBack && onBack;
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   dot: {
-    borderRadius: 999,
+    borderRadius: reedRadii.pill,
     height: 6,
   },
   scroll: {
@@ -223,6 +224,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   actionDock: {
+    // 28 intentionally between xl(24) and pill for the floating dock
     borderRadius: 28,
     borderWidth: 1,
     overflow: 'hidden',
