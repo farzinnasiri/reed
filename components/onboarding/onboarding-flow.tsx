@@ -17,13 +17,15 @@ import { StepReview } from './step-review';
 import { StepTrainingReality } from './step-training-reality';
 import { useOnboardingDraft } from './use-onboarding-draft';
 import { emptyGoalDetail, type OnboardingDraft } from './types';
-import type { OnboardingState } from './use-onboarding-draft';
+import { getOnboardingStepPosition, type OnboardingState } from './use-onboarding-draft';
+import type { OnboardingBaseStep } from './types';
 
 type OnboardingFlowProps = {
   backPlacement?: 'footer' | 'header';
   cancelLabel?: string;
   initialDraft?: OnboardingDraft;
   includeConsent?: boolean;
+  initialStep?: OnboardingBaseStep;
   onDecline: () => Promise<void> | void;
   onCancel?: () => Promise<void> | void;
   onComplete: (draft: OnboardingDraft) => Promise<void> | void;
@@ -36,6 +38,7 @@ export function OnboardingFlow({
   cancelLabel,
   initialDraft,
   includeConsent = true,
+  initialStep,
   onDecline,
   onCancel,
   onComplete,
@@ -43,7 +46,7 @@ export function OnboardingFlow({
   reviewContinueLabel,
 }: OnboardingFlowProps) {
   const initialState: OnboardingState | undefined = initialDraft
-    ? { draft: initialDraft, includeConsent, position: 0 }
+    ? { draft: initialDraft, includeConsent, position: getOnboardingStepPosition(initialDraft, initialStep, includeConsent) }
     : undefined;
   const {
     current,

@@ -60,6 +60,20 @@ function buildSequence(draft: OnboardingDraft, includeConsent = true): SequenceE
   return seq;
 }
 
+export function getOnboardingStepPosition(
+  draft: OnboardingDraft,
+  step: OnboardingBaseStep | undefined,
+  includeConsent = true,
+) {
+  if (!step) {
+    return 0;
+  }
+
+  const sequence = buildSequence(draft, includeConsent);
+  const position = sequence.findIndex(entry => entry.kind === 'step' && entry.step === step);
+  return position === -1 ? 0 : position;
+}
+
 // ---------------------------------------------------------------------------
 // Reducer
 // ---------------------------------------------------------------------------

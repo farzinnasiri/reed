@@ -129,6 +129,7 @@ export const getRecordHighlights = query({
 
     return {
       highlights: calculateRecordHighlights({ limit, records }),
+      movementSignals: buildMovementRecordSignals({ exercises, records }),
       totalRecords: records.length,
     };
   },
@@ -199,4 +200,101 @@ async function loadDocsById<TableName extends 'exerciseCatalog'>(
 
 function uniqueIds<T>(ids: T[]) {
   return Array.from(new Set(ids));
+}
+
+function buildMovementRecordSignals(input: {
+  exercises: Map<Id<'exerciseCatalog'>, Doc<'exerciseCatalog'> | null>;
+  records: ReturnType<typeof calculatePersonalRecords>;
+}) {
+  const signalByKey = new Map<string, {
+    key: string;
+    label: string;
+    recordCount: number;
+    strongestRecord: string | null;
+  }>();
+
+  for (const record of input.records) {
+    const exercise = input.exercises.get(record.exerciseCatalogId as Id<'exerciseCatalog'>);
+    if (!exercise) continue;
+
+    for (const key of getMovementSignalKeys(exercise)) {
+      const current = signalByKey.get(key) ?? {
+        key,
+        label: movementSignalLabels[key] ?? formatSignalLabel(key),
+        recordCount: 0,
+        strongestRecord: null,
+      };
+      current.recordCount += 1;
+      current.strongestRecord ??= record.exerciseName;
+      signalByKey.set(key, current);
+    }
+  }
+
+  return Array.from(signalByKey.values())
+    .sort((left, right) => right.recordCount - left.recordCount || left.label.localeCompare(right.label))
+    .slice(0, 8);
+}
+
+function getMovementSignalKeys(exercise: Doc<'exerciseCatalog'>) {
+  const keys = new Set<string>();
+  for (const pattern of exercise.movementPatterns.slice(0, 2)) {
+    keys.add(normalizeMovementSignalKey(pattern));
+  }
+  if (keys.size === 0) {
+    for (const muscleGroup of exercise.mainMuscleGroups.slice(0, 2)) {
+      keys.add(normalizeMovementSignalKey(muscleGroup));
+    }
+  }
+  if (keys.size === 0 && exercise.isCardio) {
+    keys.add('cardio');
+  }
+  return Array.from(keys);
+}
+
+const movementSignalLabels: Record<string, string> = {
+  arms: 'Arms',
+  back: 'Back',
+  calves: 'Calves',
+  cardio: 'Cardio',
+  chest: 'Push',
+  core: 'Core',
+  hinge: 'Hinge',
+  legs: 'Legs',
+  lower_body: 'Lower',
+  locomotion: 'Locomotion',
+  pull: 'Pull',
+  push: 'Push',
+  squat: 'Squat',
+  upper_body: 'Upper',
+};
+
+const movementSignalAliases: Record<string, string> = {
+  'anti-extension': 'core',
+  'anti-lateral-flexion': 'core',
+  'anti-rotation': 'core',
+  'core-extension': 'core',
+  'core-flexion': 'core',
+  'elbow-extension': 'arms',
+  'elbow-flexion': 'arms',
+  'hip-extension': 'hinge',
+  'horizontal-pull': 'pull',
+  'horizontal-push': 'push',
+  'knee-extension': 'squat',
+  'overhead': 'push',
+  'scapular-pull': 'pull',
+  'vertical-pull': 'pull',
+  'vertical-push': 'push',
+};
+
+function normalizeMovementSignalKey(value: string) {
+  const key = value.replaceAll('_', '-').toLowerCase();
+  return movementSignalAliases[key] ?? key;
+}
+
+function formatSignalLabel(value: string) {
+  return value
+    .split(/[_-]/)
+    .filter(Boolean)
+    .map(part => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(' ');
 }

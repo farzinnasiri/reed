@@ -300,8 +300,8 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
   );
 }
 
-type StoredTrainingProfile = {
-  latestBodyMetrics: Array<{ metricKey: string; value: number }>;
+export type StoredTrainingProfile = {
+  latestBodyMetrics: Array<{ metricKey: string; observedAt?: number; unit?: string; value: number }>;
   latestCardioBenchmarks: Array<{ anchorKey: string; distanceMeters?: number | null; durationSeconds?: number | null; floors?: number | null }>;
   latestStrengthBenchmarks: Array<{ anchorKey: string; loadKg?: number | null; reps: number }>;
   trainingProfile: {
@@ -330,7 +330,7 @@ type StoredTrainingProfile = {
   };
 };
 
-function draftFromTrainingProfile(data: StoredTrainingProfile, displayName: string): OnboardingDraft {
+export function draftFromTrainingProfile(data: StoredTrainingProfile, displayName: string): OnboardingDraft {
   const currentBodyMetrics = new Map(data.latestBodyMetrics.map(metric => [metric.metricKey, metric.value]));
   const currentStrengthBenchmarks = new Map(data.latestStrengthBenchmarks.map(metric => [metric.anchorKey, metric]));
   const currentCardioBenchmarks = new Map(data.latestCardioBenchmarks.map(metric => [metric.anchorKey, metric]));
