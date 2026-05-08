@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View } from 'react-native';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
@@ -24,7 +24,10 @@ type SegmentedControlProps<T extends string> = {
 };
 
 const SHELL_PADDING = 4;
-const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
+type ItemLayout = {
+  width: number;
+  x: number;
+};
 
 export function SegmentedControl<T extends string>({
   compact = false,
@@ -36,24 +39,42 @@ export function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
   const control = getGlassControlTokens(theme);
-  const [shellWidth, setShellWidth] = useState(0);
-  const progress = useRef(new Animated.Value(Math.max(0, options.findIndex(option => option.value === value)))).current;
-  const optionIndex = Math.max(0, options.findIndex(option => option.value === value));
+  const [itemLayouts, setItemLayouts] = useState<Record<string, ItemLayout>>({});
+  const indicatorX = useRef(new Animated.Value(0)).current;
+  const indicatorWidth = useRef(new Animated.Value(0)).current;
+  const hasPositionedIndicator = useRef(false);
   const shouldStackItems = !iconOnly && options.length > 0 && options.every(option => Boolean(option.icon && option.label));
-  const itemWidth = Math.max(0, (shellWidth - SHELL_PADDING * 2) / Math.max(1, options.length));
-  const indicatorTranslateX = useMemo(
-    () => Animated.multiply(progress, itemWidth || 0),
-    [itemWidth, progress],
-  );
+  const optionSignature = useMemo(() => options.map(option => option.value).join('|'), [options]);
+  const activeLayout = itemLayouts[value];
 
   useEffect(() => {
-    createTiming(progress, optionIndex, reedMotion.durations.standard, undefined, SHOULD_USE_NATIVE_DRIVER).start();
-  }, [optionIndex, progress]);
+    hasPositionedIndicator.current = false;
+    indicatorX.setValue(0);
+    indicatorWidth.setValue(0);
+    setItemLayouts({});
+  }, [indicatorWidth, indicatorX, optionSignature]);
+
+  useEffect(() => {
+    if (!activeLayout) {
+      return;
+    }
+
+    if (!hasPositionedIndicator.current) {
+      indicatorX.setValue(activeLayout.x);
+      indicatorWidth.setValue(activeLayout.width);
+      hasPositionedIndicator.current = true;
+      return;
+    }
+
+    Animated.parallel([
+      createTiming(indicatorX, activeLayout.x, reedMotion.durations.standard, undefined, false),
+      createTiming(indicatorWidth, activeLayout.width, reedMotion.durations.standard, undefined, false),
+    ]).start();
+  }, [activeLayout, indicatorWidth, indicatorX]);
 
   return (
     <View
       accessibilityRole="tablist"
-      onLayout={event => setShellWidth(event.nativeEvent.layout.width)}
       style={[
         variant === 'pill' ? styles.pillShell : styles.shell,
         variant === 'ghost'
@@ -64,17 +85,20 @@ export function SegmentedControl<T extends string>({
             },
       ]}
     >
-      {variant === 'default' && itemWidth > 0 ? (
+      {activeLayout ? (
         <Animated.View
           style={[
-            styles.indicator,
-            control.shadowStyle,
+            variant === 'pill'
+              ? styles.pillIndicator
+              : variant === 'ghost'
+                ? styles.ghostIndicator
+                : styles.indicator,
             { pointerEvents: 'none' },
             {
               backgroundColor: control.activeBackgroundColor,
-              borderColor: control.activeBorderColor,
-              transform: [{ translateX: indicatorTranslateX }],
-              width: itemWidth,
+              borderColor: variant === 'default' ? control.activeBorderColor : 'transparent',
+              transform: [{ translateX: indicatorX }],
+              width: indicatorWidth,
             },
           ]}
         />
@@ -90,15 +114,25 @@ export function SegmentedControl<T extends string>({
             accessibilityRole="tab"
             accessibilityState={{ selected: isActive }}
             key={option.value}
+            onLayout={event => {
+              const nextLayout = {
+                width: event.nativeEvent.layout.width,
+                x: event.nativeEvent.layout.x,
+              };
+              setItemLayouts(layouts => {
+                const current = layouts[option.value];
+                if (current && current.x === nextLayout.x && current.width === nextLayout.width) {
+                  return layouts;
+                }
+                return { ...layouts, [option.value]: nextLayout };
+              });
+            }}
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.item,
               compact ? styles.itemCompact : null,
               variant !== 'default' ? styles.pillItem : null,
               shouldStackItems ? styles.itemStacked : null,
-              variant !== 'default' && isActive
-                ? { backgroundColor: theme.colors.controlActiveFill }
-                : null,
               getTapScaleStyle(pressed),
             ]}
           >
@@ -141,6 +175,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     overflow: 'hidden',
+    padding: SHELL_PADDING,
   },
   ghostShell: {
     borderWidth: 0,
@@ -150,9 +185,25 @@ const styles = StyleSheet.create({
     borderRadius: reedRadii.md,
     borderWidth: 1,
     bottom: SHELL_PADDING,
-    left: SHELL_PADDING,
+    left: 0,
     position: 'absolute',
     top: SHELL_PADDING,
+  },
+  pillIndicator: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 0,
+    bottom: SHELL_PADDING,
+    left: 0,
+    position: 'absolute',
+    top: SHELL_PADDING,
+  },
+  ghostIndicator: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 0,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    top: 0,
   },
   item: {
     alignItems: 'center',

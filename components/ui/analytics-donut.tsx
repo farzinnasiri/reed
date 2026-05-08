@@ -43,7 +43,7 @@ export function AnalyticsDonut({
     <View style={[defaultStyles.container, containerStyle]}>
       <View style={[defaultStyles.wrap, wrapStyle]}>
         <Svg height={size} width={size}>
-          <G origin={`${center}, ${center}`} rotation={-90}>
+          <G transform={`rotate(-90 ${center} ${center})`}>
             {visibleSegments.length > 0 ? (
               visibleSegments.map(segment => {
                 const ratio = Math.max(0, segment.percent / 100);

@@ -205,7 +205,7 @@ export function HomeSurface({
       <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.weeklyHeaderCopy}>
-            <ReedText variant="section">Weekly load</ReedText>
+            <ReedText variant="section">Training</ReedText>
             <ReedText tone="muted">{weekLabel}</ReedText>
           </View>
           <Pressable
@@ -213,11 +213,7 @@ export function HomeSurface({
             onPress={toggleBreakdown}
             style={({ pressed }) => [
               styles.expandButton,
-              {
-                backgroundColor: glassControls.shellBackgroundColor,
-                borderColor: glassControls.shellBorderColor,
-                ...getTapScaleStyle(pressed),
-              },
+              getTapScaleStyle(pressed),
             ]}
           >
             <Ionicons
@@ -235,17 +231,9 @@ export function HomeSurface({
           </View>
         ) : (
           <>
-            <View
-              style={[
-                styles.summaryStrip,
-                {
-                  backgroundColor: glassControls.shellBackgroundColor,
-                  borderColor: glassControls.shellBorderColor,
-                },
-              ]}
-            >
+            <View style={styles.summaryStrip}>
               <SummaryMetric
-                label="Activities"
+                label="Sets"
                 showDivider
                 value={{ value: formatWholeNumber(weeklyStats.totalSets) }}
               />
@@ -255,7 +243,7 @@ export function HomeSurface({
                 value={{ value: formatWholeNumber(weeklyStats.totalReps) }}
               />
               <SummaryMetric
-                label="Volume"
+                label="Load"
                 value={formatVolumeDisplay(weeklyStats.totalVolume)}
               />
             </View>
@@ -270,17 +258,19 @@ export function HomeSurface({
               ) : (
                 <View style={styles.breakdownSection}>
                   <View style={styles.breakdownControlsRow}>
-                    <SegmentedControl<WeeklyBreakdownMetric>
-                      compact
-                      onChange={setMetricMode}
-                      options={[
-                        { label: 'Sets', value: 'sets' },
-                        { label: 'Reps', value: 'reps' },
-                        { label: 'Volume', value: 'volume' },
-                      ]}
-                      value={metricMode}
-                      variant="pill"
-                    />
+                    <View style={styles.breakdownControlFrame}>
+                      <SegmentedControl<WeeklyBreakdownMetric>
+                        compact
+                        onChange={setMetricMode}
+                        options={[
+                          { label: 'Sets', value: 'sets' },
+                          { label: 'Reps', value: 'reps' },
+                          { label: 'Load', value: 'volume' },
+                        ]}
+                        value={metricMode}
+                        variant="ghost"
+                      />
+                    </View>
                   </View>
 
                   <View style={[styles.breakdownOverview, isCompact && styles.breakdownOverviewCompact]}>
@@ -376,7 +366,7 @@ function SummaryMetric({
           {value.value}
         </ReedText>
         {value.unit ? (
-          <ReedText style={styles.summaryValueUnit} tone="muted" variant="bodyStrong">
+          <ReedText style={styles.summaryValueUnit} tone="muted" variant="section">
             {value.unit}
           </ReedText>
         ) : null}
@@ -704,8 +694,6 @@ const styles = StyleSheet.create({
   },
   expandButton: {
     alignItems: 'center',
-    borderRadius: reedRadii.sm,
-    borderWidth: 1,
     height: 44,
     justifyContent: 'center',
     width: 44,
@@ -731,52 +719,57 @@ const styles = StyleSheet.create({
     minHeight: 72,
   },
   summaryStrip: {
-    borderRadius: reedRadii.lg,
-    borderWidth: 1,
     flexDirection: 'row',
-    overflow: 'hidden',
+    paddingVertical: 8,
   },
   summaryMetric: {
     alignItems: 'center',
     flex: 1,
     gap: 2,
     justifyContent: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     position: 'relative',
   },
   summaryValueRow: {
     alignItems: 'flex-end',
     flexDirection: 'row',
-    gap: 4,
+    gap: 3,
+    justifyContent: 'center',
+    minWidth: 0,
   },
   summaryValue: {
+    flexShrink: 1,
     textAlign: 'center',
   },
   summaryValueUnit: {
-    fontSize: 22,
-    lineHeight: 28,
+    flexShrink: 0,
+    fontSize: 18,
+    lineHeight: 22,
     marginBottom: 2,
   },
   summaryDivider: {
-    bottom: 16,
+    bottom: 8,
     position: 'absolute',
     right: 0,
-    top: 16,
+    top: 8,
     width: 1,
   },
   breakdownSection: {
-    gap: 12,
-    paddingTop: 8,
+    gap: 24,
+    paddingTop: 14,
   },
   breakdownControlsRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    justifyContent: 'center',
+  },
+  breakdownControlFrame: {
+    flex: 1,
   },
   breakdownShapeSection: {
-    gap: 6,
+    gap: 10,
   },
   breakdownShapeTrack: {
     borderRadius: reedRadii.pill,

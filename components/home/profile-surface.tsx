@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
@@ -13,11 +14,18 @@ import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { getTapScaleStyle } from '@/design/motion';
+import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
+import {
+  getConsistencyCellFill,
+  getConsistencyCellOpacity,
+  getConsistencyGaugeSegmentFill,
+  getConsistencyGaugeSegmentOpacity,
+  groupConsistencyWeeks,
+} from './profile/consistency-presenter';
 import { draftFromTrainingProfile, SettingsSurface, type StoredTrainingProfile } from './settings-surface';
 
 const goalLabels: Record<string, string> = {
@@ -115,6 +123,7 @@ const goalDetailLabels: Record<string, string> = {
   squat: 'squat',
   weighted_pull_up: 'weighted pull-up',
 };
+const consistencyWeekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
 type ProfileDetailKind = 'body' | 'goal' | 'training';
 type ProfilePeriod = '30d' | '90d' | 'week';
@@ -159,6 +168,39 @@ type RecordHighlightsResult = {
     summary: string;
   }>;
 };
+type ProfileConsistencyResult = {
+  currentOnTargetWeekRun: number;
+  currentWeek: {
+    activeDays: number;
+    isOnTarget: boolean;
+    remainingActiveDays: number;
+    targetActiveDays: number;
+    weekEndAt: number;
+    weekStartAt: number;
+  };
+  dayMap: Array<{
+    activityCount: number;
+    active: boolean;
+    date: string;
+    dayStartAt: number;
+    isFuture: boolean;
+    weekStartAt: number;
+  }>;
+  hasTrainingTarget: boolean;
+  helperCopy: string;
+  helperLine: string;
+  recentOnTargetRate: {
+    onTargetWeeks: number;
+    percent: number;
+    totalWeeks: number;
+  };
+  subline: string;
+  summaryLine: string;
+  target: {
+    label: string;
+    targetActiveDays: number;
+  } | null;
+};
 
 type ProfileSurfaceProps = {
   displayName: string;
@@ -185,6 +227,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
     windowStartAt: periodRange.previous.startAt,
   });
   const recordHighlights = useQuery(api.trainingKnowledge.getRecordHighlights, { limit: 3 });
+  const consistency = useQuery(api.profileConsistency.viewerConsistency, {});
 
   const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
   const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find(metric => metric.metricKey === 'body_weight') ?? null;
@@ -195,16 +238,9 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
 
     return draftFromTrainingProfile(viewerTrainingProfile as StoredTrainingProfile, displayName);
   }, [displayName, viewerTrainingProfile]);
-  const contextLine = useMemo(() => {
-    if (!trainingProfile) {
-      return 'Set goals, body data, and training setup';
-    }
-
-    return formatGoalStack(trainingProfile.rankedGoals);
-  }, [trainingProfile]);
   const coachNote = useMemo(
-    () => formatCoachNote(trainingProfile, bodyWeight, progressSummary),
-    [bodyWeight, progressSummary, trainingProfile],
+    () => formatCoachNote(trainingProfile, bodyWeight, progressSummary, consistency),
+    [bodyWeight, consistency, progressSummary, trainingProfile],
   );
 
   if (isSettingsOpen) {
@@ -267,7 +303,6 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
         }}
       >
         <ReedText variant="title">Profile</ReedText>
-        <ReedText tone="muted">Facts and progress</ReedText>
       </ScreenHeader>
 
       {viewerTrainingProfile === undefined ? (
@@ -277,66 +312,151 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
         </View>
       ) : (
         <View style={styles.sectionStack}>
-          <View style={styles.identityStatement}>
-            <ReedText variant="display">{displayName || 'Profile'}</ReedText>
-            <ReedText tone="muted">{contextLine}</ReedText>
-          </View>
-
           <CoachNoteCard note={coachNote} />
 
-          <LivingFact
-            icon="body-outline"
-            label="Body"
-            onPress={() => setActiveDetail('body')}
-            primary={bodyWeight ? `${formatMetric(bodyWeight.value)} ${bodyWeight.unit}` : 'Add bodyweight'}
-            secondary={bodyWeight ? `Logged ${formatDate(bodyWeight.observedAt)}` : 'Log weight for better estimates.'}
-          />
+          <ConsistencySurface consistency={consistency} />
 
-          <LivingFact
-            icon="flag-outline"
-            label="Goals"
-            onPress={() => setActiveDetail('goal')}
-            primary={formatRankedGoalLine(trainingProfile?.rankedGoals ?? [])}
-            secondary={formatGoalFocusLine(trainingProfile)}
+          <ProgressSurface
+            metric={progressMetric}
+            onChangeMetric={setProgressMetric}
+            onChangePeriod={setPeriod}
+            period={period}
+            previousSummary={previousProgressSummary}
+            range={periodRange.current}
+            summary={progressSummary}
           />
+          <BestEffortsSurface recordHighlights={recordHighlights} />
 
-          <LivingFact
-            icon="finger-print-outline"
-            label="Training setup"
-            onPress={() => setActiveDetail('training')}
-            primary={formatTrainingReality(trainingProfile)}
-            secondary={formatConstraints(trainingProfile?.constraints.areas ?? [])}
-          />
-
-          {activeDetail ? (
-            <ProfileDetailSurface
-              detail={activeDetail}
-              onBack={() => setActiveDetail(null)}
+          <View style={styles.profileAccordion}>
+            <ProfileAccordionItem
+              activeDetail={activeDetail}
+              detail="body"
+              icon="body-outline"
+              label="Body"
               onEdit={step => {
                 setEditStep(step);
                 onEditingProfileChange?.(true);
               }}
+              onToggle={() => {
+                runReedLayoutAnimation(reedMotion.durations.mode);
+                setActiveDetail(activeDetail === 'body' ? null : 'body');
+              }}
+              primary={bodyWeight ? `${formatMetric(bodyWeight.value)} ${bodyWeight.unit}` : 'Add bodyweight'}
               profileData={viewerTrainingProfile}
+              secondary={bodyWeight ? `Logged ${formatDate(bodyWeight.observedAt)}` : 'Log weight for better estimates.'}
             />
-          ) : null}
-
-          {!activeDetail ? (
-            <>
-              <ProgressSurface
-                metric={progressMetric}
-                onChangeMetric={setProgressMetric}
-                onChangePeriod={setPeriod}
-                period={period}
-                previousSummary={previousProgressSummary}
-                range={periodRange.current}
-                summary={progressSummary}
-              />
-              <BestEffortsSurface recordHighlights={recordHighlights} />
-            </>
-          ) : null}
+            <ProfileAccordionItem
+              activeDetail={activeDetail}
+              detail="goal"
+              icon="flag-outline"
+              label="Goals"
+              onEdit={step => {
+                setEditStep(step);
+                onEditingProfileChange?.(true);
+              }}
+              onToggle={() => {
+                runReedLayoutAnimation(reedMotion.durations.mode);
+                setActiveDetail(activeDetail === 'goal' ? null : 'goal');
+              }}
+              primary={formatRankedGoalLine(trainingProfile?.rankedGoals ?? [])}
+              profileData={viewerTrainingProfile}
+              secondary={formatGoalFocusLine(trainingProfile)}
+            />
+            <ProfileAccordionItem
+              activeDetail={activeDetail}
+              detail="training"
+              icon="finger-print-outline"
+              label="Training setup"
+              onEdit={step => {
+                setEditStep(step);
+                onEditingProfileChange?.(true);
+              }}
+              onToggle={() => {
+                runReedLayoutAnimation(reedMotion.durations.mode);
+                setActiveDetail(activeDetail === 'training' ? null : 'training');
+              }}
+              primary={formatTrainingReality(trainingProfile)}
+              profileData={viewerTrainingProfile}
+              secondary={formatConstraints(trainingProfile?.constraints.areas ?? [])}
+            />
+          </View>
         </View>
       )}
     </ScrollView>
+  );
+}
+
+function ProfileAccordionItem({
+  activeDetail,
+  detail,
+  icon,
+  label,
+  onEdit,
+  onToggle,
+  primary,
+  profileData,
+  secondary,
+}: {
+  activeDetail: ProfileDetailKind | null;
+  detail: ProfileDetailKind;
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  onEdit: (step: OnboardingBaseStep) => void;
+  onToggle: () => void;
+  primary: string;
+  profileData: StoredTrainingProfile | null | undefined;
+  secondary: string;
+}) {
+  const isOpen = activeDetail === detail;
+
+  return (
+    <View>
+      <LivingFact
+        icon={icon}
+        isOpen={isOpen}
+        label={label}
+        onPress={onToggle}
+        primary={primary}
+        secondary={secondary}
+      />
+      {isOpen ? (
+        <AccordionDetailReveal>
+          <ProfileDetailSurface
+            detail={detail}
+            embedded
+            onBack={onToggle}
+            onEdit={onEdit}
+            profileData={profileData}
+          />
+        </AccordionDetailReveal>
+      ) : null}
+    </View>
+  );
+}
+
+function AccordionDetailReveal({ children }: { children: ReactNode }) {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    createTiming(progress, 1, reedMotion.durations.mode, undefined, true).start();
+  }, [progress]);
+
+  return (
+    <Animated.View
+      style={{
+        opacity: progress,
+        transform: [
+          {
+            translateY: progress.interpolate({
+              inputRange: [0, 1],
+              outputRange: [reedMotion.distances.expandContentY, 0],
+            }),
+          },
+        ],
+      }}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
@@ -352,6 +472,172 @@ function CoachNoteCard({ note }: { note: { body: string; lead: string } }) {
         Reed
       </ReedText>
     </GlassSurface>
+  );
+}
+
+function ConsistencySurface({ consistency }: { consistency: ProfileConsistencyResult | undefined }) {
+  const { theme } = useReedTheme();
+  const [isHelperVisible, setIsHelperVisible] = useState(false);
+
+  return (
+    <GlassSurface contentStyle={styles.consistencyContent} style={styles.consistencySurface}>
+      <View style={styles.consistencyHeader}>
+        <StreakDesignShelf consistency={consistency} />
+      </View>
+
+      <View style={styles.consistencyGridHeader}>
+        <ReedText tone="muted" variant="caption">Last 12 weeks</ReedText>
+        <Pressable
+          accessibilityLabel={isHelperVisible ? 'Hide consistency explanation' : 'Show consistency explanation'}
+          onPress={() => setIsHelperVisible(value => !value)}
+          style={({ pressed }) => [
+            styles.infoButton,
+            getTapScaleStyle(pressed),
+          ]}
+        >
+          <Ionicons color={String(theme.colors.textMuted)} name="information-circle-outline" size={18} />
+        </Pressable>
+      </View>
+
+      {consistency === undefined ? (
+        <ConsistencySkeleton />
+      ) : (
+        <>
+          <ConsistencyGrid days={consistency.dayMap} />
+
+          {isHelperVisible ? (
+            <View style={[styles.consistencyHelper, { borderTopColor: theme.colors.controlBorder }]}>
+              <ReedText tone="muted" variant="caption">{consistency.helperLine}</ReedText>
+            </View>
+          ) : null}
+        </>
+      )}
+    </GlassSurface>
+  );
+}
+
+function ConsistencySkeleton() {
+  const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
+
+  return (
+    <View style={styles.consistencySkeleton}>
+      <View style={styles.consistencyGrid}>
+        {consistencyWeekdayLabels.map((label, dayIndex) => (
+          <View key={`${label}:${dayIndex}`} style={styles.consistencyGridRow}>
+            <ReedText tone="muted" variant="caption" style={styles.consistencyDayLabel}>
+              {label}
+            </ReedText>
+            {Array.from({ length: 12 }, (_, weekIndex) => (
+              <View
+                key={weekIndex}
+                style={[
+                  styles.consistencyCell,
+                  {
+                    backgroundColor: glassControls.shellBackgroundColor,
+                    borderColor: glassControls.shellBorderColor,
+                  },
+                ]}
+              />
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StreakDesignShelf({ consistency }: { consistency: ProfileConsistencyResult | undefined }) {
+  const streakWeeks = consistency?.currentOnTargetWeekRun ?? 0;
+  const isLoading = consistency === undefined;
+
+  return (
+    <View style={styles.streakDesignShelf}>
+      <StreakRailDesign isLoading={isLoading} streakWeeks={streakWeeks} />
+    </View>
+  );
+}
+
+function StreakRailDesign({ isLoading, streakWeeks }: { isLoading: boolean; streakWeeks: number }) {
+  const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
+  const filled = Math.min(streakWeeks, 8);
+
+  return (
+    <View style={styles.streakRailDesign}>
+      <View style={styles.streakRailHeader}>
+        <ReedText variant="bodyStrong">Consistency level</ReedText>
+        <ReedText tone="muted" variant="label">{isLoading ? '-' : `${filled}/8 weeks`}</ReedText>
+      </View>
+      <View style={styles.streakRail}>
+        {Array.from({ length: 8 }, (_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.streakRailSegment,
+              {
+                backgroundColor: getConsistencyGaugeSegmentFill({
+                  accentColor: String(theme.colors.accentPrimary),
+                  filled,
+                  index,
+                  isLoading,
+                  shellColor: String(glassControls.shellBackgroundColor),
+                }),
+                borderColor: !isLoading && index === filled - 1 ? theme.colors.accentPrimary : 'transparent',
+                opacity: !isLoading && index < filled ? getConsistencyGaugeSegmentOpacity(index) : 0.72,
+                transform: [{ scaleY: !isLoading && index === filled - 1 ? 1.15 : 1 }],
+              },
+            ]}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ConsistencyGrid({ days }: { days: ProfileConsistencyResult['dayMap'] }) {
+  const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
+  const weeks = useMemo(() => groupConsistencyWeeks(days).slice(-12), [days]);
+
+  return (
+    <View style={styles.consistencyGridWrap}>
+      <View style={styles.consistencyGrid}>
+        {consistencyWeekdayLabels.map((label, dayIndex) => (
+          <View key={`${label}:${dayIndex}`} style={styles.consistencyGridRow}>
+            <ReedText tone="muted" variant="caption" style={styles.consistencyDayLabel}>
+              {label}
+            </ReedText>
+            {weeks.map(week => {
+              const day = week.days[dayIndex];
+              return (
+                <View
+                  key={`${week.weekStartAt}:${dayIndex}`}
+                  accessibilityLabel={`${day.date}: ${day.activityCount} logged ${day.activityCount === 1 ? 'activity' : 'activities'}`}
+                  style={[
+                    styles.consistencyCell,
+                    {
+                      backgroundColor: getConsistencyCellFill({
+                        active: day.active,
+                        isFuture: day.isFuture,
+                        activeFill: String(theme.colors.successText),
+                        shellColor: String(glassControls.shellBackgroundColor),
+                      }),
+                      borderColor: day.active ? 'transparent' : glassControls.shellBorderColor,
+                      opacity: getConsistencyCellOpacity({
+                        active: day.active,
+                        activityCount: day.activityCount,
+                        isFuture: day.isFuture,
+                      }),
+                    },
+                  ]}
+                />
+              );
+            })}
+          </View>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -391,11 +677,6 @@ function ProgressSurface({
     id: group.groupId,
     percent: shareByGroup.get(group.groupId) ?? 0,
   }));
-  const activeBuckets = useMemo(
-    () => buildActiveBuckets(summary?.recentActivities ?? [], range.startAt, range.endAt, period),
-    [period, range.endAt, range.startAt, summary?.recentActivities],
-  );
-
   return (
     <GlassSurface contentStyle={styles.progressContent} style={styles.progressSurface}>
       <View style={styles.progressHeader}>
@@ -415,11 +696,9 @@ function ProgressSurface({
         </View>
       ) : (
         <>
-          <ActiveDayStrip buckets={activeBuckets} />
-
           <View style={[styles.progressMetricRow, isCompact && styles.progressMetricRowCompact]}>
-            <ProgressMetricTile label="Active days" value={formatWholeNumber(getActiveDayCount(summary.recentActivities))} />
             <ProgressMetricTile label="Sets" value={formatWholeNumber(work.totalSets)} />
+            <ProgressMetricTile label="Reps" value={formatWholeNumber(work.totalReps)} />
             <ProgressMetricTile label="Load" value={formatVolume(work.totalVolume)} />
           </View>
 
@@ -491,8 +770,8 @@ function BestEffortsSurface({
     <GlassSurface contentStyle={styles.bestEffortsContent} style={styles.bestEffortsSurface}>
       <View style={styles.bestEffortsHeader}>
         <View>
-          <ReedText variant="section">Best efforts</ReedText>
-          <ReedText tone="muted" variant="caption">Your strongest logged sets and efforts.</ReedText>
+          <ReedText variant="section">Personal Records</ReedText>
+          <ReedText tone="muted" variant="caption">Your strongest logged sets.</ReedText>
         </View>
         <Ionicons color={String(theme.colors.textMuted)} name="trophy-outline" size={20} />
       </View>
@@ -560,46 +839,24 @@ function ProgressSkeleton() {
   );
 }
 
-function ActiveDayStrip({ buckets }: { buckets: Array<{ active: boolean; label: string; key: string }> }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
-  return (
-    <View style={styles.dayStrip}>
-      {buckets.map(bucket => (
-        <View key={bucket.key} style={styles.dayColumn}>
-          <View
-            style={[
-              styles.dayBar,
-              {
-                backgroundColor: bucket.active ? theme.colors.accentPrimary : glassControls.shellBackgroundColor,
-                borderColor: bucket.active ? theme.colors.accentPrimary : glassControls.shellBorderColor,
-              },
-            ]}
-          />
-          <ReedText tone="muted" variant="caption">{bucket.label}</ReedText>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 function ProgressMetricTile({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.progressMetricTile}>
-      <ReedText variant="bodyStrong">{value}</ReedText>
-      <ReedText tone="muted" variant="label">{label}</ReedText>
+      <ReedText variant="bodyStrong" style={styles.progressMetricText}>{value}</ReedText>
+      <ReedText tone="muted" variant="label" style={styles.progressMetricText}>{label}</ReedText>
     </View>
   );
 }
 
 function ProfileDetailSurface({
   detail,
+  embedded = false,
   onBack,
   onEdit,
   profileData,
 }: {
   detail: ProfileDetailKind;
+  embedded?: boolean;
   onBack: () => void;
   onEdit: (step: OnboardingBaseStep) => void;
   profileData: StoredTrainingProfile | null | undefined;
@@ -609,7 +866,7 @@ function ProfileDetailSurface({
   if (!profileData) {
     return (
       <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        <DetailHeader onBack={onBack} title="Profile" />
+        {embedded ? null : <DetailHeader onBack={onBack} title="Profile" />}
         <ReedText tone="muted">Finish your profile to see this.</ReedText>
       </GlassSurface>
     );
@@ -624,7 +881,7 @@ function ProfileDetailSurface({
 
     return (
       <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        <DetailHeader onBack={onBack} title="Body" />
+        {embedded ? null : <DetailHeader onBack={onBack} title="Body" />}
         <View style={styles.detailLead}>
           <ReedText variant="section">{formatBodyStatusLead(bodyMetrics)}</ReedText>
           <ReedText tone="muted" variant="caption">
@@ -656,7 +913,7 @@ function ProfileDetailSurface({
 
     return (
       <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        <DetailHeader onBack={onBack} title="Goals" />
+        {embedded ? null : <DetailHeader onBack={onBack} title="Goals" />}
         <View style={styles.detailLead}>
           <ReedText variant="section">{formatRankedGoalLine(goals)}</ReedText>
           <ReedText tone="muted" variant="caption">
@@ -697,7 +954,7 @@ function ProfileDetailSurface({
 
   return (
     <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-      <DetailHeader onBack={onBack} title="Training setup" />
+      {embedded ? null : <DetailHeader onBack={onBack} title="Training setup" />}
       <View style={styles.detailLead}>
         <ReedText variant="section">{formatTrainingReality(profileData.trainingProfile)}</ReedText>
         <ReedText tone="muted" variant="caption">
@@ -800,12 +1057,14 @@ function PlainHint({ body, icon, title }: { body: string; icon: keyof typeof Ion
 
 function LivingFact({
   icon,
+  isOpen,
   label,
   onPress,
   primary,
   secondary,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
+  isOpen?: boolean;
   label: string;
   onPress: () => void;
   primary: string;
@@ -832,7 +1091,12 @@ function LivingFact({
         <ReedText tone="muted" variant="caption">{secondary}</ReedText>
       </View>
       <View style={styles.updateHint}>
-        <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={14} />
+        <Ionicons
+          color={String(theme.colors.textMuted)}
+          name="chevron-forward"
+          size={14}
+          style={isOpen ? styles.updateHintOpen : null}
+        />
       </View>
     </Pressable>
   );
@@ -946,12 +1210,18 @@ function formatCoachNote(
   trainingProfile: StoredTrainingProfile['trainingProfile'] | null,
   bodyWeight: { observedAt: number; unit?: string; value: number } | null,
   summary: TrainingWindowSummary | undefined,
+  consistency: ProfileConsistencyResult | undefined,
 ) {
   if (!trainingProfile) {
-    return {
+    const base = {
       lead: 'Build the profile first.',
       body: 'Add goals, body data, and your training setup so coaching can become specific instead of generic.',
     };
+    if (consistency) {
+      return withConsistencyNote(base, consistency);
+    }
+
+    return base;
   }
 
   const primaryGoal = trainingProfile.rankedGoals[0];
@@ -959,10 +1229,15 @@ function formatCoachNote(
   const weekly = weeklySessionLabels[trainingProfile.trainingReality.weeklySessions] ?? 'your current rhythm';
 
   if (summary === undefined) {
-    return {
+    const base = {
       lead: `${primaryGoalLabel} is the priority.`,
       body: `I am checking this week's training against your ${weekly.toLowerCase()} setup before calling the next move.`,
     };
+    if (consistency) {
+      return withConsistencyNote(base, consistency);
+    }
+
+    return base;
   }
 
   if (summary.activityCount > 0) {
@@ -971,23 +1246,47 @@ function formatCoachNote(
     const workLine = topGroup && topGroup.setCount > 0
       ? `${topGroup.label.toLowerCase()} has taken the most work`
       : `${formatWholeNumber(summary.work.totalSets)} sets are logged`;
-
-    return {
+    const base = {
       lead: `${activeDays} active ${activeDays === 1 ? 'day' : 'days'} this week.`,
       body: `${workLine}. Keep the next session pointed at ${primaryGoalLabel.toLowerCase()} and avoid adding noise just to fill the week.`,
     };
+    if (consistency) {
+      return withConsistencyNote(base, consistency);
+    }
+
+    return base;
   }
 
   if (bodyWeight) {
-    return {
+    const base = {
       lead: `${formatBodyMetric(bodyWeight)} bodyweight is logged.`,
       body: `Now anchor it with training data. One clean session is enough for Reed to start comparing work against your ${weekly.toLowerCase()} target.`,
     };
+    if (consistency) {
+      return withConsistencyNote(base, consistency);
+    }
+
+    return base;
   }
 
-  return {
+  const base = {
     lead: `${primaryGoalLabel} is set.`,
     body: `Log bodyweight and one training session next. That gives Reed enough signal to turn this note into real coaching.`,
+  };
+  if (consistency) {
+    return withConsistencyNote(base, consistency);
+  }
+
+  return base;
+}
+
+function withConsistencyNote(
+  note: { body: string; lead: string },
+  consistency: ProfileConsistencyResult,
+) {
+  return {
+    lead: consistency.summaryLine,
+    body: `${consistency.subline} ${note.body}`,
   };
 }
 
@@ -1025,30 +1324,6 @@ function getActiveDayCount(activities: TrainingWindowSummary['recentActivities']
     activeDays.add(formatDate(activity.loggedAt));
   }
   return activeDays.size;
-}
-
-function buildActiveBuckets(
-  activities: TrainingWindowSummary['recentActivities'],
-  startAt: number,
-  endAt: number,
-  period: ProfilePeriod,
-) {
-  const bucketCount = 7;
-  const duration = Math.max(1, endAt - startAt);
-  const bucketMs = duration / bucketCount;
-  const activeIndexes = new Set(
-    activities.map(activity => Math.min(bucketCount - 1, Math.max(0, Math.floor((activity.loggedAt - startAt) / bucketMs)))),
-  );
-  const formatter = new Intl.DateTimeFormat('en', { weekday: 'short' });
-
-  return Array.from({ length: bucketCount }, (_, index) => {
-    const bucketStart = startAt + bucketMs * index;
-    return {
-      active: activeIndexes.has(index),
-      label: period === 'week' ? formatter.format(new Date(bucketStart)).slice(0, 1) : String(index + 1),
-      key: String(index),
-    };
-  });
 }
 
 function getNormalizedShareByGroup(groups: TrainingWindowGroup[], metric: ProgressMetric) {
@@ -1352,22 +1627,55 @@ const styles = StyleSheet.create({
   coachNoteSurface: {
     marginBottom: 4,
   },
-  dayBar: {
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    height: 42,
-    width: 8,
-  },
-  dayColumn: {
-    alignItems: 'center',
+  consistencyCell: {
+    aspectRatio: 1,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
     flex: 1,
-    gap: 6,
   },
-  dayStrip: {
-    alignItems: 'flex-end',
+  consistencyContent: {
+    gap: 16,
+    padding: 20,
+  },
+  consistencyDayLabel: {
+    height: 16,
+    width: 16,
+    lineHeight: 16,
+    textAlign: 'right',
+  },
+  consistencyGrid: {
+    flex: 1,
+    gap: 5,
+  },
+  consistencyGridHeader: {
+    alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
-    paddingTop: 2,
+    justifyContent: 'space-between',
+    minHeight: 28,
+  },
+  consistencyGridWrap: {
+    flexDirection: 'row',
+    width: '100%',
+  },
+  consistencyHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  consistencyHelper: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    paddingTop: 12,
+  },
+  consistencySkeleton: {
+    gap: 14,
+  },
+  consistencySurface: {
+    marginBottom: 4,
+  },
+  consistencyGridRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
   },
   detailContent: {
     gap: 16,
@@ -1420,6 +1728,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     paddingTop: 6,
   },
+  infoButton: {
+    alignItems: 'center',
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
   emptyProgress: {
     gap: 5,
     minHeight: 96,
@@ -1459,6 +1773,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 6,
     padding: 12,
+  },
+  profileAccordion: {
+    marginTop: 10,
   },
   legendDot: {
     borderRadius: reedRadii.pill,
@@ -1514,8 +1831,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   progressMetricTile: {
+    alignItems: 'center',
     flex: 1,
     gap: 3,
+  },
+  progressMetricText: {
+    textAlign: 'center',
   },
   progressSkeleton: {
     gap: 14,
@@ -1545,6 +1866,30 @@ const styles = StyleSheet.create({
     borderRadius: reedRadii.lg,
     flex: 1,
     height: 58,
+  },
+  streakDesignShelf: {
+    flex: 1,
+    width: '100%',
+  },
+  streakRail: {
+    flexDirection: 'row',
+    gap: 5,
+    height: 18,
+    width: '100%',
+  },
+  streakRailDesign: {
+    gap: 10,
+    width: '100%',
+  },
+  streakRailHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  streakRailSegment: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flex: 1,
   },
   root: {
     flex: 1,
@@ -1585,6 +1930,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     width: 20,
+  },
+  updateHintOpen: {
+    transform: [{ rotate: '90deg' }],
   },
   progressMetricRowCompact: {
     flexDirection: 'column',

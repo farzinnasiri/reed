@@ -7,7 +7,7 @@ import { getSolidGlassCardTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii } from '@/design/system';
+import { reedRadii, withColorAlpha } from '@/design/system';
 import { playOnboardingSwipeCommitFeedback } from '@/lib/onboarding-feedback';
 import { FIRST_EXPERIENCE_REED_MARK_ROOT_TOP, FIRST_EXPERIENCE_REED_MARK_SIZE } from './first-experience-layout';
 
@@ -225,9 +225,9 @@ export function StepGestureDemo({ displayName, onBack, onContinue }: StepGesture
           style={styles.cardStage}
         >
           <Animated.View
-            pointerEvents="none"
             style={[
               styles.swipeCue,
+              { pointerEvents: 'none' },
               {
                 opacity: hasInteracted ? 0 : Animated.multiply(cueOpacity, chromeOpacity),
                 transform: [{ translateX: cueTranslateX }],
@@ -262,7 +262,9 @@ export function StepGestureDemo({ displayName, onBack, onContinue }: StepGesture
                   styles.successCore,
                   {
                     backgroundColor: theme.colors.accentPrimary,
-                  shadowColor: String(theme.colors.accentPrimary),
+                  ...(Platform.OS === 'web'
+                    ? { boxShadow: `0px 18px 28px ${withColorAlpha(String(theme.colors.accentPrimary), 0.38)}` }
+                    : { shadowColor: String(theme.colors.accentPrimary) }),
                 },
               ]}
             >
@@ -537,9 +539,14 @@ const styles = StyleSheet.create({
     elevation: 18,
     height: FIRST_EXPERIENCE_REED_MARK_SIZE,
     justifyContent: 'center',
-    shadowOffset: { width: 0, height: 18 },
-    shadowOpacity: 0.38,
-    shadowRadius: 28,
+    ...Platform.select({
+      web: {},
+      default: {
+        shadowOffset: { width: 0, height: 18 },
+        shadowOpacity: 0.38,
+        shadowRadius: 28,
+      },
+    }),
     width: FIRST_EXPERIENCE_REED_MARK_SIZE,
   },
   successGlyph: {

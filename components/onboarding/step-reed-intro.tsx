@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii } from '@/design/system';
+import { reedRadii, withColorAlpha } from '@/design/system';
 import { FIRST_EXPERIENCE_REED_MARK_ROOT_TOP, FIRST_EXPERIENCE_REED_MARK_SIZE } from './first-experience-layout';
 
 type StepReedIntroProps = {
@@ -100,7 +100,9 @@ export function StepReedIntro({ displayName, onBack, onContinue }: StepReedIntro
           styles.presence,
           {
             top: FIRST_EXPERIENCE_REED_MARK_ROOT_TOP,
-            shadowColor: String(theme.colors.accentPrimary),
+            ...(Platform.OS === 'web'
+              ? { boxShadow: `0px 16px 30px ${withColorAlpha(String(theme.colors.accentPrimary), 0.28)}` }
+              : { shadowColor: String(theme.colors.accentPrimary) }),
           },
         ]}
       >
@@ -292,9 +294,14 @@ const styles = StyleSheet.create({
     height: FIRST_EXPERIENCE_REED_MARK_SIZE,
     justifyContent: 'center',
     position: 'absolute',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.28,
-    shadowRadius: 30,
+    ...Platform.select({
+      web: {},
+      default: {
+        shadowOffset: { width: 0, height: 16 },
+        shadowOpacity: 0.28,
+        shadowRadius: 30,
+      },
+    }),
     width: FIRST_EXPERIENCE_REED_MARK_SIZE,
     zIndex: 10,
   },

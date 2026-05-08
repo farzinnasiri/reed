@@ -663,8 +663,16 @@ export function isLiveCardioRecipeKey(recipeKey: RecipeKey): recipeKey is LiveCa
   return recipeRegistry[recipeKey].processKind === 'live_cardio';
 }
 
-export const summarizeMetrics = (recipeKey: RecipeKey, metrics: Record<string, number>) =>
-  recipeRegistry[recipeKey].formatSummary(metrics);
+export function summarizeMetrics(recipeKey: RecipeKey, metrics: Record<string, number>) {
+  const fields = recipeRegistry[recipeKey].fields;
+  const hasCompleteRecipeMetrics = fields.every(field => typeof metrics[field.key] === 'number');
+
+  if (hasCompleteRecipeMetrics) {
+    return recipeRegistry[recipeKey].formatSummary(metrics);
+  }
+
+  return summarizeAvailableMetrics(metrics);
+}
 
 export function validateRecipeMetrics(recipeKey: RecipeKey, metrics: Record<string, number>) {
   const fields = recipeRegistry[recipeKey].fields;
@@ -728,6 +736,41 @@ function formatNumber(value: number) {
 }
 
 const formatRpe = (value: number) => roundMetric(value).toString();
+
+function summarizeAvailableMetrics(metrics: Record<string, number>) {
+  const parts: string[] = [];
+  const distance = finiteOrNull(metrics.distance);
+  const duration = finiteOrNull(metrics.duration ?? metrics.time);
+  const reps = finiteOrNull(metrics.reps);
+  const load = finiteOrNull(metrics.load ?? metrics.addedLoad ?? metrics.assistLoad);
+  const rpe = finiteOrNull(metrics.rpe);
+
+  if (distance !== null && duration !== null) {
+    parts.push(`${formatDistance(distance)} in ${formatDuration(duration)}`);
+  } else if (distance !== null) {
+    parts.push(formatDistance(distance));
+  } else if (duration !== null) {
+    parts.push(formatDuration(duration));
+  }
+
+  if (reps !== null) {
+    parts.push(formatCount(reps, 'rep'));
+  }
+
+  if (load !== null) {
+    parts.push(formatLoad(load));
+  }
+
+  if (rpe !== null) {
+    parts.push(`RPE ${formatRpe(rpe)}`);
+  }
+
+  return parts.length > 0 ? parts.join(' · ') : 'Logged';
+}
+
+function finiteOrNull(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
 
 function finiteOrZero(value: number | undefined) {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;

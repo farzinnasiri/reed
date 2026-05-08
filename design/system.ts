@@ -217,6 +217,34 @@ function toRgba(hexColor: string, opacity: number) {
   return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
+export function withColorAlpha(color: string, opacity: number) {
+  const normalizedOpacity = Math.max(0, Math.min(1, opacity));
+  const hex = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+
+  if (hex) {
+    const value = hex[1];
+    const normalizedHex = value.length === 3
+      ? value.split('').map(chunk => `${chunk}${chunk}`).join('')
+      : value;
+    const red = Number.parseInt(normalizedHex.slice(0, 2), 16);
+    const green = Number.parseInt(normalizedHex.slice(2, 4), 16);
+    const blue = Number.parseInt(normalizedHex.slice(4, 6), 16);
+
+    return `rgba(${red}, ${green}, ${blue}, ${normalizedOpacity})`;
+  }
+
+  const rgb = color.trim().match(/^rgba?\(([^)]+)\)$/i);
+  if (rgb) {
+    const channels = rgb[1].split(',').map(part => part.trim());
+    if (channels.length >= 3) {
+      const [red, green, blue] = channels;
+      return `rgba(${red}, ${green}, ${blue}, ${normalizedOpacity})`;
+    }
+  }
+
+  return color;
+}
+
 export const lightTheme: ReedTheme = {
   mode: 'light',
   spacing,
