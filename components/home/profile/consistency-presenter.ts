@@ -1,14 +1,3 @@
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-export type ConsistencyDay = {
-  activityCount: number;
-  active: boolean;
-  date: string;
-  dayStartAt: number;
-  isFuture: boolean;
-  weekStartAt: number;
-};
-
 export function getConsistencyGaugeSegmentFill({
   accentColor,
   filled,
@@ -31,37 +20,6 @@ export function getConsistencyGaugeSegmentFill({
 
 export function getConsistencyGaugeSegmentOpacity(index: number) {
   return Math.min(1, 0.38 + index * 0.08);
-}
-
-export function groupConsistencyWeeks(days: ConsistencyDay[]) {
-  const byWeek = new Map<number, ConsistencyDay[]>();
-  for (const day of days) {
-    const week = byWeek.get(day.weekStartAt) ?? [];
-    week.push(day);
-    byWeek.set(day.weekStartAt, week);
-  }
-
-  return Array.from(byWeek.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([weekStartAt, weekDays]) => ({
-      days: getSevenDayWeek(weekStartAt, weekDays),
-      weekStartAt,
-    }));
-}
-
-function getSevenDayWeek(weekStartAt: number, weekDays: ConsistencyDay[]) {
-  const byDayStart = new Map(weekDays.map(day => [day.dayStartAt, day]));
-  return Array.from({ length: 7 }, (_, index) => {
-    const dayStartAt = weekStartAt + index * DAY_MS;
-    return byDayStart.get(dayStartAt) ?? {
-      activityCount: 0,
-      active: false,
-      date: new Date(dayStartAt).toISOString().slice(0, 10),
-      dayStartAt,
-      isFuture: true,
-      weekStartAt,
-    };
-  });
 }
 
 export function getConsistencyCellFill({

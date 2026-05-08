@@ -24,7 +24,6 @@ import {
   getConsistencyCellOpacity,
   getConsistencyGaugeSegmentFill,
   getConsistencyGaugeSegmentOpacity,
-  groupConsistencyWeeks,
 } from './profile/consistency-presenter';
 import { draftFromTrainingProfile, SettingsSurface, type StoredTrainingProfile } from './settings-surface';
 
@@ -178,16 +177,18 @@ type ProfileConsistencyResult = {
     weekEndAt: number;
     weekStartAt: number;
   };
-  dayMap: Array<{
-    activityCount: number;
-    active: boolean;
-    date: string;
-    dayStartAt: number;
-    isFuture: boolean;
+  weekGrid: Array<{
+    days: Array<{
+      activityCount: number;
+      active: boolean;
+      date: string;
+      dayStartAt: number;
+      isFuture: boolean;
+      weekStartAt: number;
+    }>;
     weekStartAt: number;
   }>;
   hasTrainingTarget: boolean;
-  helperCopy: string;
   helperLine: string;
   recentOnTargetRate: {
     onTargetWeeks: number;
@@ -227,7 +228,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
     windowStartAt: periodRange.previous.startAt,
   });
   const recordHighlights = useQuery(api.trainingKnowledge.getRecordHighlights, { limit: 3 });
-  const consistency = useQuery(api.profileConsistency.viewerConsistency, {});
+  const consistency = useQuery(api.trainingKnowledge.getConsistency, {});
 
   const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
   const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find(metric => metric.metricKey === 'body_weight') ?? null;
@@ -503,7 +504,7 @@ function ConsistencySurface({ consistency }: { consistency: ProfileConsistencyRe
         <ConsistencySkeleton />
       ) : (
         <>
-          <ConsistencyGrid days={consistency.dayMap} />
+          <ConsistencyGrid weekGrid={consistency.weekGrid} />
 
           {isHelperVisible ? (
             <View style={[styles.consistencyHelper, { borderTopColor: theme.colors.controlBorder }]}>
@@ -595,10 +596,9 @@ function StreakRailDesign({ isLoading, streakWeeks }: { isLoading: boolean; stre
   );
 }
 
-function ConsistencyGrid({ days }: { days: ProfileConsistencyResult['dayMap'] }) {
+function ConsistencyGrid({ weekGrid }: { weekGrid: ProfileConsistencyResult['weekGrid'] }) {
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
-  const weeks = useMemo(() => groupConsistencyWeeks(days).slice(-12), [days]);
 
   return (
     <View style={styles.consistencyGridWrap}>
@@ -608,7 +608,7 @@ function ConsistencyGrid({ days }: { days: ProfileConsistencyResult['dayMap'] })
             <ReedText tone="muted" variant="caption" style={styles.consistencyDayLabel}>
               {label}
             </ReedText>
-            {weeks.map(week => {
+            {weekGrid.map(week => {
               const day = week.days[dayIndex];
               return (
                 <View
@@ -1241,7 +1241,7 @@ function formatCoachNote(
   }
 
   if (summary.activityCount > 0) {
-    const activeDays = getActiveDayCount(summary.recentActivities);
+    const activeDays = consistency?.currentWeek.activeDays ?? getActiveDayCount(summary.recentActivities);
     const topGroup = [...summary.work.groups].sort((left, right) => right.setCount - left.setCount)[0];
     const workLine = topGroup && topGroup.setCount > 0
       ? `${topGroup.label.toLowerCase()} has taken the most work`
