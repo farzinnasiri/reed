@@ -190,14 +190,25 @@ function ReedChatSend(props: SendProps<ReedChatMessage>) {
       containerStyle={styles.sendContainer}
     >
       <Pressable
+        accessibilityHint="Sends your message to Reed."
         accessibilityLabel="Send message"
+        accessibilityRole="button"
+        accessibilityState={{ disabled }}
         disabled={disabled}
         style={({ pressed }) => [
           styles.sendButton,
+          {
+            backgroundColor: disabled ? theme.colors.controlFill : theme.colors.accentPrimary,
+            borderColor: disabled ? theme.colors.controlBorder : theme.colors.accentPrimary,
+          },
           getTapScaleStyle(pressed, disabled),
         ]}
       >
-        <Ionicons color={String(theme.colors.textPrimary)} name="arrow-up" size={18} />
+        <Ionicons
+          color={String(disabled ? theme.colors.textMuted : theme.colors.accentPrimaryText)}
+          name="arrow-up"
+          size={18}
+        />
       </Pressable>
     </Send>
   );
@@ -239,7 +250,7 @@ export function ReedChatAvatar() {
 
   return (
     <View style={[styles.avatar, { backgroundColor: theme.colors.accentPrimary }]}>
-      <ReedText style={styles.avatarLetter} variant="bodyStrong">
+      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
         R
       </ReedText>
     </View>
@@ -253,9 +264,6 @@ const styles = StyleSheet.create({
     height: 32,
     justifyContent: 'center',
     width: 32,
-  },
-  avatarLetter: {
-    color: '#f8fafc',
   },
   bubbleFrame: {
     alignItems: 'flex-end',
@@ -312,9 +320,11 @@ const styles = StyleSheet.create({
   },
   sendButton: {
     alignItems: 'center',
-    height: 34,
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    height: 44,
     justifyContent: 'center',
-    width: 34,
+    width: 44,
   },
   sendContainer: {
     alignItems: 'center',

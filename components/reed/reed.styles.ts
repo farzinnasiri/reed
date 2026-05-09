@@ -1,0 +1,236 @@
+import { Platform, StyleSheet } from 'react-native';
+import { reedRadii } from '@/design/system';
+
+export const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  content: {
+    gap: 16,
+  },
+  fixedHeader: {
+    borderRadius: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 15,
+  },
+  fixedHeaderContent: {
+    gap: 0,
+  },
+  header: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    paddingHorizontal: 2,
+  },
+  headerIdentity: {
+    alignItems: 'flex-start',
+    gap: 1,
+  },
+  headerAction: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 44,
+    paddingHorizontal: 14,
+  },
+  todayStrip: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  todayCopy: {
+    gap: 3,
+  },
+  quickActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  quickActionChip: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  coachItemsBlock: {
+    gap: 8,
+  },
+  coachItemStack: {
+    gap: 8,
+  },
+  coachItemRow: {
+    alignItems: 'center',
+    borderRadius: reedRadii.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 64,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  coachItemDot: {
+    borderRadius: reedRadii.pill,
+    height: 8,
+    width: 8,
+  },
+  coachItemCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  coachItemAction: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  thread: {
+    gap: 14,
+    paddingTop: 4,
+  },
+  messageRowLeft: {
+    alignItems: 'flex-start',
+    width: '100%',
+  },
+  messageRowRight: {
+    alignItems: 'flex-end',
+    width: '100%',
+  },
+  assistantMessageGroup: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+    maxWidth: '100%',
+  },
+  userMessageGroup: {
+    alignItems: 'flex-end',
+    maxWidth: '82%',
+  },
+  messageBubble: {
+    alignSelf: 'stretch',
+    borderRadius: reedRadii.lg,
+    borderWidth: 1,
+    flexShrink: 1,
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  messageBubbleLeft: {
+    borderBottomLeftRadius: 6,
+  },
+  messageBubbleRight: {
+    borderBottomRightRadius: 6,
+  },
+  messageSideActions: {
+    gap: 2,
+    paddingTop: 8,
+  },
+  messageSideAction: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  typingBubble: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  typingDotsRow: {
+    flexDirection: 'row',
+    gap: 5,
+  },
+  typingDot: {
+    borderRadius: reedRadii.pill,
+    height: 6,
+    width: 6,
+  },
+  composerDock: {
+    bottom: 0,
+    gap: 8,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 20,
+  },
+  voiceWaveformRow: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    gap: 4,
+    height: 28,
+    justifyContent: 'center',
+  },
+  voiceWaveformBar: {
+    borderRadius: reedRadii.pill,
+    height: 16,
+    width: 3,
+  },
+  composerCard: {
+    borderRadius: reedRadii.xl,
+  },
+  composerCardContent: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  composerInputRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 44,
+  },
+  composerInputFrame: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  composerButtonCluster: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  composerIconButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  composerInput: {
+    alignSelf: 'stretch',
+    fontSize: 15,
+    includeFontPadding: Platform.OS === 'android' ? false : undefined,
+    lineHeight: 22,
+    maxHeight: 96,
+    minHeight: 22,
+    paddingBottom: 0,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    textAlignVertical: Platform.OS === 'android' ? 'top' : undefined,
+  },
+  sendButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+});
