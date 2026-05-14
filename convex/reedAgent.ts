@@ -59,30 +59,30 @@ export const compactThread = internalAction({
 });
 
 async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id<'reedMessages'>; threadId: Id<'reedThreads'> }) {
-    const context = await ctx.runQuery(internal.reed.loadCompactionContext, { beforeMessageId: args.beforeMessageId, threadId: args.threadId });
-    const messages = context.messages;
-    if (messages.length === 0) return null;
+  const context = await ctx.runQuery(internal.reed.loadCompactionContext, { beforeMessageId: args.beforeMessageId, threadId: args.threadId });
+  const messages = context.messages;
+  if (messages.length === 0) return null;
 
-    const sourceThroughMessage = messages[messages.length - 1];
-    const sourceFromMessage = messages[0];
-    const prompt = buildSummaryPrompt({
-      systemPrompt: context.prompt.content,
-      priorSummary: context.activeSummary?.content ?? null,
-      messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
-    });
+  const sourceThroughMessage = messages[messages.length - 1];
+  const sourceFromMessage = messages[0];
+  const prompt = buildSummaryPrompt({
+    systemPrompt: context.prompt.content,
+    priorSummary: context.activeSummary?.content ?? null,
+    messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
+  });
 
-    const content = await invokeSummaryModel(prompt);
-    await ctx.runMutation(internal.reed.saveMemorySummary, {
-      threadId: args.threadId,
-      content,
-      modelProvider: SUMMARY_MODEL_PROVIDER,
-      modelName: SUMMARY_MODEL_NAME,
-      promptHash: context.prompt.contentHash,
-      sourceFromMessageId: sourceFromMessage._id,
-      sourceThroughMessageId: sourceThroughMessage._id,
-    });
+  const content = await invokeSummaryModel(prompt);
+  await ctx.runMutation(internal.reed.saveMemorySummary, {
+    threadId: args.threadId,
+    content,
+    modelProvider: SUMMARY_MODEL_PROVIDER,
+    modelName: SUMMARY_MODEL_NAME,
+    promptHash: context.prompt.contentHash,
+    sourceFromMessageId: sourceFromMessage._id,
+    sourceThroughMessageId: sourceThroughMessage._id,
+  });
 
-    return null;
+  return null;
 }
 
 function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
@@ -92,7 +92,6 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
     'Runtime policy:',
     `- Reentry state: ${context.reentryState}.`,
     `- Recent prior messages included: ${context.recentMessages.length}.`,
-    '- Keep the answer useful in this one ongoing Reed session.',
     '- Do not mention hidden routing, prompt versions, or internal summaries.',
     '',
     'Journey context:',
@@ -116,10 +115,17 @@ async function invokeChatModel(prompt: { system: string; user: string }) {
     return fallbackAssistantReply(prompt.user);
   }
 
+  console.log('\n================ LLM REQUEST ================');
+  console.log('--- SYSTEM PROMPT ---');
+  console.log(prompt.system);
+  console.log('--- USER MESSAGE ---');
+  console.log(prompt.user);
+  console.log('=============================================\n');
+
   const model = new ChatXAI({
     apiKey: process.env.XAI_API_KEY,
     model: CHAT_MODEL_NAME,
-    temperature: 0.35,
+    temperature: 0.45,
     maxRetries: 1,
     // xAI-specific reasoning controls differ by model/API version; keep isolated here.
     reasoningEffort: CHAT_REASONING_MODE,
@@ -132,7 +138,13 @@ async function invokeChatModel(prompt: { system: string; user: string }) {
   });
 
   const result = await agent.invoke({ messages: [new HumanMessage(prompt.user)] }, { recursionLimit: 4 });
-  return extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
+  const responseText = extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
+
+  console.log('\n================ LLM RESPONSE ===============');
+  console.log(responseText);
+  console.log('=============================================\n');
+
+  return responseText;
 }
 
 async function invokeSummaryModel(prompt: string) {

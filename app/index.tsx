@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
@@ -8,11 +8,11 @@ import { api } from '@/convex/_generated/api';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { AppSplash } from '@/components/ui/app-splash';
 import { AuthEntry } from '@/components/home/auth-entry';
-import { SignedInShell } from '@/components/home/signed-in-shell';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { LoveLetter } from '@/components/onboarding/love-letter';
 import { useReedTheme } from '@/design/provider';
-import type { AuthMode, AppMode } from '@/components/home/types';
+import { appRouteFromModeParam } from '@/components/home/app-routes';
+import type { AuthMode } from '@/components/home/types';
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
@@ -21,7 +21,6 @@ export default function HomeScreen() {
   const ensureViewerProfile = useMutation(api.profiles.ensureViewerProfile);
   const { theme } = useReedTheme();
   const [mode, setMode] = useState<AuthMode>('sign-in');
-  const [appMode, setAppMode] = useState<AppMode>('workout');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -53,16 +52,6 @@ export default function HomeScreen() {
       setErrorMessage(getErrorMessage(error));
     });
   }, [ensureViewerProfile, session?.user.id]);
-
-  useEffect(() => {
-    if (!session || typeof params.mode !== 'string') {
-      return;
-    }
-
-    if (params.mode === 'home' || params.mode === 'workout' || params.mode === 'chat' || params.mode === 'user') {
-      setAppMode(params.mode);
-    }
-  }, [params.mode, session]);
 
   useEffect(() => {
     if (!session) {
@@ -186,11 +175,7 @@ export default function HomeScreen() {
           }}
         />
       ) : session ? (
-        <SignedInShell
-          appMode={appMode}
-          displayName={viewerProfile?.displayName ?? session.user.name ?? 'there'}
-          onChangeMode={setAppMode}
-        />
+        <Redirect href={appRouteFromModeParam(typeof params.mode === 'string' ? params.mode : undefined)} />
       ) : (
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}

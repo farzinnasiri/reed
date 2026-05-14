@@ -163,10 +163,12 @@ async function buildJourneySnapshot(ctx: MutationCtx, profileId: Id<'profiles'>,
     .unique();
   if (!trainingProfile) throw new ConvexError('Training profile not found.');
 
-  const trajectoryStartAt = now - TRAJECTORY_WINDOW_DAYS * DAY_MS;
-  const currentStateStartAt = now - CURRENT_STATE_WINDOW_DAYS * DAY_MS;
-  const bodyStartAt = now - BODY_WINDOW_DAYS * DAY_MS;
-  const recordStartAt = now - RECORD_WINDOW_DAYS * DAY_MS;
+  const trajectoryStartAt = effectiveWindowStart(profile._creationTime, now, TRAJECTORY_WINDOW_DAYS);
+  const currentStateStartAt = effectiveWindowStart(profile._creationTime, now, CURRENT_STATE_WINDOW_DAYS);
+  const bodyStartAt = effectiveWindowStart(profile._creationTime, now, BODY_WINDOW_DAYS);
+  const recordStartAt = effectiveWindowStart(profile._creationTime, now, RECORD_WINDOW_DAYS);
+  const trajectoryWindowDays = daysBetween(trajectoryStartAt, now);
+  const currentStateWindowDays = daysBetween(currentStateStartAt, now);
 
   const [sessions, trajectoryLogs, currentLogs, bodyweightPoints, latestBodyMeasurements, allRecordLogs, exercises, strengthAssessments, cardioAssessments] = await Promise.all([
     ctx.db
@@ -234,15 +236,15 @@ async function buildJourneySnapshot(ctx: MutationCtx, profileId: Id<'profiles'>,
   const assessmentAnchors = buildAssessmentAnchors(strengthAssessments, cardioAssessments);
   const profileContext = buildProfileContext(profile, trainingProfile, latestBodyMeasurements);
   const baseline = buildBaseline(trainingProfile, assessmentAnchors);
-  const trajectory = buildTrajectory({ bodyTrend, recordHighlights, sessions, trajectoryLogs, trajectorySummary });
-  const currentState = buildCurrentState({ currentSummary, sessions });
+  const trajectory = buildTrajectory({ bodyTrend, recordHighlights, sessions, trajectoryLogs, trajectorySummary, windowDays: trajectoryWindowDays });
+  const currentState = buildCurrentState({ currentStateStartAt, currentSummary, sessions, windowDays: currentStateWindowDays });
   const watchouts = buildWatchouts({ consistency, currentSummary, now, sessions, trainingProfile, trajectorySummary });
   const previous = await ctx.db
     .query('reedJourneySnapshots')
     .withIndex('by_profile_id_and_created_at', q => q.eq('profileId', profileId))
     .order('desc')
     .first();
-  const signals = buildSignals({ consistency, currentSummary, now, previous, recordHighlights, sessions, trainingProfile, trajectorySummary });
+  const signals = buildSignals({ consistency, currentStateWindowDays, currentSummary, now, previous, recordHighlights, sessions, trainingProfile, trajectorySummary, trajectoryWindowDays });
   const renderedContext = renderJourneyContext({ baseline, currentState, profileContext, trajectory, watchouts, signals });
   const fingerprint = simpleHash(JSON.stringify({ baseline, currentState, profileContext, trajectory, watchouts, signals }));
 
@@ -366,20 +368,21 @@ function buildTrajectory(input: {
   sessions: Doc<'liveSessions'>[];
   trajectoryLogs: Doc<'activityLogs'>[];
   trajectorySummary: ReturnType<typeof summarizeTrainingWindow>;
+  windowDays: number;
 }) {
   const topExercises = input.trajectorySummary.byExercise.slice(0, 4).map(item => `${item.exerciseName} (${item.setCount} sets)`);
   const recordHighlights = input.recordHighlights.map(record => `${record.exerciseName}: ${record.label} ${record.displayValue}`);
   const activeDays = new Set(input.trajectoryLogs.map(log => new Date(log.loggedAt).toISOString().slice(0, 10))).size;
   const bodyweightDeltaKg = input.bodyTrend.delta === null ? null : round(input.bodyTrend.delta, 1);
   const summaryParts = [
-    `${input.sessions.length} ended sessions in the last ${TRAJECTORY_WINDOW_DAYS} days`,
+    `${input.sessions.length} ended sessions in ${formatWindowLabel(input.windowDays, TRAJECTORY_WINDOW_DAYS)}`,
     topExercises.length > 0 ? `most work went to ${formatList(topExercises.slice(0, 2))}` : 'limited exercise distribution data',
     recordHighlights.length > 0 ? `${recordHighlights.length} notable record signals` : 'no strong record movement yet',
   ];
 
   return {
     summary: summaryParts.join('; '),
-    windowDays: TRAJECTORY_WINDOW_DAYS,
+    windowDays: input.windowDays,
     completedSessions: input.sessions.length,
     activeDays,
     topExercises,
@@ -389,8 +392,10 @@ function buildTrajectory(input: {
 }
 
 function buildCurrentState(input: {
+  currentStateStartAt: number;
   currentSummary: ReturnType<typeof summarizeTrainingWindow>;
   sessions: Doc<'liveSessions'>[];
+  windowDays: number;
 }) {
   const recentWorkFocus = input.currentSummary.byExercise.slice(0, 3).map(item => item.exerciseName);
   const latestActivity = input.currentSummary.recentActivities[0] ?? null;
@@ -400,10 +405,10 @@ function buildCurrentState(input: {
 
   return {
     summary: input.currentSummary.activityCount > 0
-      ? `${input.currentSummary.activityCount} logged sets in the last ${CURRENT_STATE_WINDOW_DAYS} days with ${recentWorkFocus.length > 0 ? formatList(recentWorkFocus) : 'no clear focus'} leading.`
-      : `No logged training in the last ${CURRENT_STATE_WINDOW_DAYS} days.`,
-    windowDays: CURRENT_STATE_WINDOW_DAYS,
-    recentSessions: countRecentSessions(input.sessions, CURRENT_STATE_WINDOW_DAYS),
+      ? `${input.currentSummary.activityCount} logged sets in ${formatWindowLabel(input.windowDays, CURRENT_STATE_WINDOW_DAYS)} with ${recentWorkFocus.length > 0 ? formatList(recentWorkFocus) : 'no clear focus'} leading.`
+      : `No logged training in ${formatWindowLabel(input.windowDays, CURRENT_STATE_WINDOW_DAYS)}.`,
+    windowDays: input.windowDays,
+    recentSessions: countSessionsSince(input.sessions, input.currentStateStartAt),
     recentSetCount: input.currentSummary.activityCount,
     recentWorkFocus,
     latestSessionAt,
@@ -445,6 +450,7 @@ function buildWatchouts(input: {
 
 function buildSignals(input: {
   consistency: ReturnType<typeof summarizeConsistency>;
+  currentStateWindowDays: number;
   currentSummary: ReturnType<typeof summarizeTrainingWindow>;
   now: number;
   previous: Doc<'reedJourneySnapshots'> | null;
@@ -452,21 +458,23 @@ function buildSignals(input: {
   sessions: Doc<'liveSessions'>[];
   trainingProfile: Doc<'trainingProfiles'>;
   trajectorySummary: ReturnType<typeof summarizeTrainingWindow>;
+  trajectoryWindowDays: number;
 }) {
   const consistencyValue = input.consistency.hasTrainingTarget
     ? Math.min(100, Math.round((input.consistency.currentOnTargetWeekRun / 8) * 100))
     : 0;
   const progressionValue = Math.min(100, input.recordHighlights.length * 18 + Math.min(28, input.trajectorySummary.byExercise.length * 4));
-  const workloadValue = Math.min(100, input.currentSummary.activityCount * 4 + countRecentSessions(input.sessions, CURRENT_STATE_WINDOW_DAYS) * 12);
+  const currentWindowStartAt = input.now - input.currentStateWindowDays * DAY_MS;
+  const workloadValue = Math.min(100, input.currentSummary.activityCount * 4 + countSessionsSince(input.sessions, currentWindowStartAt) * 12);
   const goalAlignmentValue = calculateGoalAlignment(input.trainingProfile, input.trajectorySummary);
   const recoveryRiskValue = calculateRecoveryRisk(input.trainingProfile, input.currentSummary, input.sessions, input.now);
 
   return {
-    consistency: buildSignal('consistency', consistencyValue, 84, 8, input.previous),
-    progression: buildSignal('progression', progressionValue, 84, input.recordHighlights.length, input.previous),
-    workload: buildSignal('workload', workloadValue, 14, input.currentSummary.activityCount, input.previous),
-    goalAlignment: buildSignal('goalAlignment', goalAlignmentValue, 84, input.trajectorySummary.byExercise.length, input.previous),
-    recoveryRisk: buildSignal('recoveryRisk', recoveryRiskValue, 14, input.currentSummary.activityCount, input.previous, true),
+    consistency: buildSignal('consistency', consistencyValue, input.trajectoryWindowDays, 8, input.previous),
+    progression: buildSignal('progression', progressionValue, input.trajectoryWindowDays, input.recordHighlights.length, input.previous),
+    workload: buildSignal('workload', workloadValue, input.currentStateWindowDays, input.currentSummary.activityCount, input.previous),
+    goalAlignment: buildSignal('goalAlignment', goalAlignmentValue, input.trajectoryWindowDays, input.trajectorySummary.byExercise.length, input.previous),
+    recoveryRisk: buildSignal('recoveryRisk', recoveryRiskValue, input.currentStateWindowDays, input.currentSummary.activityCount, input.previous, true),
   };
 }
 
@@ -512,7 +520,7 @@ function calculateRecoveryRisk(
   now: number,
 ) {
   let risk = trainingProfile.baseline.recoveryQuality === 'fragile' ? 70 : trainingProfile.baseline.recoveryQuality === 'mixed' ? 48 : 28;
-  const recentSessions = countRecentSessions(sessions, 7);
+  const recentSessions = countSessionsSince(sessions, now - 7 * DAY_MS);
   if (recentSessions >= 4) risk += 10;
   if (currentSummary.activityCount >= 28) risk += 8;
   const latestSessionAt = sessions.reduce<number | null>((max, session) => {
@@ -633,11 +641,11 @@ function formatRecentTrainingParagraph(
   trajectory: JourneySnapshotInput['trajectory'],
   currentState: JourneySnapshotInput['currentState'],
 ) {
-  const parts = [`Over the last ${trajectory.windowDays} days, ${subject} completed ${trajectory.completedSessions} sessions`];
+  const parts = [`Over ${formatWindowLabel(trajectory.windowDays, TRAJECTORY_WINDOW_DAYS)}, ${subject} completed ${trajectory.completedSessions} sessions`];
   if (trajectory.topExercises.length > 0) {
     parts.push(`Recent work has been concentrated around ${formatList(trajectory.topExercises.slice(0, 3))}`);
   }
-  parts.push(`In the last ${currentState.windowDays} days ${pronouns.subject} logged ${currentState.recentSetCount} sets`);
+  parts.push(`In ${formatWindowLabel(currentState.windowDays, CURRENT_STATE_WINDOW_DAYS)} ${pronouns.subject} logged ${currentState.recentSetCount} sets`);
   if (currentState.latestSessionSummary) parts.push(`Latest notable work was ${currentState.latestSessionSummary}`);
   if (trajectory.recordHighlights.length > 0) parts.push(`Record signals include ${formatList(trajectory.recordHighlights.slice(0, 3))}`);
   if (trajectory.bodyweightDeltaKg !== null) parts.push(`Bodyweight trend is ${signedNumber(trajectory.bodyweightDeltaKg)} kg over the recent window`);
@@ -645,10 +653,10 @@ function formatRecentTrainingParagraph(
 }
 
 function formatCoachReadParagraph(pronouns: ReturnType<typeof getPronouns>, signals: JourneySnapshotInput['signals'], watchouts: string[]) {
-  const consistency = signalNarrative('consistency', signals.consistency, 'current on-target weekly run against the 8-week UI gauge');
-  const progression = signalNarrative('progression', signals.progression, 'recent PR/record signals and breadth of trained movements');
-  const workload = signalNarrative('workload', signals.workload, 'logged set count and finished sessions in the last 14 days');
-  const goalAlignment = signalNarrative('goal alignment', signals.goalAlignment, 'whether recent top movements match the primary training goal');
+  const consistency = signalNarrative('consistency', signals.consistency, 'current on-target weekly run over the available account history, capped at 12 weeks');
+  const progression = signalNarrative('progression', signals.progression, 'recent PR/record signals and breadth of trained movements over the available account history');
+  const workload = signalNarrative('workload', signals.workload, 'logged set count and finished sessions over the current-state window');
+  const goalAlignment = signalNarrative('goal alignment', signals.goalAlignment, 'whether recent top movements match the primary training goal over the available account history');
   const recoveryRisk = signalNarrative('recovery risk', signals.recoveryRisk, 'recovery baseline, recent workload, session frequency, gaps, and constraints');
   const watchoutText = watchouts.length > 0 ? ` The main watchouts are: ${watchouts.join(' ')}` : '';
 
@@ -764,9 +772,25 @@ function formatDuration(seconds: number) {
   return `${minutes}:${remainder}`;
 }
 
-function countRecentSessions(sessions: Doc<'liveSessions'>[], days: number) {
-  const cutoff = Date.now() - days * DAY_MS;
-  return sessions.filter(session => (session.endedAt ?? 0) >= cutoff).length;
+function countSessionsSince(sessions: Doc<'liveSessions'>[], startAt: number) {
+  return sessions.filter(session => (session.endedAt ?? session.startedAt) >= startAt).length;
+}
+
+function effectiveWindowStart(profileCreatedAt: number, now: number, maxWindowDays: number) {
+  return Math.max(profileCreatedAt, now - maxWindowDays * DAY_MS);
+}
+
+function daysBetween(startAt: number, endAt: number) {
+  return Math.max(1, Math.ceil((endAt - startAt) / DAY_MS));
+}
+
+function formatWindowLabel(windowDays: number, maxWindowDays: number) {
+  if (windowDays >= maxWindowDays) {
+    if (maxWindowDays === 84) return 'the last 12 weeks (84 days)';
+    if (maxWindowDays === 14) return 'the last 2 weeks (14 days)';
+    return `the last ${maxWindowDays} days`;
+  }
+  return `the ${windowDays} ${windowDays === 1 ? 'day' : 'days'} since signup`;
 }
 
 function formatGoal(value: string) {
