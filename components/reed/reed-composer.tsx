@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Pressable, TextInput, View } from 'react-native';
+import { Animated, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion, shouldUseNativeDriver } from '@/design/motion';
@@ -35,7 +35,13 @@ export function ReedComposer({
   return (
     <>
       {shouldShowQuickActions ? (
-        <View style={styles.quickActionsRow}>
+        <ScrollView
+          contentContainerStyle={styles.quickActionsContent}
+          horizontal
+          keyboardShouldPersistTaps="handled"
+          showsHorizontalScrollIndicator={false}
+          style={styles.quickActionsScroller}
+        >
           {QUICK_ACTIONS.map(action => (
             <QuickActionChip
               disabled={disabled}
@@ -44,7 +50,7 @@ export function ReedComposer({
               onPress={() => onQuickAction(resolveQuickActionPrompt(action))}
             />
           ))}
-        </View>
+        </ScrollView>
       ) : null}
 
       <ComposerCard
@@ -87,7 +93,10 @@ function QuickActionChip({
       onPress={onPress}
       style={({ pressed }) => [
         styles.quickActionChip,
-        { borderColor: theme.colors.controlBorder },
+        {
+          backgroundColor: theme.colors.controlFill,
+          borderColor: theme.colors.controlBorder,
+        },
         getTapScaleStyle(pressed, disabled),
       ]}
     >

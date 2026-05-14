@@ -186,9 +186,9 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
 
     const exists = session.timeline.some(
-      row =>
+      (row: { sessionExerciseId: string; sets: Array<{ setLogId: string }> }) =>
         row.sessionExerciseId === editingSet.sessionExerciseId &&
-        row.sets.some(setEntry => setEntry.setLogId === editingSet.setLogId),
+        row.sets.some((setEntry: { setLogId: string }) => setEntry.setLogId === editingSet.setLogId),
     );
 
     if (!exists) {
@@ -298,7 +298,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }, [elapsedNow, session?.session.startedAt]);
 
   const fallbackStatus = useMemo<LiveSessionStatusStrip>(() => {
-    const completedSets = session?.timeline.reduce((total, row) => total + row.setCount, 0) ?? 0;
+    const completedSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
     return {
       completedSetsLabel: `${completedSets} ${completedSets === 1 ? 'set' : 'sets'}`,
       durationLabel: elapsedLabel ?? '0m',
@@ -718,7 +718,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           ) : endedSessionsPage.summaries.length > 0 ? (
             <>
               <View style={styles.lastSessionList}>
-                {endedSessionsPage.summaries.map((item, index) => (
+                {endedSessionsPage.summaries.map((item: any, index: number) => (
                   <Pressable
                     accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
                     key={item.sessionId}
@@ -740,7 +740,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
                         <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
                       </View>
                       <ReedText numberOfLines={1} tone="muted" variant="caption">
-                        {item.exercises.slice(0, 3).map(exercise => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
+                        {item.exercises.slice(0, 3).map((exercise: any) => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
                       </ReedText>
                     </View>
                   </Pressable>

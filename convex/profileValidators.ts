@@ -1,5 +1,50 @@
 import { v } from 'convex/values';
 
+export const bodyTypeValidator = v.union(
+  v.literal('skinny'),
+  v.literal('skinny_fat'),
+  v.literal('bulky'),
+  v.literal('high_fat'),
+  v.literal('athletic'),
+);
+
+export const genderIdentityValidator = v.union(
+  v.literal('male'),
+  v.literal('female'),
+  v.literal('nonbinary'),
+  v.literal('prefer_not_to_say'),
+);
+
+export const dailyMovementValidator = v.union(
+  v.literal('mostly_sitting'),
+  v.literal('on_feet'),
+  v.literal('walks_a_lot'),
+  v.literal('physical_job'),
+  v.literal('restless'),
+);
+
+export const idleMovementValidator = v.union(
+  v.literal('mostly_still'),
+  v.literal('fidget_sometimes'),
+  v.literal('always_moving'),
+);
+
+export const usualStepsValidator = v.union(
+  v.literal('not_sure'),
+  v.literal('under_4k'),
+  v.literal('four_to_8k'),
+  v.literal('eight_to_12k'),
+  v.literal('over_12k'),
+);
+
+export const eatingRoutineValidator = v.union(
+  v.literal('consistent'),
+  v.literal('hit_or_miss'),
+  v.literal('often_under_eat'),
+  v.literal('often_overeat'),
+  v.literal('not_sure'),
+);
+
 export const recoveryQualityValidator = v.union(
   v.literal('solid'),
   v.literal('mixed'),
@@ -133,6 +178,7 @@ export const trainingProfileValidator = v.object({
     birthDay: v.number(),
     birthMonth: v.number(),
     birthYear: v.number(),
+    genderIdentity: v.optional(v.union(genderIdentityValidator, v.null())),
     heightCm: v.number(),
     recoveryQuality: recoveryQualityValidator,
   }),
@@ -140,12 +186,21 @@ export const trainingProfileValidator = v.object({
     areas: v.array(constraintAreaValidator),
     details: v.record(v.string(), constraintDetailValidator),
   }),
-  aiContextSummary: v.optional(v.string()),
   goalDetails: v.record(v.string(), goalDetailValidator),
   profileId: v.id('profiles'),
   profilingConsent: v.literal(true),
   rankedGoals: v.array(primaryGoalValidator),
   source: v.union(v.literal('onboarding'), v.literal('manual')),
+  startingPoint: v.optional(v.object({
+    bodyType: v.union(bodyTypeValidator, v.null()),
+    genderIdentity: v.optional(v.union(genderIdentityValidator, v.null())),
+  })),
+  lifestyle: v.optional(v.object({
+    dailyMovement: v.union(dailyMovementValidator, v.null()),
+    eatingRoutine: v.union(eatingRoutineValidator, v.null()),
+    idleMovement: v.optional(v.union(idleMovementValidator, v.null())),
+    usualSteps: v.union(usualStepsValidator, v.null()),
+  })),
   trainingReality: v.object({
     effort: effortValidator,
     equipmentAccess: v.array(equipmentAccessValidator),
@@ -165,6 +220,7 @@ export const completeOnboardingArgsFields = {
     birthDay: v.number(),
     birthMonth: v.number(),
     birthYear: v.number(),
+    genderIdentity: v.union(genderIdentityValidator, v.null()),
     heightCm: v.number(),
     recoveryQuality: recoveryQualityValidator,
   }),
@@ -195,6 +251,15 @@ export const completeOnboardingArgsFields = {
   userNotes: v.union(v.string(), v.null()),
   profilingConsent: v.literal(true),
   rankedGoals: v.array(primaryGoalValidator),
+  startingPoint: v.object({
+    bodyType: v.union(bodyTypeValidator, v.null()),
+  }),
+  lifestyle: v.object({
+    dailyMovement: v.union(dailyMovementValidator, v.null()),
+    eatingRoutine: v.union(eatingRoutineValidator, v.null()),
+    idleMovement: v.union(idleMovementValidator, v.null()),
+    usualSteps: v.union(usualStepsValidator, v.null()),
+  }),
   trainingReality: v.object({
     effort: effortValidator,
     equipmentAccess: v.array(equipmentAccessValidator),
@@ -212,6 +277,7 @@ export type CompleteOnboardingPayload = {
     birthDay: number;
     birthMonth: number;
     birthYear: number;
+    genderIdentity: 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say' | null;
     heightCm: number;
     recoveryQuality: 'solid' | 'mixed' | 'fragile';
   };
@@ -239,6 +305,15 @@ export type CompleteOnboardingPayload = {
   userNotes: string | null;
   profilingConsent: true;
   rankedGoals: string[];
+  startingPoint: {
+    bodyType: 'skinny' | 'skinny_fat' | 'bulky' | 'high_fat' | 'athletic' | null;
+  };
+  lifestyle: {
+    dailyMovement: 'mostly_sitting' | 'on_feet' | 'walks_a_lot' | 'physical_job' | 'restless' | null;
+    eatingRoutine: 'consistent' | 'hit_or_miss' | 'often_under_eat' | 'often_overeat' | 'not_sure' | null;
+    idleMovement: 'mostly_still' | 'fidget_sometimes' | 'always_moving' | null;
+    usualSteps: 'not_sure' | 'under_4k' | 'four_to_8k' | 'eight_to_12k' | 'over_12k' | null;
+  };
   trainingReality: {
     effort: 'easy' | 'moderate' | 'hard';
     equipmentAccess: string[];

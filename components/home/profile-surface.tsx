@@ -231,7 +231,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
   const consistency = useQuery(api.trainingKnowledge.getConsistency, {});
 
   const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
-  const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find(metric => metric.metricKey === 'body_weight') ?? null;
+  const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find((metric: { metricKey: string }) => metric.metricKey === 'body_weight') ?? null;
   const editDraft = useMemo(() => {
     if (!viewerTrainingProfile) {
       return null;

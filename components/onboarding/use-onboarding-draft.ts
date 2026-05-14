@@ -42,6 +42,8 @@ function buildSequence(draft: OnboardingDraft, includeConsent = true): SequenceE
     { kind: 'step', step: 'reed-intro' },
     ...(includeConsent ? [{ kind: 'step' as const, step: 'consent' as const }] : []),
     { kind: 'step', step: 'baseline' },
+    { kind: 'step', step: 'body-type' },
+    { kind: 'step', step: 'lifestyle' },
     { kind: 'step', step: 'training-reality' },
     { kind: 'step', step: 'priorities' },
   ];

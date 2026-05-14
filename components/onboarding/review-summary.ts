@@ -81,6 +81,69 @@ function buildBudgetSummary(draft: OnboardingDraft): string {
     : 'Training budget not yet specified.';
 }
 
+const BODY_TYPE_PROSE_LABELS: Record<NonNullable<OnboardingDraft['bodyType']>, string> = {
+  athletic: 'athletic',
+  bulky: 'bulky',
+  high_fat: 'higher body fat',
+  skinny: 'skinny',
+  skinny_fat: 'skinny-fat',
+};
+
+const GENDER_PROSE_LABELS: Record<NonNullable<OnboardingDraft['genderIdentity']>, string> = {
+  female: 'female',
+  male: 'male',
+  nonbinary: 'non-binary',
+  prefer_not_to_say: 'prefer not to say',
+};
+
+function buildStartingPointSummary(draft: OnboardingDraft): string {
+  const parts: string[] = [];
+  if (draft.bodyType) parts.push(`body type: ${BODY_TYPE_PROSE_LABELS[draft.bodyType]}`);
+  if (draft.genderIdentity) parts.push(`gender: ${GENDER_PROSE_LABELS[draft.genderIdentity]}`);
+  return parts.length > 0 ? `Starting point — ${parts.join('; ')}.` : 'No starting point context selected.';
+}
+
+const DAILY_MOVEMENT_PROSE_LABELS: Record<NonNullable<OnboardingDraft['dailyMovement']>, string> = {
+  mostly_sitting: 'mostly sitting',
+  on_feet: 'often on your feet',
+  walks_a_lot: 'out and about most days',
+  physical_job: 'a physical job',
+  restless: 'restless or fidgety',
+};
+
+const IDLE_MOVEMENT_PROSE_LABELS: Record<NonNullable<OnboardingDraft['idleMovement']>, string> = {
+  mostly_still: 'mostly still when seated',
+  fidget_sometimes: 'some fidgeting when seated',
+  always_moving: 'restless or always moving',
+};
+
+const STEPS_PROSE_LABELS: Record<NonNullable<OnboardingDraft['usualSteps']>, string> = {
+  not_sure: 'steps unknown',
+  under_4k: 'under 4k steps',
+  four_to_8k: '4-8k steps',
+  eight_to_12k: '8-12k steps',
+  over_12k: '12k+ steps',
+};
+
+const EATING_ROUTINE_PROSE_LABELS: Record<NonNullable<OnboardingDraft['eatingRoutine']>, string> = {
+  consistent: 'consistent eating routine',
+  hit_or_miss: 'hit-or-miss eating routine',
+  often_under_eat: 'often under-eating',
+  often_overeat: 'often over-eating',
+  not_sure: 'eating routine unclear',
+};
+
+function buildLifestyleSummary(draft: OnboardingDraft): string {
+  const parts = [
+    draft.dailyMovement ? DAILY_MOVEMENT_PROSE_LABELS[draft.dailyMovement] : null,
+    draft.usualSteps ? STEPS_PROSE_LABELS[draft.usualSteps] : null,
+    draft.idleMovement ? IDLE_MOVEMENT_PROSE_LABELS[draft.idleMovement] : null,
+    draft.eatingRoutine ? EATING_ROUTINE_PROSE_LABELS[draft.eatingRoutine] : null,
+  ].filter(Boolean);
+
+  return parts.length > 0 ? capitalize(parts.join('; ')) + '.' : 'No lifestyle context selected.';
+}
+
 function buildRecoverySummary(draft: OnboardingDraft): string {
   if (!draft.recoveryQuality) return 'Recovery stance not yet specified.';
   const label = RECOVERY_PROSE_LABELS[draft.recoveryQuality];
@@ -146,6 +209,8 @@ export function buildReviewSections(draft: OnboardingDraft): ReviewSection[] {
   return [
     { heading: 'Priority', body: buildPrioritySummary(draft), editStep: 'priorities' },
     { heading: 'Training budget', body: buildBudgetSummary(draft), editStep: 'training-reality' },
+    { heading: 'Starting point', body: buildStartingPointSummary(draft), editStep: 'body-type' },
+    { heading: 'Lifestyle', body: buildLifestyleSummary(draft), editStep: 'lifestyle' },
     { heading: 'Recovery', body: buildRecoverySummary(draft), editStep: 'baseline' },
     { heading: 'Constraints', body: buildConstraintsSummary(draft), editStep: 'constraints' },
     draft.userNotes.trim().length > 0

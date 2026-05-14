@@ -295,6 +295,7 @@ export type StoredTrainingProfile = {
       birthDay: number;
       birthMonth: number;
       birthYear: number;
+      genderIdentity?: OnboardingDraft['genderIdentity'];
       heightCm: number;
       recoveryQuality: OnboardingDraft['recoveryQuality'];
     };
@@ -303,7 +304,17 @@ export type StoredTrainingProfile = {
       details: OnboardingDraft['constraintDetails'];
     };
     goalDetails: OnboardingDraft['goalDetails'];
+    lifestyle?: {
+      dailyMovement: OnboardingDraft['dailyMovement'];
+      eatingRoutine: OnboardingDraft['eatingRoutine'];
+      idleMovement?: OnboardingDraft['idleMovement'];
+      usualSteps: OnboardingDraft['usualSteps'];
+    };
     rankedGoals: OnboardingDraft['rankedGoals'];
+    startingPoint?: {
+      bodyType: OnboardingDraft['bodyType'];
+      genderIdentity?: OnboardingDraft['genderIdentity'];
+    };
     userNotes?: string | null;
     trainingReality: {
       effort: OnboardingDraft['effort'];
@@ -334,9 +345,15 @@ export function draftFromTrainingProfile(data: StoredTrainingProfile, displayNam
     equipmentAccess: data.trainingProfile.trainingReality.equipmentAccess,
     goalDetails: data.trainingProfile.goalDetails,
     heightCm: formatRequiredInput(data.trainingProfile.baseline.heightCm),
+    dailyMovement: data.trainingProfile.lifestyle?.dailyMovement ?? null,
+    eatingRoutine: data.trainingProfile.lifestyle?.eatingRoutine ?? null,
+    idleMovement: data.trainingProfile.lifestyle?.idleMovement ?? null,
+    usualSteps: data.trainingProfile.lifestyle?.usualSteps ?? null,
     profilingConsent: true,
     rankedGoals: data.trainingProfile.rankedGoals,
     recoveryQuality: data.trainingProfile.baseline.recoveryQuality,
+    bodyType: data.trainingProfile.startingPoint?.bodyType ?? null,
+    genderIdentity: data.trainingProfile.baseline.genderIdentity ?? data.trainingProfile.startingPoint?.genderIdentity ?? 'prefer_not_to_say',
     userNotes: data.trainingProfile.userNotes ?? '',
     restingHeartRate: formatOptionalInput(currentBodyMetrics.get('resting_heart_rate') ?? null),
     sessionDuration: data.trainingProfile.trainingReality.sessionDuration,

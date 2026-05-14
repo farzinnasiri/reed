@@ -14,13 +14,20 @@ import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { RECOVERY_OPTIONS } from './labels';
 import { OnboardingShell } from './onboarding-shell';
-import type { OnboardingDraft, RecoveryQuality } from './types';
+import type { GenderIdentity, OnboardingDraft, RecoveryQuality } from './types';
 
 const RECOVERY_COPY: Record<RecoveryQuality, string> = {
   solid: 'Usually rested, stable energy.',
   mixed: 'Some poor sleep or inconsistent energy.',
   fragile: 'Poor sleep, high stress, or often un-restored.',
 };
+
+const GENDER_OPTIONS: Array<{ accessibilityLabel?: string; label: string; value: GenderIdentity }> = [
+  { label: 'Male', value: 'male' },
+  { label: 'Female', value: 'female' },
+  { accessibilityLabel: 'Non-binary', label: 'Nonbinary', value: 'nonbinary' },
+  { accessibilityLabel: 'Prefer not to say', label: 'Prefer not', value: 'prefer_not_to_say' },
+];
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -219,6 +226,20 @@ export function StepBaseline({
             <ReedText tone="danger" variant="caption">{weightError}</ReedText>
           ) : null}
         </View>
+      </View>
+
+      <View style={[styles.divider, { backgroundColor: theme.colors.borderSoft }]} />
+
+      {/* Gender identity — optional context */}
+      <View style={styles.fieldGroup}>
+        <ReedText variant="bodyStrong">Gender</ReedText>
+        <SegmentedControl<GenderIdentity>
+          compact
+          onChange={value => onUpdateDraft({ genderIdentity: value })}
+          options={GENDER_OPTIONS}
+          value={draft.genderIdentity ?? 'prefer_not_to_say'}
+        />
+
       </View>
 
       <View style={[styles.divider, { backgroundColor: theme.colors.borderSoft }]} />

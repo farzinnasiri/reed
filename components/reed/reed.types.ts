@@ -11,6 +11,7 @@ export type ReedSurfaceProps = {
 export type CoachItem = {
   body: string;
   id: string;
+  sourceMessageId?: string;
   status: CoachItemStatus;
   title: string;
   type: 'caution' | 'check_in' | 'experiment' | 'focus';

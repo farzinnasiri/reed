@@ -44,6 +44,7 @@ export function buildCompleteOnboardingPayload(draft: OnboardingDraft) {
       birthDay: draft.birthDay ?? 0,
       birthMonth: draft.birthMonth ?? 0,
       birthYear: draft.birthYear ?? 0,
+      genderIdentity: draft.genderIdentity,
       heightCm: parseRequiredNumber(draft.heightCm),
       recoveryQuality: draft.recoveryQuality,
     },
@@ -112,6 +113,15 @@ export function buildCompleteOnboardingPayload(draft: OnboardingDraft) {
     userNotes: normalizeText(draft.userNotes),
     profilingConsent: true as const,
     rankedGoals: draft.rankedGoals,
+    startingPoint: {
+      bodyType: draft.bodyType,
+    },
+    lifestyle: {
+      dailyMovement: draft.dailyMovement,
+      eatingRoutine: draft.eatingRoutine,
+      idleMovement: draft.idleMovement,
+      usualSteps: draft.usualSteps,
+    },
     trainingReality: {
       effort: draft.effort,
       equipmentAccess: draft.equipmentAccess,

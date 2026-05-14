@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, type ScrollView as ScrollViewType } from 'react-native';
+import { Keyboard, Platform, View, type ScrollView as ScrollViewType } from 'react-native';
+import { useQuery } from 'convex/react';
+import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
 import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
-import { summarizeReplyQuote } from './reed.presenter';
 import { createLocalMockReedRuntime } from './reed.runtime';
 import { styles } from './reed.styles';
 import { ReedThread } from './reed-thread';
@@ -21,11 +22,16 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const [isViewingCoachItems, setIsViewingCoachItems] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [composerDockHeight, setComposerDockHeight] = useState(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const runtime = useMemo(() => createLocalMockReedRuntime(), []);
-  const { label: reedPresenceLabel, markOnline, shouldDelayAssistantStart } = useReedPresence();
+  const presence = useQuery(api.reed.getPresence, {});
+  const { isOnline: isReedOnline, label: reedPresenceLabel, markOnline, shouldDelayAssistantStart } = useReedPresence(presence?.lastMessageAt ?? null);
   const {
     coachItems,
+    hasMoreMessages,
+    isMessageSaved,
+    loadOlderMessages,
     messages,
     pendingRunId,
     resolveCoachItem,
@@ -43,22 +49,33 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     () => coachItems.filter(item => item.status === 'open'),
     [coachItems],
   );
-  const hasUserMessage = useMemo(
-    () => messages.some(message => message.role === 'user'),
-    [messages],
-  );
-
-  const shouldShowQuickActions = !hasUserMessage && voiceState.status === 'idle';
+  const shouldShowQuickActions = !isReedOnline && voiceState.status === 'idle';
   const headerTopInset = insets.top + theme.spacing.sm;
   const contentTopPadding = headerTopInset + 44 + theme.spacing.lg;
+  const keyboardLift = Platform.OS === 'android' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+  const composerBottomPadding = keyboardLift > 0 ? theme.spacing.xs : dockReservedSpace + theme.spacing.xs;
   const scrollBottomSpace = composerDockHeight > 0
-    ? dockReservedSpace + composerDockHeight + theme.spacing.lg
-    : dockReservedSpace + theme.spacing.xxxl;
+    ? composerBottomPadding + keyboardLift + composerDockHeight + theme.spacing.lg
+    : composerBottomPadding + keyboardLift + theme.spacing.xxxl;
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', event => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(timeout);
-  }, [messages, openCoachItems.length, voiceState.status]);
+  }, [keyboardLift, messages, openCoachItems.length, voiceState.status]);
 
   function clearComposerState() {
     setComposerText('');
@@ -75,12 +92,6 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     if (sendPrompt(text, 'voice')) {
       clearComposerState();
     }
-  }
-
-  function handleReplyToMessage(messageText: string) {
-    const quote = summarizeReplyQuote(messageText);
-    resetVoice();
-    setComposerText(quote ? `About “${quote}”: ` : 'About that: ');
   }
 
   if (isViewingCoachItems) {
@@ -108,8 +119,10 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
       <ReedThread
         contentPaddingBottom={scrollBottomSpace}
         contentPaddingTop={contentTopPadding}
+        hasMoreMessages={hasMoreMessages}
         messages={messages}
-        onReplyToMessage={message => handleReplyToMessage(message.text)}
+        onLoadOlderMessages={loadOlderMessages}
+        isMessageSaved={isMessageSaved}
         onSaveCoachItem={saveCoachItem}
         scrollRef={scrollRef}
       />
@@ -123,7 +136,11 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         }}
         style={[
           styles.composerDock,
-          { paddingBottom: dockReservedSpace + theme.spacing.xs, paddingHorizontal: theme.spacing.sm },
+          {
+            bottom: keyboardLift,
+            paddingBottom: composerBottomPadding,
+            paddingHorizontal: theme.spacing.sm,
+          },
         ]}
       >
         <ReedComposer

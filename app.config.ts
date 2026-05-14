@@ -26,9 +26,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   splash: {
-    image: './assets/images/splash-icon.png',
+    image: './assets/images/logo-mark-dark.svg',
     resizeMode: 'contain',
-    backgroundColor: '#000000',
+    backgroundColor: '#f7f7f4',
   },
   ios: {
     supportsTablet: true,
@@ -50,6 +50,19 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/images/logo-mark-dark.svg',
+        imageWidth: 180,
+        resizeMode: 'contain',
+        backgroundColor: '#f7f7f4',
+        dark: {
+          image: './assets/images/logo-mark.svg',
+          backgroundColor: '#040404',
+        },
+      },
+    ],
     'expo-asset',
     'expo-web-browser',
     [

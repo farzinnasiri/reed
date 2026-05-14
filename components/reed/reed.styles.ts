@@ -50,11 +50,12 @@ export const styles = StyleSheet.create({
   todayCopy: {
     gap: 3,
   },
-  quickActionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  quickActionsScroller: {
+    marginHorizontal: -12,
+  },
+  quickActionsContent: {
     gap: 8,
-    paddingHorizontal: 2,
+    paddingHorizontal: 12,
   },
   quickActionChip: {
     alignItems: 'center',
@@ -100,6 +101,19 @@ export const styles = StyleSheet.create({
     gap: 14,
     paddingTop: 4,
   },
+  messageCluster: {
+    gap: 14,
+  },
+  dateIndicatorRow: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  dateIndicatorPill: {
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
   messageRowLeft: {
     alignItems: 'flex-start',
     width: '100%',
@@ -112,18 +126,18 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 8,
-    maxWidth: '100%',
+    maxWidth: '92%',
   },
   userMessageGroup: {
     alignItems: 'flex-end',
-    maxWidth: '82%',
+    maxWidth: '80%',
   },
   messageBubble: {
     alignSelf: 'stretch',
     borderRadius: reedRadii.lg,
     borderWidth: 1,
     flexShrink: 1,
-    gap: 9,
+    gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -133,17 +147,23 @@ export const styles = StyleSheet.create({
   messageBubbleRight: {
     borderBottomRightRadius: 6,
   },
-  messageSideActions: {
-    gap: 2,
-    paddingTop: 8,
+  messageActionBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 24,
   },
-  messageSideAction: {
+  messageActionCluster: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  messageInlineAction: {
     alignItems: 'center',
     borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    height: 44,
+    height: 24,
     justifyContent: 'center',
-    width: 44,
+    width: 24,
   },
   typingBubble: {
     alignItems: 'center',

@@ -11,6 +11,8 @@ export type OnboardingBaseStep =
   | 'reed-intro'
   | 'consent'
   | 'baseline'
+  | 'body-type'
+  | 'lifestyle'
   | 'training-reality'
   | 'priorities'
   | 'constraints'
@@ -27,6 +29,8 @@ export const BASE_ONBOARDING_STEPS: readonly OnboardingBaseStep[] = [
   'reed-intro',
   'consent',
   'baseline',
+  'body-type',
+  'lifestyle',
   'training-reality',
   'priorities',
   'constraints',
@@ -35,6 +39,12 @@ export const BASE_ONBOARDING_STEPS: readonly OnboardingBaseStep[] = [
   'review',
 ] as const;
 
+export type BodyType = 'skinny' | 'skinny_fat' | 'bulky' | 'high_fat' | 'athletic';
+export type GenderIdentity = 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say';
+export type DailyMovement = 'mostly_sitting' | 'on_feet' | 'walks_a_lot' | 'physical_job' | 'restless';
+export type IdleMovement = 'mostly_still' | 'fidget_sometimes' | 'always_moving';
+export type UsualSteps = 'not_sure' | 'under_4k' | 'four_to_8k' | 'eight_to_12k' | 'over_12k';
+export type EatingRoutine = 'consistent' | 'hit_or_miss' | 'often_under_eat' | 'often_overeat' | 'not_sure';
 export type RecoveryQuality = 'solid' | 'mixed' | 'fragile';
 export type TrainingAge = 'starting' | 'under_6_months' | 'six_to_18_months' | 'over_18_months';
 export type WeeklySessions = 'one_to_two' | 'two_to_four' | 'four_plus';
@@ -129,6 +139,16 @@ export type OnboardingDraft = {
   skeletalMuscleMassKg: string;
   restingHeartRate: string;
 
+  // Optional profile context
+  bodyType: BodyType | null;
+  genderIdentity: GenderIdentity | null;
+
+  // Step: Lifestyle
+  dailyMovement: DailyMovement | null;
+  idleMovement: IdleMovement | null;
+  usualSteps: UsualSteps | null;
+  eatingRoutine: EatingRoutine | null;
+
   // Step 3 — Training Reality
   trainingAge: TrainingAge;
   weeklySessions: WeeklySessions;
@@ -168,6 +188,12 @@ export const EMPTY_DRAFT: OnboardingDraft = {
   bodyFatPercent: '',
   skeletalMuscleMassKg: '',
   restingHeartRate: '',
+  bodyType: null,
+  genderIdentity: 'prefer_not_to_say',
+  dailyMovement: null,
+  idleMovement: null,
+  usualSteps: null,
+  eatingRoutine: null,
   trainingAge: 'starting',
   weeklySessions: 'one_to_two',
   sessionDuration: 'under_45',

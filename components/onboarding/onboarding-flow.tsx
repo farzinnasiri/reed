@@ -1,17 +1,19 @@
 // ---------------------------------------------------------------------------
 // OnboardingFlow — top-level orchestrator.
 // Renders the current step and wires navigation + draft callbacks.
-// The sequence is dynamic: Name → Gesture → Reed → Consent → Baseline → Training Reality → Goals →
+// The sequence is dynamic: Name → Gesture → Reed → Consent → Baseline → Body Type → Lifestyle → Training Reality → Goals →
 // [Goal Details based on rank] → Constraints → Review
 // ---------------------------------------------------------------------------
 
 import { StepBaseline } from './step-baseline';
+import { StepBodyType } from './step-body-type';
 import { StepConsent } from './step-consent';
 import { StepGestureDemo } from './step-gesture-demo';
 import { StepName } from './step-name';
 import { StepReedIntro } from './step-reed-intro';
 import { StepConstraints } from './step-constraints';
 import { StepGoalDetail } from './step-goal-detail';
+import { StepLifestyle } from './step-lifestyle';
 import { StepPriorities } from './step-priorities';
 import { StepPerformanceAnchors } from './step-performance-anchors';
 import { StepNotes } from './step-notes';
@@ -142,6 +144,36 @@ export function OnboardingFlow({
     case 'baseline':
       return (
         <StepBaseline
+          cancelLabel={cancelLabel}
+          onCancel={onCancel}
+          backPlacement={backPlacement}
+          draft={draft}
+          onBack={handleBack}
+          onContinue={goNext}
+          onUpdateDraft={updateDraft}
+          stepCount={stepCount}
+          stepIndex={stepIndex}
+        />
+      );
+
+    case 'body-type':
+      return (
+        <StepBodyType
+          cancelLabel={cancelLabel}
+          onCancel={onCancel}
+          backPlacement={backPlacement}
+          draft={draft}
+          onBack={handleBack}
+          onContinue={goNext}
+          onUpdateDraft={updateDraft}
+          stepCount={stepCount}
+          stepIndex={stepIndex}
+        />
+      );
+
+    case 'lifestyle':
+      return (
+        <StepLifestyle
           cancelLabel={cancelLabel}
           onCancel={onCancel}
           backPlacement={backPlacement}

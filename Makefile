@@ -61,7 +61,13 @@ convex-env-push: env-check
 	if [ -n "$$GOOGLE_CLIENT_ID" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_CLIENT_ID "$$GOOGLE_CLIENT_ID"; fi; \
 	if [ -n "$$GOOGLE_CLIENT_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_CLIENT_SECRET "$$GOOGLE_CLIENT_SECRET"; fi; \
 	if [ -n "$$SITE_URL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" SITE_URL "$$SITE_URL"; fi; \
-	if [ -n "$$BETTER_AUTH_TRUSTED_ORIGINS" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_TRUSTED_ORIGINS "$$BETTER_AUTH_TRUSTED_ORIGINS"; fi
+	if [ -n "$$BETTER_AUTH_TRUSTED_ORIGINS" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_TRUSTED_ORIGINS "$$BETTER_AUTH_TRUSTED_ORIGINS"; fi; \
+	if [ -n "$$XAI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" XAI_API_KEY "$$XAI_API_KEY"; fi; \
+	if [ -n "$$GOOGLE_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_API_KEY "$$GOOGLE_API_KEY"; fi; \
+	if [ -n "$$GEMINI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GEMINI_API_KEY "$$GEMINI_API_KEY"; fi; \
+	if [ -n "$$REED_CHAT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CHAT_MODEL "$$REED_CHAT_MODEL"; fi; \
+	if [ -n "$$REED_SUMMARY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_SUMMARY_MODEL "$$REED_SUMMARY_MODEL"; fi; \
+	if [ -n "$$REED_PROMPT_ADMIN_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROMPT_ADMIN_SECRET "$$REED_PROMPT_ADMIN_SECRET"; fi
 
 eas-env-sync: env-check
 	@set -a; source "$(ENV_FILE)"; set +a; \

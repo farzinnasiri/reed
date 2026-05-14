@@ -1,4 +1,5 @@
 import { internalMutation, mutation, query } from './_generated/server';
+import { internal } from './_generated/api';
 import { ConvexError, v } from 'convex/values';
 import { authComponent } from './auth';
 import {
@@ -7,7 +8,6 @@ import {
 } from './profileValidators';
 import type { Id } from './_generated/dataModel';
 import type { QueryCtx, MutationCtx } from './_generated/server';
-import { buildTrainingProfileContextSummary } from './trainingProfileContext';
 
 const profileValidator = v.object({
   _creationTime: v.number(),
@@ -157,13 +157,7 @@ export const completeOnboarding = mutation({
     validateOnboardingPayload(args);
 
     const now = Date.now();
-    const aiContextSummary = buildTrainingProfileContextSummary({
-      displayName: args.displayName,
-      payload: args,
-      now,
-    });
     const trainingProfile = {
-      aiContextSummary,
       baseline: args.baseline,
       constraints: args.constraints,
       goalDetails: args.goalDetails,
@@ -171,6 +165,8 @@ export const completeOnboarding = mutation({
       profilingConsent: true as const,
       rankedGoals: args.rankedGoals,
       source: 'onboarding' as const,
+      lifestyle: args.lifestyle,
+      startingPoint: args.startingPoint,
       trainingReality: args.trainingReality,
       updatedAt: now,
       userNotes: args.userNotes,
@@ -210,6 +206,11 @@ export const completeOnboarding = mutation({
       throw new ConvexError('Profile was not saved.');
     }
 
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
+      profileId: profile._id,
+      trigger: 'onboarding_updated',
+    });
+
     return updatedProfile;
   },
 });
@@ -231,20 +232,15 @@ export const updateTrainingProfile = mutation({
     }
 
     const now = Date.now();
-    const aiContextSummary = buildTrainingProfileContextSummary({
-      displayName: args.displayName,
-      payload: args,
-      now,
-    });
-
     await ctx.db.patch(existingTrainingProfile._id, {
-      aiContextSummary,
       baseline: args.baseline,
       constraints: args.constraints,
       goalDetails: args.goalDetails,
       profilingConsent: true,
       rankedGoals: args.rankedGoals,
       source: 'manual',
+      lifestyle: args.lifestyle,
+      startingPoint: args.startingPoint,
       trainingReality: args.trainingReality,
       updatedAt: now,
       userNotes: args.userNotes,
@@ -256,6 +252,11 @@ export const updateTrainingProfile = mutation({
     await ctx.db.patch(profile._id, {
       displayName: args.displayName.trim(),
       updatedAt: now,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
+      profileId: profile._id,
+      trigger: 'onboarding_updated',
     });
 
     const updatedProfile = await ctx.db.get(profile._id);

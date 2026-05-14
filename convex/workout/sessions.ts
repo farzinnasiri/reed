@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from '../_generated/server';
+import { internal } from '../_generated/api';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { requireViewerProfile } from '../profiles';
@@ -343,10 +344,16 @@ export const finishSession = mutation({
       return { deletedEmptySession: true };
     }
 
+    const endedAt = Date.now();
     await ctx.db.patch(session._id, {
       activeProcess: null,
-      endedAt: Date.now(),
+      endedAt,
       status: 'ended',
+    });
+
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
+      profileId: profile._id,
+      trigger: 'session_ended',
     });
 
     return { deletedEmptySession: false };

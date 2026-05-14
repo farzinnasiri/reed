@@ -1,13 +1,12 @@
 import { useLocalSearchParams } from 'expo-router';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { authClient } from '@/lib/auth-client';
 import { api } from '@/convex/_generated/api';
-import { GlassSurface } from '@/components/ui/glass-surface';
-import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
+import { AppSplash } from '@/components/ui/app-splash';
 import { AuthEntry } from '@/components/home/auth-entry';
 import { SignedInShell } from '@/components/home/signed-in-shell';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
@@ -166,56 +165,11 @@ export default function HomeScreen() {
   return (
     <ScreenBackdrop>
       {isPending ? (
-        <View
-          style={[
-            styles.loadingScreen,
-            {
-              paddingHorizontal: theme.spacing.lg,
-              paddingVertical: theme.spacing.xl,
-            },
-          ]}
-        >
-          <GlassSurface>
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted">Checking the current session.</ReedText>
-            </View>
-          </GlassSurface>
-        </View>
+        <AppSplash message="Checking the current session." />
       ) : session && viewer === undefined ? (
-        <View
-          style={[
-            styles.loadingScreen,
-            {
-              paddingHorizontal: theme.spacing.lg,
-              paddingVertical: theme.spacing.xl,
-            },
-          ]}
-        >
-          <GlassSurface>
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted">Finishing your account setup.</ReedText>
-            </View>
-          </GlassSurface>
-        </View>
+        <AppSplash message="Finishing your account setup." />
       ) : session && viewer === null ? (
-        <View
-          style={[
-            styles.loadingScreen,
-            {
-              paddingHorizontal: theme.spacing.lg,
-              paddingVertical: theme.spacing.xl,
-            },
-          ]}
-        >
-          <GlassSurface>
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted">Finishing your account setup.</ReedText>
-            </View>
-          </GlassSurface>
-        </View>
+        <AppSplash message="Finishing your account setup." />
       ) : session && welcomeName ? (
         <LoveLetter
           displayName={welcomeName}
@@ -302,18 +256,9 @@ const styles = StyleSheet.create({
   keyboard: {
     flex: 1,
   },
-  loadingScreen: {
-    flex: 1,
-    justifyContent: 'center',
-  },
   content: {
     flexGrow: 1,
     gap: 18,
     justifyContent: 'center',
-  },
-  loadingRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
   },
 });
