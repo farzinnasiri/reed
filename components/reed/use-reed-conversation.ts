@@ -174,7 +174,13 @@ export function useReedConversation({
     ));
     markOnline();
 
-    void sendReedMessage({ clientNonce: nonce, content: text, source })
+    void sendReedMessage({
+      clientNonce: nonce,
+      clientNow: now,
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      content: text,
+      source,
+    })
       .then(() => {
         markOnline();
       })

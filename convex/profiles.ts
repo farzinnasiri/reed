@@ -116,6 +116,104 @@ export const viewerTrainingProfile = query({
   },
 });
 
+export const bodyWeightTrend = query({
+  args: {
+    rangeDays: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const authUser = await authComponent.safeGetAuthUser(ctx);
+    if (!authUser) {
+      return [];
+    }
+    const profile = await ctx.db
+      .query('profiles')
+      .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
+      .unique();
+    if (!profile) {
+      return [];
+    }
+    const rangeDays = Math.min(Math.max(Math.round(args.rangeDays), 7), 365);
+    const startAt = Date.now() - rangeDays * 24 * 60 * 60 * 1000;
+    const rows = await ctx.db
+      .query('bodyMeasurements')
+      .withIndex('by_profile_id_and_metric_key_and_observed_at', q =>
+        q.eq('profileId', profile._id).eq('metricKey', 'body_weight').gte('observedAt', startAt),
+      )
+      .order('asc')
+      .collect();
+
+    return rows.map(row => ({
+      _id: row._id,
+      observedAt: row.observedAt,
+      source: row.source,
+      unit: row.unit,
+      value: row.value,
+    }));
+  },
+});
+
+export const upsertTodayBodyWeight = mutation({
+  args: {
+    dayEndAt: v.number(),
+    dayStartAt: v.number(),
+    observedAt: v.number(),
+    valueKg: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const valueKg = roundMetric(args.valueKg);
+    if (!isInRange(valueKg, 25, 300)) {
+      throw new ConvexError('Weight must be between 25 and 300 kg.');
+    }
+    if (!(args.dayStartAt < args.observedAt && args.observedAt <= args.dayEndAt)) {
+      throw new ConvexError('Weight log time is outside the selected day.');
+    }
+    if (args.dayEndAt - args.dayStartAt > 48 * 60 * 60 * 1000) {
+      throw new ConvexError('Weight log day is invalid.');
+    }
+
+    const manualRowsToday = await ctx.db
+      .query('bodyMeasurements')
+      .withIndex('by_profile_id_and_metric_key_and_observed_at', q =>
+        q
+          .eq('profileId', profile._id)
+          .eq('metricKey', 'body_weight')
+          .gte('observedAt', args.dayStartAt)
+          .lt('observedAt', args.dayEndAt),
+      )
+      .filter(q => q.eq(q.field('source'), 'manual'))
+      .take(8);
+
+    const [existing, ...duplicates] = manualRowsToday;
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        observedAt: args.observedAt,
+        value: valueKg,
+      });
+      for (const duplicate of duplicates) {
+        await ctx.db.delete(duplicate._id);
+      }
+    } else {
+      await ctx.db.insert('bodyMeasurements', {
+        metricKey: 'body_weight',
+        observedAt: args.observedAt,
+        profileId: profile._id,
+        source: 'manual',
+        unit: 'kg',
+        value: valueKg,
+      });
+    }
+
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
+      profileId: profile._id,
+      trigger: 'body_metrics_updated',
+    });
+
+    return null;
+  },
+});
+
 export const ensureViewerProfile = mutation({
   args: {},
   returns: profileValidator,
@@ -553,6 +651,8 @@ async function upsertCardioBenchmarkIfChanged(
 }
 
 async function loadLatestBodyMetrics(ctx: QueryCtx, profileId: Id<'profiles'>) {
+  // Current body state is derived from bodyMeasurements only. In particular,
+  // latest bodyweight is the newest row with metricKey='body_weight'.
   const metricKeys = ['body_weight', 'body_fat_percent', 'skeletal_muscle_mass', 'resting_heart_rate'] as const;
   const rows = await Promise.all(
     metricKeys.map(metricKey =>

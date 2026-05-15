@@ -692,10 +692,10 @@ function getAge(birthYear: number, birthMonth: number, birthDay: number) {
 function shouldAppendJourney(previous: Doc<'reedJourneySnapshots'>, next: JourneySnapshotInput) {
   if (previous.fingerprint === next.fingerprint) return false;
 
-  // Profile edits are explicit user intent. Even when signal scores do not move
-  // enough to pass the material-change threshold, the latest journey context
-  // should record the edited onboarding/profile baseline.
-  if (next.trigger === 'onboarding_updated') return true;
+  // Profile/body edits are explicit user intent. Even when signal scores do not
+  // move enough to pass the material-change threshold, the latest journey context
+  // should record the edited baseline/body state.
+  if (next.trigger === 'onboarding_updated' || next.trigger === 'body_metrics_updated') return true;
 
   const changeMagnitude =
     Math.abs(previous.signals.consistency.value - next.signals.consistency.value) * 0.24 +

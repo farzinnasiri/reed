@@ -166,7 +166,7 @@ async function resolveLiveSessionSetDerivedLoadFields(
     return {};
   }
 
-  const latestBodyweight = await getLatestBodyweight(ctx, args.profileId, args.loggedAt);
+  const latestBodyweight = await getLatestBodyweightAtOrBefore(ctx, args.profileId, args.loggedAt);
 
   if (latestBodyweight === null) {
     return {};
@@ -205,7 +205,7 @@ async function resolveQuickLogDerivedLoadFields(
     return {};
   }
 
-  const latestBodyweight = await getLatestBodyweight(ctx, args.profileId, args.loggedAt);
+  const latestBodyweight = await getLatestBodyweightAtOrBefore(ctx, args.profileId, args.loggedAt);
 
   if (latestBodyweight === null) {
     return {};
@@ -217,7 +217,11 @@ async function resolveQuickLogDerivedLoadFields(
   };
 }
 
-async function getLatestBodyweight(
+// Bodyweight is not denormalized onto profile/training profile. The source of truth is
+// the latest bodyMeasurements row for metricKey='body_weight'. For historical set
+// logging, use the latest weight at or before the set time so old sessions don't get
+// recomputed with a future weigh-in.
+async function getLatestBodyweightAtOrBefore(
   ctx: MutationCtx,
   profileId: Id<'profiles'>,
   observedAt: number,

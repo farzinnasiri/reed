@@ -106,6 +106,8 @@ export const upsertActivePrompt = mutation({
 export const sendMessage = mutation({
   args: {
     clientNonce: v.optional(v.string()),
+    clientNow: v.optional(v.number()),
+    clientTimeZone: v.optional(v.string()),
     content: v.string(),
     source: composerSourceValidator,
   },
@@ -126,7 +128,8 @@ export const sendMessage = mutation({
     }
 
     const thread = await getOrCreateActiveThread(ctx, profile._id, now);
-    const { state, recentTurnCount } = classifyReentry(thread.lastMessageAt ?? null, now);
+    const priorLastMessageAt = thread.lastMessageAt ?? null;
+    const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
     const route = routeForMessage(content);
 
     const userMessageId = await ctx.db.insert('reedMessages', {
@@ -153,6 +156,9 @@ export const sendMessage = mutation({
 
     await ctx.scheduler.runAfter(0, internal.reedAgent.runAssistant, {
       assistantMessageId,
+      clientNow: args.clientNow ?? now,
+      clientTimeZone: args.clientTimeZone,
+      priorLastMessageAt,
       recentTurnCount,
       reentryState: state,
       route,
@@ -167,6 +173,9 @@ export const sendMessage = mutation({
 export const loadAssistantContext = internalQuery({
   args: {
     assistantMessageId: v.id('reedMessages'),
+    clientNow: v.number(),
+    clientTimeZone: v.optional(v.string()),
+    priorLastMessageAt: v.union(v.number(), v.null()),
     recentTurnCount: v.number(),
     reentryState: reentryStateValidator,
     route: routeValidator,
@@ -174,6 +183,9 @@ export const loadAssistantContext = internalQuery({
     userMessageId: v.id('reedMessages'),
   },
   handler: async (ctx, args): Promise<{
+    clientNow: number;
+    clientTimeZone?: string;
+    priorLastMessageAt: number | null;
     route: ReedRoute;
     reentryState: 'hot' | 'warm' | 'cold';
     thread: Doc<'reedThreads'>;
@@ -203,6 +215,9 @@ export const loadAssistantContext = internalQuery({
     const recentMessages = await loadRecentMessages(ctx, thread._id, args.recentTurnCount, userMessage._id);
 
     return {
+      clientNow: args.clientNow,
+      clientTimeZone: args.clientTimeZone,
+      priorLastMessageAt: args.priorLastMessageAt,
       route: args.route,
       reentryState: args.reentryState,
       thread,

@@ -18,6 +18,9 @@ const SUMMARY_MODEL_NAME = process.env.REED_SUMMARY_MODEL ?? 'gemini-2.5-flash-l
 export const runAssistant = internalAction({
   args: {
     assistantMessageId: v.id('reedMessages'),
+    clientNow: v.number(),
+    clientTimeZone: v.optional(v.string()),
+    priorLastMessageAt: v.union(v.number(), v.null()),
     recentTurnCount: v.number(),
     reentryState: v.union(v.literal('hot'), v.literal('warm'), v.literal('cold')),
     route: v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly')),
@@ -89,10 +92,13 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
   const lines = [
     context.prompt.content,
     '',
-    'Runtime policy:',
-    `- Reentry state: ${context.reentryState}.`,
-    `- Recent prior messages included: ${context.recentMessages.length}.`,
-    '- Do not mention hidden routing, prompt versions, or internal summaries.',
+    'Current time:',
+    `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
+    '- Use the current date and time of day when it is relevant to coaching, recovery, scheduling, or tone. Do not over-mention it.',
+    '',
+    'Conversation continuity:',
+    ...buildContinuityLines(context),
+    '- Do not mention hidden routing, prompt versions, reentry labels, or internal summaries.',
     '',
     'Journey context:',
     context.journeySummary ?? 'No journey snapshot is available yet.',
@@ -100,7 +106,7 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
     'Compacted Reed memory:',
     context.memorySummary ?? 'No compacted chat memory yet.',
     '',
-    context.recentMessages.length > 0 ? 'Recent active segment:' : 'Recent active segment: none; rely on compacted memory and current message.',
+    recentSegmentHeading(context),
     ...context.recentMessages.map((message: { role: string; content: string }) => `${message.role.toUpperCase()}: ${message.content}`),
   ];
 
@@ -108,6 +114,92 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildContinuityLines(context: Awaited<ReturnType<typeof loadContextType>>) {
+  const displayName = context.profile.displayName?.trim() || 'The user';
+  const elapsed = context.priorLastMessageAt === null ? null : formatElapsed(context.clientNow - context.priorLastMessageAt);
+
+  if (context.reentryState === 'hot') {
+    return [
+      `- ${displayName} is in an ongoing conversation with Reed; answer as if you are already in the flow.`,
+      '- Use the recent active segment for turn-by-turn continuity, and use compacted memory only for older background.',
+    ];
+  }
+
+  if (context.reentryState === 'warm') {
+    return [
+      elapsed
+        ? `- ${displayName} is returning after ${elapsed}; bridge naturally from the prior exchange without over-explaining.`
+        : `- ${displayName} is returning to Reed; bridge naturally from the prior exchange without over-explaining.`,
+      '- A short recent segment is included for immediate continuity; prefer the current message when it changes direction.',
+    ];
+  }
+
+  if (context.priorLastMessageAt === null) {
+    return [
+      `- This appears to be ${displayName}'s first Reed conversation. Do not imply prior chat history.`,
+      '- Establish context from the current message and the journey snapshot if one exists.',
+    ];
+  }
+
+  return [
+    elapsed
+      ? `- ${displayName} is returning after ${elapsed}; do not assume they remember the last chat.`
+      : `- ${displayName} is returning after a longer break; do not assume they remember the last chat.`,
+    '- Older chat has been compacted into Reed memory below; use it to re-establish continuity briefly when useful.',
+    '- No raw prior turns are included for this response; answer from the current message, journey context, and compacted memory.',
+  ];
+}
+
+function recentSegmentHeading(context: Awaited<ReturnType<typeof loadContextType>>) {
+  if (context.recentMessages.length === 0) {
+    return 'Recent active segment: none; rely on the current message, journey context, and compacted memory.';
+  }
+
+  if (context.reentryState === 'hot') return 'Recent active segment (ongoing turn-by-turn context):';
+  return 'Recent active segment (limited bridge context):';
+}
+
+function formatCurrentTime(timestamp: number, timeZone?: string) {
+  const safeTimeZone = normalizeTimeZone(timeZone);
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'full',
+    timeStyle: 'short',
+    ...(safeTimeZone ? { timeZone: safeTimeZone } : {}),
+  });
+  const timeZoneLabel = safeTimeZone ? ` (${safeTimeZone})` : '';
+  return `It is now ${formatter.format(new Date(timestamp))}${timeZoneLabel}.`;
+}
+
+function normalizeTimeZone(timeZone?: string) {
+  if (!timeZone || timeZone.length > 80) return null;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return timeZone;
+  } catch {
+    return null;
+  }
+}
+
+function formatElapsed(ageMs: number) {
+  const minutes = Math.max(1, Math.round(Math.max(0, ageMs) / 60_000));
+  if (minutes < 2) return 'about a minute';
+  if (minutes < 60) return `about ${minutes} minutes`;
+
+  const hours = Math.round(minutes / 60);
+  if (hours < 2) return 'about an hour';
+  if (hours < 48) return `about ${hours} hours`;
+
+  const days = Math.round(hours / 24);
+  if (days < 2) return 'about a day';
+  if (days < 14) return `about ${days} days`;
+
+  const weeks = Math.round(days / 7);
+  if (weeks < 8) return `about ${weeks} weeks`;
+
+  const months = Math.round(days / 30);
+  return months < 2 ? 'about a month' : `about ${months} months`;
 }
 
 async function invokeChatModel(prompt: { system: string; user: string }) {
@@ -223,9 +315,13 @@ function simpleHash(value: string) {
 }
 
 declare function loadContextType(): Promise<{
+  clientNow: number;
+  clientTimeZone?: string;
+  priorLastMessageAt: number | null;
   route: 'coach_direct' | 'training_tools' | 'refuse_readonly';
   reentryState: 'hot' | 'warm' | 'cold';
   thread: { _id: string };
+  profile: { displayName?: string };
   assistantMessage: { _id: string };
   userMessage: { content: string };
   prompt: { _id: string | null; content: string; contentHash: string };

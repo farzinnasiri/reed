@@ -1,14 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { api } from '@/convex/_generated/api';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { buildCompleteOnboardingPayload } from '@/components/onboarding/step-review';
 import type { OnboardingBaseStep } from '@/components/onboarding/types';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { ReedButton } from '@/components/ui/reed-button';
+import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
@@ -126,6 +128,13 @@ const consistencyWeekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
 
 type ProfileDetailKind = 'body' | 'goal' | 'training';
 type ProfilePeriod = '30d' | '90d' | 'week';
+type BodyWeightPoint = {
+  _id: string;
+  observedAt: number;
+  source: 'manual' | 'onboarding';
+  unit: 'kg' | 'percent' | 'bpm';
+  value: number;
+};
 type ProgressMetric = 'load' | 'reps' | 'sets';
 type TrainingWindowGroup = {
   groupId: string;
@@ -212,8 +221,11 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
   const viewerTrainingProfile = useQuery(api.profiles.viewerTrainingProfile, {});
+  const bodyWeightTrend = useQuery(api.profiles.bodyWeightTrend, { rangeDays: 90 });
   const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
+  const upsertTodayBodyWeight = useMutation(api.profiles.upsertTodayBodyWeight);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isWeightSheetOpen, setIsWeightSheetOpen] = useState(false);
   const [activeDetail, setActiveDetail] = useState<ProfileDetailKind | null>(null);
   const [editStep, setEditStep] = useState<OnboardingBaseStep | null>(null);
   const [period, setPeriod] = useState<ProfilePeriod>('week');
@@ -283,6 +295,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
   }
 
   return (
+    <>
     <ScrollView
       contentContainerStyle={[
         styles.content,
@@ -316,6 +329,12 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
           <CoachNoteCard note={coachNote} />
 
           <ConsistencySurface consistency={consistency} />
+
+          <BodyWeightSurface
+            latestWeight={bodyWeight}
+            onLogWeight={() => setIsWeightSheetOpen(true)}
+            series={bodyWeightTrend}
+          />
 
           <ProgressSurface
             metric={progressMetric}
@@ -384,6 +403,22 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
         </View>
       )}
     </ScrollView>
+    <BodyWeightLogSheet
+      latestWeight={bodyWeight}
+      onClose={() => setIsWeightSheetOpen(false)}
+      onSave={async valueKg => {
+        const now = Date.now();
+        const bounds = getLocalDayBounds(now);
+        await upsertTodayBodyWeight({
+          dayEndAt: bounds.endAt,
+          dayStartAt: bounds.startAt,
+          observedAt: now,
+          valueKg,
+        });
+      }}
+      visible={isWeightSheetOpen}
+    />
+    </>
   );
 }
 
@@ -638,6 +673,227 @@ function ConsistencyGrid({ weekGrid }: { weekGrid: ProfileConsistencyResult['wee
         ))}
       </View>
     </View>
+  );
+}
+
+function BodyWeightSurface({
+  latestWeight,
+  onLogWeight,
+  series,
+}: {
+  latestWeight: { observedAt: number; unit?: string; value: number } | null;
+  onLogWeight: () => void;
+  series: BodyWeightPoint[] | undefined;
+}) {
+  const { theme } = useReedTheme();
+  const trend = useMemo(() => summarizeBodyWeightTrend(series ?? []), [series]);
+  const hasSeries = (series?.length ?? 0) >= 2;
+
+  return (
+    <GlassSurface contentStyle={styles.bodyWeightContent} style={styles.bodyWeightSurface}>
+      <View style={styles.bodyWeightHeader}>
+        <View style={styles.bodyWeightHeaderCopy}>
+          <ReedText variant="section">Bodyweight</ReedText>
+          <ReedText tone="muted" variant="caption">Trend signal, not a daily verdict.</ReedText>
+        </View>
+        <Pressable
+          accessibilityLabel="Log bodyweight"
+          onPress={onLogWeight}
+          style={({ pressed }) => [
+            styles.weightLogButton,
+            { backgroundColor: theme.colors.accentPrimary },
+            getTapScaleStyle(pressed),
+          ]}
+        >
+          <Ionicons color={String(theme.colors.accentPrimaryText)} name="add" size={18} />
+          <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">Log</ReedText>
+        </Pressable>
+      </View>
+
+      <View style={styles.bodyWeightReadoutRow}>
+        <View style={styles.bodyWeightReadout}>
+          <ReedText style={styles.bodyWeightValue} variant="display">
+            {latestWeight ? formatMetric(latestWeight.value) : '—'}
+          </ReedText>
+          <ReedText tone="muted" variant="label">kg now</ReedText>
+        </View>
+        <View style={styles.bodyWeightTrendCopy}>
+          <ReedText variant="bodyStrong">{trend.summary}</ReedText>
+          <ReedText tone="muted" variant="caption">{latestWeight ? `Last logged ${formatDate(latestWeight.observedAt)}` : 'One quick log starts the trend.'}</ReedText>
+        </View>
+      </View>
+
+      {series === undefined ? (
+        <ProgressSkeleton />
+      ) : hasSeries ? (
+        <BodyWeightChart points={series} />
+      ) : (
+        <View style={[styles.bodyWeightEmptyChart, { borderColor: theme.colors.controlBorder }]}>
+          <ReedText variant="bodyStrong">No trend yet</ReedText>
+          <ReedText tone="muted" variant="caption">Log a few mornings. Reed will smooth the noise into a useful line.</ReedText>
+        </View>
+      )}
+    </GlassSurface>
+  );
+}
+
+function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
+  const { theme } = useReedTheme();
+  const width = 320;
+  const height = 136;
+  const paddingX = 10;
+  const paddingY = 18;
+  const values = points.map(point => point.value);
+  const minValue = Math.min(...values);
+  const maxValue = Math.max(...values);
+  const valueSpan = Math.max(1, maxValue - minValue);
+  const startAt = points[0]?.observedAt ?? Date.now();
+  const endAt = points[points.length - 1]?.observedAt ?? startAt;
+  const timeSpan = Math.max(1, endAt - startAt);
+  const coords = points.map(point => {
+    const x = paddingX + ((point.observedAt - startAt) / timeSpan) * (width - paddingX * 2);
+    const y = paddingY + (1 - ((point.value - minValue) / valueSpan)) * (height - paddingY * 2);
+    return { ...point, x, y };
+  });
+  const path = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const averageY = paddingY + (1 - ((average - minValue) / valueSpan)) * (height - paddingY * 2);
+
+  return (
+    <View style={styles.bodyWeightChartWrap}>
+      <Svg height={height} preserveAspectRatio="none" width="100%" viewBox={`0 0 ${width} ${height}`}>
+        <Line
+          stroke={String(theme.colors.controlBorder)}
+          strokeDasharray="5 7"
+          strokeWidth={1}
+          x1={paddingX}
+          x2={width - paddingX}
+          y1={averageY}
+          y2={averageY}
+        />
+        <Path d={path} fill="none" stroke={String(theme.colors.accentPrimary)} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
+        {coords.map((point, index) => (
+          <Circle
+            cx={point.x}
+            cy={point.y}
+            fill={String(index === coords.length - 1 ? theme.colors.accentPrimary : theme.colors.canvasSecondary)}
+            key={point._id}
+            r={index === coords.length - 1 ? 4.5 : 3}
+            stroke={String(theme.colors.accentPrimary)}
+            strokeWidth={1.5}
+          />
+        ))}
+      </Svg>
+      <View style={styles.bodyWeightChartLabels}>
+        <ReedText tone="muted" variant="caption">{formatDate(startAt)}</ReedText>
+        <ReedText tone="muted" variant="caption">{formatDate(endAt)}</ReedText>
+      </View>
+    </View>
+  );
+}
+
+function BodyWeightLogSheet({
+  latestWeight,
+  onClose,
+  onSave,
+  visible,
+}: {
+  latestWeight: { observedAt: number; value: number } | null;
+  onClose: () => void;
+  onSave: (valueKg: number) => Promise<void>;
+  visible: boolean;
+}) {
+  const { theme } = useReedTheme();
+  const { height } = useWindowDimensions();
+  const [isMounted, setIsMounted] = useState(visible);
+  const sheetProgress = useRef(new Animated.Value(0)).current;
+  const [weightInput, setWeightInput] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const parsedWeight = parseOptionalNumber(weightInput);
+  const canSave = parsedWeight !== null && parsedWeight >= 25 && parsedWeight <= 300 && !isSaving;
+  const translateY = sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] });
+  const overlayOpacity = sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
+
+  useEffect(() => {
+    if (visible) {
+      setIsMounted(true);
+      setWeightInput(latestWeight ? formatMetric(latestWeight.value) : '');
+      setErrorMessage(null);
+      sheetProgress.setValue(0);
+      createTiming(sheetProgress, 1, reedMotion.durations.mode + 80).start();
+      return;
+    }
+
+    if (!isMounted) return;
+    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(({ finished }) => {
+      if (finished) setIsMounted(false);
+    });
+  }, [isMounted, latestWeight, sheetProgress, visible]);
+
+  async function handleSave() {
+    if (!canSave || parsedWeight === null) return;
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      await onSave(parsedWeight);
+      onClose();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function requestClose() {
+    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(() => {
+      setIsMounted(false);
+      onClose();
+    });
+  }
+
+  if (!isMounted) return null;
+
+  return (
+    <Modal animationType="none" onRequestClose={requestClose} transparent visible={isMounted}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetKeyboardView}>
+        <Animated.View style={[styles.sheetOverlay, { backgroundColor: theme.colors.overlayScrim, opacity: overlayOpacity }]}>
+          <Pressable accessibilityLabel="Close bodyweight logger" onPress={requestClose} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+        <Animated.View style={[styles.sheetDock, { transform: [{ translateY }] }]}>
+          <GlassSurface contentStyle={styles.weightSheetContent} style={styles.weightSheetSurface}>
+            <View style={[styles.weightSheetHandle, { backgroundColor: theme.colors.handleFill }]} />
+            <View style={styles.weightSheetHeader}>
+              <View style={styles.weightSheetTitleBlock}>
+                <ReedText variant="title">Log weight</ReedText>
+                <ReedText tone="muted" variant="caption">Today’s value replaces today’s manual log.</ReedText>
+              </View>
+              <Pressable accessibilityLabel="Close" onPress={requestClose} style={({ pressed }) => [styles.weightSheetClose, getTapScaleStyle(pressed)]}>
+                <Ionicons color={String(theme.colors.textMuted)} name="close" size={20} />
+              </Pressable>
+            </View>
+            <View style={styles.weightInputRow}>
+              <ReedInput
+                autoFocus
+                keyboardType="decimal-pad"
+                label="Weight"
+                onChangeText={setWeightInput}
+                placeholder="83.4"
+                returnKeyType="done"
+                style={styles.weightInput}
+                value={weightInput}
+              />
+              <ReedText style={styles.weightUnitLabel} variant="section">kg</ReedText>
+            </View>
+            {latestWeight ? (
+              <ReedText tone="muted" variant="caption">Last: {formatMetric(latestWeight.value)} kg · {formatDate(latestWeight.observedAt)}</ReedText>
+            ) : null}
+            {errorMessage ? <ReedText tone="danger" variant="caption">{errorMessage}</ReedText> : null}
+            <ReedButton disabled={!canSave} label={isSaving ? 'Saving…' : 'Save'} onPress={handleSave} variant="primary" />
+          </GlassSurface>
+        </Animated.View>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -1119,6 +1375,66 @@ function getCurrentWeekBounds() {
   };
 }
 
+function getLocalDayBounds(timestamp: number) {
+  const start = new Date(timestamp);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 1);
+  return { endAt: end.getTime(), startAt: start.getTime() };
+}
+
+function summarizeBodyWeightTrend(points: BodyWeightPoint[]) {
+  if (points.length < 2) {
+    return { deltaKg: null, summary: 'Needs a few logs' };
+  }
+
+  const first = points[0];
+  const last = points[points.length - 1];
+  const deltaKg = roundDisplay(last.value - first.value);
+  const windowLabel = formatBodyTrendWindow(first.observedAt, last.observedAt);
+  if (Math.abs(deltaKg) < 0.2) {
+    return { deltaKg, summary: `Stable ${windowLabel}` };
+  }
+
+  return { deltaKg, summary: `${deltaKg > 0 ? '+' : ''}${formatMetric(deltaKg)} kg ${windowLabel}` };
+}
+
+function formatBodyTrendWindow(startAt: number, endAt: number) {
+  const daySpan = Math.max(0, Math.round((endAt - startAt) / (24 * 60 * 60 * 1000)));
+  if (daySpan === 0) {
+    return 'today';
+  }
+  if (daySpan === 1) {
+    return 'since yesterday';
+  }
+  if (daySpan < 14) {
+    return `over ${daySpan} days`;
+  }
+  const weekSpan = Math.round(daySpan / 7);
+  if (weekSpan < 8) {
+    return `over ${weekSpan} weeks`;
+  }
+  return `over ${daySpan} days`;
+}
+
+function roundDisplay(value: number) {
+  return Math.round(value * 10) / 10;
+}
+
+function parseOptionalNumber(value: string) {
+  const trimmed = value.trim().replace(',', '.');
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return 'Could not save. Try again.';
+}
+
 function getProfilePeriodRange(period: ProfilePeriod) {
   const now = Date.now();
   if (period === 'week') {
@@ -1592,6 +1908,55 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
+  bodyWeightChartLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
+  bodyWeightChartWrap: {
+    gap: 4,
+  },
+  bodyWeightContent: {
+    gap: 16,
+    padding: 20,
+  },
+  bodyWeightEmptyChart: {
+    borderRadius: reedRadii.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    gap: 4,
+    minHeight: 120,
+    justifyContent: 'center',
+    padding: 14,
+  },
+  bodyWeightHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  bodyWeightHeaderCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  bodyWeightReadout: {
+    minWidth: 112,
+  },
+  bodyWeightReadoutRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 18,
+  },
+  bodyWeightSurface: {
+    marginTop: 8,
+  },
+  bodyWeightTrendCopy: {
+    flex: 1,
+    gap: 3,
+    paddingBottom: 7,
+  },
+  bodyWeightValue: {
+    letterSpacing: -1.4,
+  },
   bestEffortList: {
     gap: 0,
   },
@@ -1905,6 +2270,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 30,
   },
+  sheetDock: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  sheetKeyboardView: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  sheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+  },
   sectionStack: {
     gap: 8,
   },
@@ -1924,6 +2302,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 18,
+  },
+  weightInput: {
+    fontSize: 34,
+    fontWeight: '800',
+    minHeight: 74,
+  },
+  weightInputRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  weightLogButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    flexDirection: 'row',
+    gap: 4,
+    minHeight: 38,
+    paddingHorizontal: 12,
+  },
+  weightSheetClose: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  weightSheetContent: {
+    gap: 16,
+    paddingBottom: 28,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+  },
+  weightSheetHandle: {
+    alignSelf: 'center',
+    borderRadius: reedRadii.pill,
+    height: 4,
+    width: 42,
+  },
+  weightSheetHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  weightSheetSurface: {
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  weightSheetTitleBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  weightUnitLabel: {
+    paddingBottom: 17,
   },
   updateHint: {
     alignItems: 'center',
