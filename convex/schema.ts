@@ -196,6 +196,37 @@ export default defineSchema({
   })
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt']),
+  reedAttitudes: defineTable({
+    key: v.string(),
+    name: v.string(),
+    description: v.string(),
+    prompt: v.string(),
+    status: v.union(v.literal('active'), v.literal('archived')),
+    sortOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_key', ['key'])
+    .index('by_status_and_sort_order', ['status', 'sortOrder']),
+  reedProfileAiSettings: defineTable({
+    profileId: v.id('profiles'),
+    selectedAttitudeId: v.optional(v.id('reedAttitudes')),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index('by_profile_id', ['profileId']),
+  profileInsights: defineTable({
+    profileId: v.id('profiles'),
+    content: v.string(),
+    status: v.union(v.literal('active'), v.literal('stale'), v.literal('failed')),
+    staleReason: v.optional(v.string()),
+    sourceFingerprint: v.string(),
+    sourceChangedAt: v.number(),
+    generatedAt: v.number(),
+    modelName: v.string(),
+    error: v.optional(v.string()),
+  })
+    .index('by_profile_id', ['profileId'])
+    .index('by_profile_id_and_status', ['profileId', 'status']),
   reedPromptVersions: defineTable({
     key: v.string(),
     content: v.string(),

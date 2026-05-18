@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
-import Svg, { Circle, Line, Path } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { api } from '@/convex/_generated/api';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { buildCompleteOnboardingPayload } from '@/components/onboarding/step-review';
@@ -241,6 +241,8 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
   });
   const recordHighlights = useQuery(api.trainingKnowledge.getRecordHighlights, { limit: 3 });
   const consistency = useQuery(api.trainingKnowledge.getConsistency, {});
+  const profileInsight = useQuery(api.profileInsight.getCurrent, {});
+  const ensureProfileInsight = useMutation(api.profileInsight.ensureFresh);
 
   const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
   const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find((metric: { metricKey: string }) => metric.metricKey === 'body_weight') ?? null;
@@ -251,9 +253,15 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
 
     return draftFromTrainingProfile(viewerTrainingProfile as StoredTrainingProfile, displayName);
   }, [displayName, viewerTrainingProfile]);
+  useEffect(() => {
+    void ensureProfileInsight({ clientNow: Date.now() });
+  }, [ensureProfileInsight]);
+
   const coachNote = useMemo(
-    () => formatCoachNote(trainingProfile, bodyWeight, progressSummary, consistency),
-    [bodyWeight, consistency, progressSummary, trainingProfile],
+    () => profileInsight?.content
+      ? { lead: '', body: profileInsight.content }
+      : formatCoachNote(trainingProfile, bodyWeight, progressSummary, consistency),
+    [bodyWeight, consistency, profileInsight?.content, progressSummary, trainingProfile],
   );
 
   if (isSettingsOpen) {
@@ -500,8 +508,8 @@ function CoachNoteCard({ note }: { note: { body: string; lead: string } }) {
   return (
     <GlassSurface contentStyle={styles.coachNoteContent} style={styles.coachNoteSurface}>
       <ReedText variant="body" style={styles.coachNoteBody}>
-        <ReedText variant="bodyStrong">{note.lead}</ReedText>
-        {' '}
+        {note.lead ? <ReedText variant="bodyStrong">{note.lead}</ReedText> : null}
+        {note.lead ? ' ' : ''}
         {note.body}
       </ReedText>
       <ReedText tone="muted" variant="caption" style={styles.coachNoteSignoff}>
@@ -742,7 +750,7 @@ function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
   const width = 320;
   const height = 136;
   const paddingX = 10;
-  const paddingY = 18;
+  const paddingY = 22;
   const values = points.map(point => point.value);
   const minValue = Math.min(...values);
   const maxValue = Math.max(...values);
@@ -758,6 +766,15 @@ function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
   const path = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
   const average = values.reduce((sum, value) => sum + value, 0) / values.length;
   const averageY = paddingY + (1 - ((average - minValue) / valueSpan)) * (height - paddingY * 2);
+  const first = coords[0];
+  const latest = coords[coords.length - 1];
+  const peak = coords.reduce((best, point) => point.value > best.value ? point : best, coords[0]);
+  const valueLabels = dedupeChartLabels([
+    { label: `${formatMetric(peak.value)}kg`, x: peak.x, y: peak.y - 10 },
+    { label: `${formatMetric(first.value)}kg`, x: first.x, y: height - 6 },
+    { label: `${formatMetric(latest.value)}kg`, x: latest.x, y: height - 6, anchor: 'end' as const },
+  ]);
+  const averageLabel = { value: `${formatMetric(average)}kg`, label: 'avg', x: width - paddingX, y: Math.max(17, averageY - 7), anchor: 'end' as const };
 
   return (
     <View style={styles.bodyWeightChartWrap}>
@@ -783,6 +800,39 @@ function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
             strokeWidth={1.5}
           />
         ))}
+        <SvgText
+          fill={String(theme.colors.textPrimary)}
+          fontFamily="Outfit_800ExtraBold"
+          fontSize={10}
+          textAnchor={averageLabel.anchor}
+          x={Math.min(width - paddingX, Math.max(paddingX, averageLabel.x))}
+          y={Math.min(height - 12, Math.max(10, averageLabel.y))}
+        >
+          {averageLabel.value}
+        </SvgText>
+        <SvgText
+          fill={String(theme.colors.textMuted)}
+          fontFamily="Outfit_600SemiBold"
+          fontSize={8}
+          textAnchor={averageLabel.anchor}
+          x={Math.min(width - paddingX, Math.max(paddingX, averageLabel.x))}
+          y={Math.min(height - 3, Math.max(18, averageLabel.y + 9))}
+        >
+          {averageLabel.label}
+        </SvgText>
+        {valueLabels.map(item => (
+          <SvgText
+            fill={String(theme.colors.textMuted)}
+            fontFamily="Outfit_600SemiBold"
+            fontSize={9}
+            key={`${item.label}-${item.x.toFixed(1)}-${item.y.toFixed(1)}`}
+            textAnchor={item.anchor ?? 'start'}
+            x={Math.min(width - paddingX, Math.max(paddingX, item.x))}
+            y={Math.min(height - 4, Math.max(10, item.y))}
+          >
+            {item.label}
+          </SvgText>
+        ))}
       </Svg>
       <View style={styles.bodyWeightChartLabels}>
         <ReedText tone="muted" variant="caption">{formatDate(startAt)}</ReedText>
@@ -790,6 +840,15 @@ function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
       </View>
     </View>
   );
+}
+
+function dedupeChartLabels(labels: Array<{ anchor?: 'start' | 'end'; label: string; x: number; y: number }>) {
+  const kept: Array<{ anchor?: 'start' | 'end'; label: string; x: number; y: number }> = [];
+  for (const label of labels) {
+    const overlaps = kept.some(existing => Math.abs(existing.x - label.x) < 34 && Math.abs(existing.y - label.y) < 12);
+    if (!overlaps) kept.push(label);
+  }
+  return kept;
 }
 
 function BodyWeightLogSheet({
@@ -1384,19 +1443,61 @@ function getLocalDayBounds(timestamp: number) {
 }
 
 function summarizeBodyWeightTrend(points: BodyWeightPoint[]) {
-  if (points.length < 2) {
+  const sorted = [...points].sort((left, right) => left.observedAt - right.observedAt);
+  if (sorted.length < 2) {
     return { deltaKg: null, summary: 'Needs a few logs' };
   }
 
-  const first = points[0];
-  const last = points[points.length - 1];
-  const deltaKg = roundDisplay(last.value - first.value);
-  const windowLabel = formatBodyTrendWindow(first.observedAt, last.observedAt);
-  if (Math.abs(deltaKg) < 0.2) {
-    return { deltaKg, summary: `Stable ${windowLabel}` };
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const medianGapDays = getMedianBodyLogGapDays(sorted);
+  const latestAgeDays = Math.floor((Date.now() - last.observedAt) / (24 * 60 * 60 * 1000));
+
+  if (latestAgeDays >= 21) {
+    return { deltaKg: null, summary: `Last logged ${formatDate(last.observedAt)}` };
   }
 
-  return { deltaKg, summary: `${deltaKg > 0 ? '+' : ''}${formatMetric(deltaKg)} kg ${windowLabel}` };
+  if (sorted.length >= 6 && medianGapDays <= 3) {
+    return summarizeBodyAverageShift(sorted, 3);
+  }
+
+  if (sorted.length >= 4 && medianGapDays <= 8) {
+    return summarizeBodyAverageShift(sorted, 2);
+  }
+
+  const deltaKg = roundDisplay(last.value - first.value);
+  if (sorted.length === 2) {
+    return { deltaKg, summary: `${formatBodyDelta(deltaKg)} since ${formatDate(first.observedAt)}` };
+  }
+
+  return { deltaKg, summary: `${formatBodyDelta(deltaKg)} since ${formatDate(first.observedAt)}` };
+}
+
+function summarizeBodyAverageShift(points: BodyWeightPoint[], windowSize: number) {
+  const recent = points.slice(-windowSize);
+  const prior = points.slice(-windowSize * 2, -windowSize);
+  const deltaKg = roundDisplay(averageBodyWeight(recent) - averageBodyWeight(prior));
+  if (Math.abs(deltaKg) < 0.2) {
+    return { deltaKg, summary: 'Holding steady' };
+  }
+  return { deltaKg, summary: `${formatBodyDelta(deltaKg)} recently` };
+}
+
+function getMedianBodyLogGapDays(points: BodyWeightPoint[]) {
+  const gaps = points
+    .slice(1)
+    .map((point, index) => (point.observedAt - points[index].observedAt) / (24 * 60 * 60 * 1000))
+    .sort((left, right) => left - right);
+  return gaps[Math.floor(gaps.length / 2)] ?? Number.POSITIVE_INFINITY;
+}
+
+function averageBodyWeight(points: BodyWeightPoint[]) {
+  return points.reduce((sum, point) => sum + point.value, 0) / Math.max(1, points.length);
+}
+
+function formatBodyDelta(deltaKg: number) {
+  if (Math.abs(deltaKg) < 0.2) return 'stable';
+  return `${deltaKg > 0 ? '+' : ''}${formatMetric(deltaKg)} kg`;
 }
 
 function formatBodyTrendWindow(startAt: number, endAt: number) {

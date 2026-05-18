@@ -5,6 +5,8 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { ChatXAI } from '@langchain/xai';
 import { createAgent } from 'langchain';
 import { internalAction, type ActionCtx } from './_generated/server';
+import { planReedContext } from './reedContextPlan';
+import type { ReedContextBlock } from './reedContextTypes';
 import { internal } from './_generated/api';
 import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
@@ -36,9 +38,12 @@ export const runAssistant = internalAction({
     }
 
     try {
+      const contextBlocks = context.route === 'refuse_readonly'
+        ? []
+        : await buildContextBlocks(ctx, context);
       const response = context.route === 'refuse_readonly'
         ? buildReadonlyRefusal()
-        : await invokeChatModel(buildChatPrompt(context));
+        : await invokeChatModel(buildChatPrompt(context, contextBlocks));
 
       await ctx.runMutation(internal.reed.completeAssistantMessage, {
         threadId: context.thread._id,
@@ -47,6 +52,7 @@ export const runAssistant = internalAction({
         completedAt: Date.now(),
       });
     } catch (error) {
+      console.error('[REED_ASSISTANT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
       await ctx.runMutation(internal.reed.failAssistantMessage, {
         assistantMessageId: context.assistantMessage._id,
         failedAt: Date.now(),
@@ -88,9 +94,43 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
   return null;
 }
 
-function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
+async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<typeof loadContextType>>): Promise<ReedContextBlock[]> {
+  try {
+    const plannedCalls = await planReedContext({
+      clientNow: context.clientNow,
+      clientTimeZone: context.clientTimeZone,
+      recentMessages: context.recentMessages,
+      userMessage: context.userMessage.content,
+    });
+
+    console.log('\n================ REED CONTEXT PLAN ================');
+    console.log(JSON.stringify(plannedCalls, null, 2));
+    console.log('===================================================\n');
+
+    if (plannedCalls.length === 0) return [];
+
+    const blocks: ReedContextBlock[] = await ctx.runQuery(internal.reedContextTools.runContextTools, {
+      calls: plannedCalls,
+      clientNow: context.clientNow,
+      clientTimeZone: context.clientTimeZone,
+      profileId: context.profile._id,
+    });
+
+    console.log('\n================ REED CONTEXT BLOCKS ==============');
+    console.log(JSON.stringify(blocks, null, 2));
+    console.log('===================================================\n');
+
+    return blocks;
+  } catch (error) {
+    console.error('[REED_CONTEXT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+    return [];
+  }
+}
+
+function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, contextBlocks: ReedContextBlock[]) {
   const lines = [
     context.prompt.content,
+    ...buildAttitudePromptLines(context.attitude),
     '',
     'Current time:',
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
@@ -102,6 +142,7 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
     '',
     'Journey context:',
     context.journeySummary ?? 'No journey snapshot is available yet.',
+    ...buildContextBlockLines(contextBlocks),
     '',
     'Compacted Reed memory:',
     context.memorySummary ?? 'No compacted chat memory yet.',
@@ -114,6 +155,29 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>) {
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildContextBlockLines(blocks: ReedContextBlock[]) {
+  if (blocks.length === 0) return [''];
+
+  return [
+    '',
+    'Retrieved Reed context:',
+    ...blocks.flatMap(block => [`${block.title}:`, block.content]),
+    '- Use retrieved context when relevant. Do not mention hidden tool names or planning.',
+  ];
+}
+
+function buildAttitudePromptLines(attitude: { name: string; description: string; prompt: string }) {
+  if (!attitude.prompt.trim()) return [''];
+
+  return [
+    '',
+    'Current Reed attitude:',
+    `- ${attitude.name}: ${attitude.description}`,
+    `- Attitude instructions: ${attitude.prompt}`,
+    '- This modifies Reed’s approach only. Keep Reed’s base identity, safety boundaries, and app constraints intact.',
+  ];
 }
 
 function buildContinuityLines(context: Awaited<ReturnType<typeof loadContextType>>) {
@@ -321,10 +385,11 @@ declare function loadContextType(): Promise<{
   route: 'coach_direct' | 'training_tools' | 'refuse_readonly';
   reentryState: 'hot' | 'warm' | 'cold';
   thread: { _id: string };
-  profile: { displayName?: string };
+  profile: { _id: Id<'profiles'>; displayName?: string };
   assistantMessage: { _id: string };
   userMessage: { content: string };
   prompt: { _id: string | null; content: string; contentHash: string };
+  attitude: { _id: string | null; key: string; name: string; description: string; prompt: string };
   journeySummary: string | null;
   memorySummary: string | null;
   recentMessages: Array<{ role: string; content: string }>;

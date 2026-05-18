@@ -11,6 +11,14 @@ V1 is read-only: you cannot change workouts, profile, goals, plans, or app data.
 If data is missing or context is weak, say so plainly and ask one narrow follow-up.
 Use the profile and memory context when present. Do not pretend to know facts not in context.`;
 
+const DEFAULT_REED_ATTITUDE = {
+  _id: null,
+  key: 'default',
+  name: 'Default',
+  description: 'No extra attitude prompt.',
+  prompt: '',
+};
+
 const HOT_AFTER_MS = 5 * 60 * 1000;
 const WARM_AFTER_MS = 60 * 60 * 1000;
 const HOT_RECENT_MESSAGE_COUNT = 8;
@@ -29,6 +37,81 @@ const composerSourceValidator = v.union(v.literal('quick-action'), v.literal('ty
 const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly'));
 const reentryStateValidator = v.union(v.literal('hot'), v.literal('warm'), v.literal('cold'));
 type ReedRoute = 'coach_direct' | 'training_tools' | 'refuse_readonly';
+
+const attitudePayloadValidator = v.object({
+  description: v.string(),
+  key: v.string(),
+  name: v.string(),
+  prompt: v.string(),
+  sortOrder: v.number(),
+});
+
+type ReedAttitudeSeed = {
+  description: string;
+  key: string;
+  name: string;
+  prompt: string;
+  sortOrder: number;
+};
+
+const DEFAULT_REED_ATTITUDE_SEEDS: ReedAttitudeSeed[] = [
+  {
+    key: 'drill_sergeant',
+    name: 'Drill sergeant',
+    description: 'Hard, blunt accountability for moments when excuses are louder than action.',
+    prompt: 'Take a strict, no-excuses coaching stance. Be blunt, serious, and action-oriented, but never insulting, shaming, reckless, or unsafe. Cut through rationalization, name the next concrete action, and push the user to execute now. Keep Reed’s base personality intact: precise, protective, and useful.',
+    sortOrder: 10,
+  },
+  {
+    key: 'tough_love',
+    name: 'Tough love',
+    description: 'Firm and compassionate: honest pressure without theatrics.',
+    prompt: 'Use tough love. Tell the truth plainly, challenge weak reasoning, and hold the user to their stated goals. Pair every hard truth with one practical next step. Avoid motivational yelling; the tone should feel like a coach who cares enough not to indulge avoidance.',
+    sortOrder: 20,
+  },
+  {
+    key: 'steady_coach',
+    name: 'Steady coach',
+    description: 'Balanced, grounded coaching for everyday training decisions.',
+    prompt: 'Use a steady coaching attitude: warm, direct, concise, and practical. Help the user reduce ambiguity, choose the next useful action, and maintain momentum without over-explaining. This is the default Reed approach.',
+    sortOrder: 30,
+  },
+  {
+    key: 'soft_supportive',
+    name: 'Soft support',
+    description: 'Gentle, reassuring, and confidence-building when the user feels low or overwhelmed.',
+    prompt: 'Use a softer supportive attitude. Validate the difficulty briefly, reduce pressure, and help the user find a small safe step forward. Do not coddle or remove agency. Keep guidance concrete and calm, with extra care around fatigue, discouragement, and recovery.',
+    sortOrder: 40,
+  },
+  {
+    key: 'analytical',
+    name: 'Analytical',
+    description: 'Structured reasoning, tradeoffs, and evidence-first coaching.',
+    prompt: 'Use an analytical coaching attitude. Break the situation into variables, constraints, tradeoffs, and likely outcomes. Prefer clear reasoning over hype. When data is missing, say what would change the recommendation. End with a decision or a narrow next question.',
+    sortOrder: 50,
+  },
+  {
+    key: 'practical_operator',
+    name: 'Practical operator',
+    description: 'Execution-first coaching with checklists, steps, and minimum viable action.',
+    prompt: 'Use a practical operator attitude. Convert the user’s situation into an immediate plan, checklist, or decision rule. Minimize theory unless it changes the action. Optimize for what the user can do today with their available time, equipment, and energy.',
+    sortOrder: 60,
+  },
+  {
+    key: 'academic',
+    name: 'Academic',
+    description: 'Deeper explanations for users who want the why behind training advice.',
+    prompt: 'Use an academic teaching attitude. Explain mechanisms, principles, and assumptions in plain language. Keep it rigorous but not verbose. Separate established principles from uncertainty, and translate the lesson back into training practice before ending.',
+    sortOrder: 70,
+  },
+  {
+    key: 'minimalist',
+    name: 'Minimalist',
+    description: 'Very concise coaching for users who want signal only.',
+    prompt: 'Use a minimalist attitude. Be terse, specific, and high-signal. Avoid long explanations, emotional padding, and multiple options unless necessary. Give the user the cleanest answer and the next action.',
+    sortOrder: 80,
+  },
+];
 
 export const getOrCreateThread = mutation({
   args: {},
@@ -71,13 +154,140 @@ export const getPresence = query({
   },
 });
 
+export const listAttitudes = query({
+  args: {},
+  handler: async ctx => {
+    await requireViewerProfile(ctx);
+    const rows = await ctx.db
+      .query('reedAttitudes')
+      .withIndex('by_status_and_sort_order', q => q.eq('status', 'active'))
+      .order('asc')
+      .take(100);
+
+    return rows.map(row => ({
+      _id: row._id,
+      key: row.key,
+      name: row.name,
+      description: row.description,
+      prompt: row.prompt,
+      sortOrder: row.sortOrder,
+    }));
+  },
+});
+
+export const getAiSettings = query({
+  args: {},
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const settings = await getAiSettingsForProfile(ctx, profile._id);
+    const selectedAttitude = settings?.selectedAttitudeId
+      ? await ctx.db.get(settings.selectedAttitudeId)
+      : null;
+
+    return {
+      selectedAttitudeId: selectedAttitude?.status === 'active' ? selectedAttitude._id : null,
+      fallbackAttitude: DEFAULT_REED_ATTITUDE,
+    };
+  },
+});
+
+export const setAiAttitude = mutation({
+  args: { attitudeId: v.union(v.id('reedAttitudes'), v.null()) },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    if (args.attitudeId) {
+      const attitude = await ctx.db.get(args.attitudeId);
+      if (!attitude || attitude.status !== 'active') {
+        throw new ConvexError('That Reed attitude is not available.');
+      }
+    }
+
+    const now = Date.now();
+    const existing = await getAiSettingsForProfile(ctx, profile._id);
+    const selectedAttitudeId = args.attitudeId ?? undefined;
+    if (existing) {
+      await ctx.db.patch(existing._id, { selectedAttitudeId, updatedAt: now });
+      return existing._id;
+    }
+
+    return await ctx.db.insert('reedProfileAiSettings', {
+      profileId: profile._id,
+      selectedAttitudeId,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const upsertAttitude = mutation({
+  args: { adminSecret: v.string(), attitude: attitudePayloadValidator },
+  handler: async (ctx, args) => {
+    assertPromptAdmin(args.adminSecret);
+    const key = normalizeAttitudeKey(args.attitude.key);
+    const name = args.attitude.name.trim();
+    const description = args.attitude.description.trim();
+    const prompt = args.attitude.prompt.trim();
+    if (name.length < 2) throw new ConvexError('Attitude name is too short.');
+    if (description.length < 8) throw new ConvexError('Attitude description is too short.');
+    if (prompt.length < 40) throw new ConvexError('Attitude prompt is too short.');
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query('reedAttitudes')
+      .withIndex('by_key', q => q.eq('key', key))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        name,
+        description,
+        prompt,
+        sortOrder: args.attitude.sortOrder,
+        status: 'active',
+        updatedAt: now,
+      });
+      return existing._id;
+    }
+
+    return await ctx.db.insert('reedAttitudes', {
+      key,
+      name,
+      description,
+      prompt,
+      sortOrder: args.attitude.sortOrder,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+export const deleteAttitude = mutation({
+  args: { adminSecret: v.string(), attitudeId: v.id('reedAttitudes') },
+  handler: async (ctx, args) => {
+    assertPromptAdmin(args.adminSecret);
+    const attitude = await ctx.db.get(args.attitudeId);
+    if (!attitude) return null;
+    await ctx.db.delete(args.attitudeId);
+    return null;
+  },
+});
+
+export const seedDefaultAttitudes = mutation({
+  args: {},
+  handler: async ctx => {
+    const ids = [];
+    for (const seed of DEFAULT_REED_ATTITUDE_SEEDS) {
+      ids.push(await insertMissingAttitudeSeed(ctx, seed));
+    }
+    return { count: ids.length, ids };
+  },
+});
+
 export const upsertActivePrompt = mutation({
   args: { adminSecret: v.string(), content: v.string(), key: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const expectedSecret = process.env.REED_PROMPT_ADMIN_SECRET;
-    if (!expectedSecret || args.adminSecret !== expectedSecret) {
-      throw new ConvexError('Prompt editing is not enabled for this deployment.');
-    }
+    assertPromptAdmin(args.adminSecret);
     const key = args.key ?? DEFAULT_PROMPT_KEY;
     const content = args.content.trim();
     if (content.length < 100) throw new ConvexError('Prompt content is too short.');
@@ -193,6 +403,7 @@ export const loadAssistantContext = internalQuery({
     userMessage: Doc<'reedMessages'>;
     assistantMessage: Doc<'reedMessages'>;
     prompt: { _id: Id<'reedPromptVersions'> | null; key: string; content: string; contentHash: string; version: number };
+    attitude: { _id: Id<'reedAttitudes'> | null; key: string; name: string; description: string; prompt: string };
     journeySummary: string | null;
     memorySummary: string | null;
     recentMessages: Doc<'reedMessages'>[];
@@ -213,6 +424,11 @@ export const loadAssistantContext = internalQuery({
       .first();
     const summary = thread.activeSummaryId ? await ctx.db.get(thread.activeSummaryId) : null;
     const recentMessages = await loadRecentMessages(ctx, thread._id, args.recentTurnCount, userMessage._id);
+    const aiSettings = await getAiSettingsForProfile(ctx, thread.profileId);
+    const selectedAttitude = aiSettings?.selectedAttitudeId
+      ? await ctx.db.get(aiSettings.selectedAttitudeId)
+      : null;
+    const activeAttitude = selectedAttitude?.status === 'active' ? selectedAttitude : null;
 
     return {
       clientNow: args.clientNow,
@@ -231,6 +447,15 @@ export const loadAssistantContext = internalQuery({
         contentHash: simpleHash(DEFAULT_REED_SYSTEM_PROMPT),
         version: 0,
       },
+      attitude: activeAttitude
+        ? {
+            _id: activeAttitude._id,
+            key: activeAttitude.key,
+            name: activeAttitude.name,
+            description: activeAttitude.description,
+            prompt: activeAttitude.prompt,
+          }
+        : DEFAULT_REED_ATTITUDE,
       journeySummary: journey?.renderedContext ?? null,
       memorySummary: summary?.content ?? null,
       recentMessages,
@@ -346,6 +571,47 @@ async function getActiveThread(ctx: QueryCtx | MutationCtx, profileId: Id<'profi
     .query('reedThreads')
     .withIndex('by_profile_id_and_status', q => q.eq('profileId', profileId).eq('status', 'active'))
     .unique();
+}
+
+async function getAiSettingsForProfile(ctx: QueryCtx | MutationCtx, profileId: Id<'profiles'>) {
+  return await ctx.db
+    .query('reedProfileAiSettings')
+    .withIndex('by_profile_id', q => q.eq('profileId', profileId))
+    .unique();
+}
+
+async function insertMissingAttitudeSeed(ctx: MutationCtx, seed: ReedAttitudeSeed) {
+  const key = normalizeAttitudeKey(seed.key);
+  const existing = await ctx.db
+    .query('reedAttitudes')
+    .withIndex('by_key', q => q.eq('key', key))
+    .unique();
+  if (existing) return existing._id;
+
+  const now = Date.now();
+  return await ctx.db.insert('reedAttitudes', {
+    key,
+    name: seed.name,
+    description: seed.description,
+    prompt: seed.prompt,
+    sortOrder: seed.sortOrder,
+    status: 'active',
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+function assertPromptAdmin(adminSecret: string) {
+  const expectedSecret = process.env.REED_PROMPT_ADMIN_SECRET;
+  if (!expectedSecret || adminSecret !== expectedSecret) {
+    throw new ConvexError('Prompt editing is not enabled for this deployment.');
+  }
+}
+
+function normalizeAttitudeKey(key: string) {
+  const normalized = key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
+  if (normalized.length < 2) throw new ConvexError('Attitude key is too short.');
+  return normalized;
 }
 
 async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles'>, now: number) {

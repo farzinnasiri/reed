@@ -4,6 +4,7 @@ import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
+import { ReedAiSettingsPage } from './reed-ai-settings-page';
 import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
@@ -19,6 +20,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewType | null>(null);
+  const [isViewingAiSettings, setIsViewingAiSettings] = useState(false);
   const [isViewingCoachItems, setIsViewingCoachItems] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [composerDockHeight, setComposerDockHeight] = useState(0);
@@ -94,6 +96,17 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     }
   }
 
+  if (isViewingAiSettings) {
+    return (
+      <ReedAiSettingsPage
+        contentTopPadding={contentTopPadding}
+        dockReservedSpace={dockReservedSpace}
+        onBack={() => setIsViewingAiSettings(false)}
+        topInset={headerTopInset}
+      />
+    );
+  }
+
   if (isViewingCoachItems) {
     return (
       <ReedCoachItemsPage
@@ -111,6 +124,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     <View style={styles.root}>
       <ReedHeader
         label={reedPresenceLabel}
+        onOpenAiSettings={() => setIsViewingAiSettings(true)}
         onOpenCoachItems={() => setIsViewingCoachItems(true)}
         openItemsCount={openCoachItems.length}
         topInset={headerTopInset}

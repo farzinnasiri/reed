@@ -355,6 +355,10 @@ export const finishSession = mutation({
       profileId: profile._id,
       trigger: 'session_ended',
     });
+    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
+      profileId: profile._id,
+      reason: 'session_ended',
+    });
 
     return { deletedEmptySession: false };
   },

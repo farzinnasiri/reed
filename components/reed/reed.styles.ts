@@ -30,6 +30,11 @@ export const styles = StyleSheet.create({
     alignItems: 'flex-start',
     gap: 1,
   },
+  headerActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
   headerAction: {
     alignItems: 'center',
     borderRadius: reedRadii.pill,
@@ -38,6 +43,14 @@ export const styles = StyleSheet.create({
     gap: 7,
     minHeight: 44,
     paddingHorizontal: 14,
+  },
+  headerActionIconOnly: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
   todayStrip: {
     alignItems: 'center',

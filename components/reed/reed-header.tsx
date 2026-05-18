@@ -8,11 +8,13 @@ import { styles } from './reed.styles';
 
 export function ReedHeader({
   label,
+  onOpenAiSettings,
   onOpenCoachItems,
   openItemsCount,
   topInset,
 }: {
   label: string;
+  onOpenAiSettings: () => void;
   onOpenCoachItems: () => void;
   openItemsCount: number;
   topInset: number;
@@ -37,20 +39,35 @@ export function ReedHeader({
           <ReedText variant="title">Reed</ReedText>
           <ReedText tone="muted" variant="caption">{label}</ReedText>
         </View>
-        <Pressable
-          accessibilityHint="Shows saved coaching notes and follow-up items."
-          accessibilityLabel={`Open coach items, ${openItemsCount} open`}
-          accessibilityRole="button"
-          onPress={onOpenCoachItems}
-          style={({ pressed }) => [
-            styles.headerAction,
-            { borderColor: theme.colors.controlBorder },
-            getTapScaleStyle(pressed),
-          ]}
-        >
-          <Ionicons color={String(theme.colors.textMuted)} name="book-outline" size={16} />
-          <ReedText tone="muted" variant="caption">{openItemsCount}</ReedText>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            accessibilityHint="Opens Reed AI settings."
+            accessibilityLabel="Open Reed AI settings"
+            accessibilityRole="button"
+            onPress={onOpenAiSettings}
+            style={({ pressed }) => [
+              styles.headerActionIconOnly,
+              { borderColor: theme.colors.controlBorder },
+              getTapScaleStyle(pressed),
+            ]}
+          >
+            <Ionicons color={String(theme.colors.textMuted)} name="settings-outline" size={17} />
+          </Pressable>
+          <Pressable
+            accessibilityHint="Shows saved coaching notes and follow-up items."
+            accessibilityLabel={`Open coach items, ${openItemsCount} open`}
+            accessibilityRole="button"
+            onPress={onOpenCoachItems}
+            style={({ pressed }) => [
+              styles.headerAction,
+              { borderColor: theme.colors.controlBorder },
+              getTapScaleStyle(pressed),
+            ]}
+          >
+            <Ionicons color={String(theme.colors.textMuted)} name="book-outline" size={16} />
+            <ReedText tone="muted" variant="caption">{openItemsCount}</ReedText>
+          </Pressable>
+        </View>
       </View>
     </GlassSurface>
   );

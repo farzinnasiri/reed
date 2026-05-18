@@ -209,6 +209,10 @@ export const upsertTodayBodyWeight = mutation({
       profileId: profile._id,
       trigger: 'body_metrics_updated',
     });
+    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
+      profileId: profile._id,
+      reason: 'body_updated',
+    });
 
     return null;
   },
@@ -308,6 +312,10 @@ export const completeOnboarding = mutation({
       profileId: profile._id,
       trigger: 'onboarding_updated',
     });
+    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
+      profileId: profile._id,
+      reason: 'profile_updated',
+    });
 
     return updatedProfile;
   },
@@ -355,6 +363,10 @@ export const updateTrainingProfile = mutation({
     await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
       profileId: profile._id,
       trigger: 'onboarding_updated',
+    });
+    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
+      profileId: profile._id,
+      reason: 'profile_updated',
     });
 
     const updatedProfile = await ctx.db.get(profile._id);

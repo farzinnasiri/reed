@@ -67,6 +67,8 @@ convex-env-push: env-check
 	if [ -n "$$GEMINI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GEMINI_API_KEY "$$GEMINI_API_KEY"; fi; \
 	if [ -n "$$REED_CHAT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CHAT_MODEL "$$REED_CHAT_MODEL"; fi; \
 	if [ -n "$$REED_SUMMARY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_SUMMARY_MODEL "$$REED_SUMMARY_MODEL"; fi; \
+	if [ -n "$$REED_CONTEXT_PLANNER_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTEXT_PLANNER_MODEL "$$REED_CONTEXT_PLANNER_MODEL"; fi; \
+	if [ -n "$$REED_PROFILE_INSIGHT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROFILE_INSIGHT_MODEL "$$REED_PROFILE_INSIGHT_MODEL"; fi; \
 	if [ -n "$$REED_PROMPT_ADMIN_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROMPT_ADMIN_SECRET "$$REED_PROMPT_ADMIN_SECRET"; fi
 
 eas-env-sync: env-check
