@@ -18,6 +18,18 @@ export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
     .query('activityLogs')
     .withIndex('by_profile_id_and_logged_at', q => q.eq('profileId', args.profileId).gte('loggedAt', range.startAt).lte('loggedAt', range.endAt))
     .take(500);
+  const sessions = await ctx.db
+    .query('liveSessions')
+    .withIndex('by_profile_id_and_status_and_started_at', q => q.eq('profileId', args.profileId).eq('status', 'ended').gte('startedAt', range.startAt).lte('startedAt', range.endAt))
+    .order('desc')
+    .take(12);
+  const sessionExercises = await Promise.all(sessions.map(async session => ({
+    session,
+    exercises: await ctx.db
+      .query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+      .collect(),
+  })));
   const exercises = await loadExerciseMap(ctx, getUniqueIds(logs.map(log => log.exerciseCatalogId)));
   const summary = summarizeTrainingWindow({
     exercises: Array.from(exercises.entries()).flatMap(([exerciseCatalogId, exercise]) => exercise ? [{
@@ -44,6 +56,11 @@ export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
     title: `Training summary: ${range.label}`,
     content: [
       `${summary.activityCount} logged set${summary.activityCount === 1 ? '' : 's'} in ${range.label}.`,
+      sessionExercises.length > 0 ? `Ended sessions: ${sessionExercises.map(item => {
+        const names = item.exercises.slice(0, 5).map(exercise => exercise.exerciseName).join(', ');
+        const durationMinutes = item.session.endedAt ? Math.max(1, Math.round((item.session.endedAt - item.session.startedAt) / 60000)) : null;
+        return `${formatDateForContext(item.session.startedAt, args.clientTimeZone)}${durationMinutes ? ` (${durationMinutes} min)` : ''}${names ? `: ${names}` : ''}`;
+      }).join('; ')}.` : null,
       summary.byExercise.length > 0 ? `Top exercises: ${summary.byExercise.slice(0, 6).map(exercise => `${exercise.exerciseName} (${exercise.setCount})`).join(', ')}.` : 'No exercises logged in this range.',
       summary.recentActivities.length > 0 ? `Recent work: ${summary.recentActivities.slice(0, 6).map(activity => `${activity.exerciseName} ${activity.summary}`).join('; ')}.` : null,
       summary.work.groups.length > 0 ? `Main work focus: ${summary.work.groups.slice(0, 5).map(group => `${group.label} (${group.setCount} sets)`).join(', ')}.` : null,
@@ -161,6 +178,17 @@ function summarizeLogForCoaching(
   const baseSummary = summarizeMetrics(recipeKey, metrics);
   const outcomeDetails = formatSetOutcomeDetails(setOutcome, metrics);
   return outcomeDetails ? `${baseSummary} (${outcomeDetails})` : baseSummary;
+}
+
+function formatDateForContext(timestamp: number, timeZone?: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    ...(timeZone && timeZone.length <= 80 ? { timeZone } : {}),
+  });
+  return formatter.format(new Date(timestamp));
 }
 
 function formatNumber(value: number) {

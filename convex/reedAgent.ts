@@ -6,7 +6,7 @@ import { ChatXAI } from '@langchain/xai';
 import { createAgent } from 'langchain';
 import { internalAction, type ActionCtx } from './_generated/server';
 import { planReedContext } from './reedContextPlan';
-import type { ReedContextBlock } from './reedContextTypes';
+import type { ReedContextBlock, ReedContextToolCall } from './reedContextTypes';
 import { internal } from './_generated/api';
 import { v } from 'convex/values';
 import type { Id } from './_generated/dataModel';
@@ -102,15 +102,19 @@ async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<ty
       recentMessages: context.recentMessages,
       userMessage: context.userMessage.content,
     });
+    const contextCalls = mergeContextToolCalls([
+      ...deterministicContextCalls(context),
+      ...plannedCalls,
+    ]);
 
     console.log('\n================ REED CONTEXT PLAN ================');
-    console.log(JSON.stringify(plannedCalls, null, 2));
+    console.log(JSON.stringify({ deterministic: deterministicContextCalls(context), planned: plannedCalls, selected: contextCalls }, null, 2));
     console.log('===================================================\n');
 
-    if (plannedCalls.length === 0) return [];
+    if (contextCalls.length === 0) return [];
 
     const blocks: ReedContextBlock[] = await ctx.runQuery(internal.reedContextTools.runContextTools, {
-      calls: plannedCalls,
+      calls: contextCalls,
       clientNow: context.clientNow,
       clientTimeZone: context.clientTimeZone,
       profileId: context.profile._id,
@@ -125,6 +129,47 @@ async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<ty
     console.error('[REED_CONTEXT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
     return [];
   }
+}
+
+function deterministicContextCalls(context: Awaited<ReturnType<typeof loadContextType>>): ReedContextToolCall[] {
+  const currentText = context.userMessage.content.toLowerCase();
+  const recentText = [
+    ...context.recentMessages.slice(-6).map((message: { content: string }) => message.content),
+    context.userMessage.content,
+  ].join('\n').toLowerCase();
+
+  const calls: ReedContextToolCall[] = [];
+
+  const trainingInThread = /\b(workout|session|training|lift|exercise|exercises|set|sets|rep|reps|hit|logged|bench|squat|deadlift|press|curl|row|pull[- ]?up|dip|run|cardio)\b/.test(recentText);
+  const contextSeekingMessage = /\b(access|see|read|retrieve|look up|pull up|know|check|review|progress|what|how|today|week|recent|last|finished|did|hit|them|it|that|this)\b/.test(currentText);
+  const wantsWeeklyContext = /\b(this week|week|weekly)\b/.test(currentText);
+  const wantsProgressContext = /\b(progress|trend|improving|stronger|weaker|compare|history)\b/.test(currentText);
+
+  if (trainingInThread && contextSeekingMessage) {
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'today' } } });
+  }
+
+  if (trainingInThread && wantsWeeklyContext) {
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'this_week' } } });
+  }
+
+  if (trainingInThread && wantsProgressContext) {
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 30 } } });
+  }
+
+  return calls;
+}
+
+function mergeContextToolCalls(calls: ReedContextToolCall[]) {
+  const seen = new Set<string>();
+  const merged: ReedContextToolCall[] = [];
+  for (const call of calls) {
+    const key = JSON.stringify(call);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(call);
+  }
+  return merged.slice(0, 6);
 }
 
 function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, contextBlocks: ReedContextBlock[]) {
