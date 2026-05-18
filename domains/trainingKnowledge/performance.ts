@@ -1,3 +1,4 @@
+import type { SetOutcomeDetails } from '../workout/modifier-aware-calculations';
 import {
   getComparisonScalarForRecipe,
   roundMetric,
@@ -11,6 +12,7 @@ export type PerformanceLogInput = {
   metrics: Record<string, number>;
   recipeKey: RecipeKey;
   setLogId: string;
+  setOutcome?: SetOutcomeDetails | null;
 };
 
 export function buildExercisePerformanceSnapshot(args: {
@@ -28,7 +30,10 @@ export function buildExercisePerformanceSnapshot(args: {
     | null = null;
 
   for (const log of eligibleLogs) {
-    const scalar = getComparisonScalarForRecipe(log.recipeKey, log.metrics, log.derivedEffectiveLoadKg ?? null);
+    const scalar = getComparisonScalarForRecipe(log.recipeKey, log.metrics, log.derivedEffectiveLoadKg ?? null, {
+      derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+      setOutcome: log.setOutcome ?? null,
+    });
     if (scalar <= 0) {
       continue;
     }

@@ -7,6 +7,7 @@ export const recipeKeyValidator = v.union(
   v.literal('added_bodyweight'),
   v.literal('hold'),
   v.literal('weighted_hold'),
+  v.literal('mobility_duration_intensity'),
   v.literal('unilateral_load_pair'),
   v.literal('unilateral_reps_pair'),
   v.literal('unilateral_duration_rpe_pair'),
@@ -20,6 +21,33 @@ export const recipeKeyValidator = v.union(
 );
 
 export const recipeKeyOrNullValidator = v.union(recipeKeyValidator, v.null());
+
+export const setupModifierKeyValidator = v.union(v.literal('inclineAngle'), v.literal('assistanceSupport'));
+
+export const setOutcomeDetailKeyValidator = v.union(v.literal('failure'), v.literal('rangeOfMotion'));
+
+export const exerciseModifierCapabilitiesValidator = v.object({
+  setup: v.array(setupModifierKeyValidator),
+  setOutcome: v.array(setOutcomeDetailKeyValidator),
+});
+
+export const rangeOfMotionValidator = v.union(
+  v.literal('full'),
+  v.literal('top_partial'),
+  v.literal('bottom_partial'),
+  v.literal('mid_partial'),
+);
+
+export const setOutcomeDetailsValidator = v.object({
+  failedReps: v.optional(v.number()),
+  inclineAngleDegrees: v.optional(v.number()),
+  rangeOfMotion: v.optional(rangeOfMotionValidator),
+});
+
+export const exerciseSetupModifiersValidator = v.object({
+  assistanceSupportKg: v.optional(v.number()),
+  inclineAngleDegrees: v.optional(v.number()),
+});
 
 export const liveCardioRecipeKeyValidator = v.union(
   v.literal('cardio_live_duration_distance'),

@@ -722,6 +722,7 @@ function mapActivityRecord(log: Doc<'activityLogs'>, exerciseMap: Map<Id<'exerci
     profileId: log.profileId as string,
     recipeKey: log.recipeKey as RecipeKey,
     sessionId: log.sessionId ? log.sessionId as string : null,
+    setOutcome: log.setOutcomeDetails ?? null,
     warmup: log.warmup,
   }];
 }

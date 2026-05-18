@@ -9,6 +9,7 @@ import type {
   LiveCardioFinishSummary,
   MetricValues,
   RestCard,
+  SetOutcomeDetails,
 } from './workout-surface.types';
 import { WorkoutExerciseCaptureView } from './workout-exercise-capture-view';
 import { WorkoutExerciseRestView } from './workout-exercise-rest-view';
@@ -30,8 +31,10 @@ type ExercisePageProps = {
     onCaptureSwipeRight: () => void;
     onPickerInteractionEnd: () => void;
     onPickerInteractionStart: () => void;
+    onSetOutcomeDetailsChange: (details: SetOutcomeDetails) => void;
     onUpdateMetric: (key: string, nextValue: number) => void;
     onWarmupToggle: () => void;
+    setOutcomeDetails: SetOutcomeDetails;
     warmup: boolean;
   };
   liveCardio: {
@@ -128,8 +131,10 @@ export function ExercisePage({ contentTopInset, navigation, capture, liveCardio,
             onPickerInteractionEnd={capture.onPickerInteractionEnd}
             onPickerInteractionStart={capture.onPickerInteractionStart}
             onSetActiveSide={setActiveSide}
+            onSetOutcomeDetailsChange={capture.onSetOutcomeDetailsChange}
             onUpdateMetric={capture.onUpdateMetric}
             onWarmupToggle={capture.onWarmupToggle}
+            setOutcomeDetails={capture.setOutcomeDetails}
             warmup={capture.warmup}
           />
         ) : rest.card ? (

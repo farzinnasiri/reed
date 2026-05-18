@@ -113,6 +113,7 @@ async function buildInsightsForSession(
           profileId: log.profileId as string,
           recipeKey: log.recipeKey,
           sessionId: log.sessionId ? log.sessionId as string : null,
+          setOutcome: log.setOutcomeDetails ?? null,
           warmup: log.warmup,
         },
       ];
@@ -125,6 +126,7 @@ async function buildInsightsForSession(
       recipeKey: log.recipeKey,
       restSeconds: log.restSeconds ?? null,
       sessionExerciseId: log.sessionExerciseId as string,
+      setOutcome: log.setOutcomeDetails ?? null,
       setLogId: log._id as string,
       setNumber: log.setNumber,
       warmup: log.warmup,
@@ -145,6 +147,7 @@ async function buildInsightsForSession(
           isHold: catalogExercise.isHold,
           mainMuscleGroups: catalogExercise.mainMuscleGroups,
           movementPatterns: catalogExercise.movementPatterns,
+          setup: sessionExercise.setupModifiers ?? null,
           recipeKey: sessionExercise.recipeKey,
           sessionExerciseId: sessionExercise._id as string,
         },

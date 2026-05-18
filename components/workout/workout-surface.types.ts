@@ -1,4 +1,10 @@
 import type { Id } from '@/convex/_generated/dataModel';
+import type { ExerciseModifierCapabilities } from '@/domains/workout/modifier-capabilities';
+import type {
+  ExerciseSetupModifiers,
+  RangeOfMotion,
+  SetOutcomeDetails,
+} from '@/domains/workout/modifier-aware-calculations';
 import type { RecipeFieldDefinition, RecipeKey, RecipeLayoutKind, RecipeProcessKind } from '@/domains/workout/recipes';
 
 export type CatalogItem = {
@@ -14,6 +20,8 @@ export type CatalogItem = {
 
 export type MetricValues = Record<string, number>;
 
+export type { ExerciseSetupModifiers, RangeOfMotion, SetOutcomeDetails };
+
 export type WorkoutPage = 'timeline' | 'exercise';
 
 export type TimelineSet = {
@@ -21,12 +29,14 @@ export type TimelineSet = {
   restSeconds: number | null;
   setLogId: Id<'activityLogs'>;
   setNumber: number;
+  setOutcomeDetails: SetOutcomeDetails | null;
   summary: string;
   warmup: boolean;
 };
 
 export type TimelineRow = {
   exerciseName: string;
+  exerciseSetupModifiers: ExerciseSetupModifiers;
   lastLoggedSummary: string | null;
   sessionExerciseId: Id<'liveSessionExercises'>;
   sets: TimelineSet[];
@@ -39,6 +49,7 @@ export type EditingSet = {
   sessionExerciseId: Id<'liveSessionExercises'>;
   setLogId: Id<'activityLogs'>;
   setNumber: number;
+  setOutcomeDetails: SetOutcomeDetails | null;
   warmup: boolean;
 };
 
@@ -53,9 +64,11 @@ export type AddExerciseSheetData = {
 export type CaptureCard = {
   currentSetNumber: number;
   exerciseName: string;
+  exerciseSetupModifiers: ExerciseSetupModifiers;
   fields: RecipeFieldDefinition[];
   initialMetrics: MetricValues;
   layoutKind: RecipeLayoutKind;
+  modifierCapabilities: ExerciseModifierCapabilities;
   previousMetrics: MetricValues | null;
   previousSetSummary: string | null;
   processKind: RecipeProcessKind;

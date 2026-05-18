@@ -1,3 +1,9 @@
+import {
+  getCompletedRepCount,
+  getRangeOfMotionWorkMultiplier,
+  type ModifierAwareCalculationContext,
+} from './modifier-aware-calculations';
+
 export const supportedRecipeKeys = [
   'standard_load',
   'bodyweight_reps',
@@ -5,6 +11,7 @@ export const supportedRecipeKeys = [
   'added_bodyweight',
   'hold',
   'weighted_hold',
+  'mobility_duration_intensity',
   'unilateral_load_pair',
   'unilateral_reps_pair',
   'unilateral_duration_rpe_pair',
@@ -130,6 +137,16 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
     formatSummary: metrics =>
       `${formatDuration(metrics.duration)} + ${formatLoad(metrics.load)} · RPE ${formatRpe(metrics.rpe)}`,
     label: 'Weighted hold',
+    layoutKind: 'standard',
+    processKind: 'rest_after_log',
+  },
+  mobility_duration_intensity: {
+    fields: [
+      { defaultValue: 45, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 5, unit: 's' },
+      { defaultValue: 6, key: 'intensity', label: 'Intensity', max: 10, min: 1, pickerMax: 10, pickerMin: 1, step: 0.5 },
+    ],
+    formatSummary: metrics => `${formatDuration(metrics.duration)} · Intensity ${formatRpe(metrics.intensity)}`,
+    label: 'Mobility',
     layoutKind: 'standard',
     processKind: 'rest_after_log',
   },
@@ -418,6 +435,7 @@ const recipeComparisonKinds: Record<RecipeKey, ComparisonKind> = {
   cardio_manual_distance_time_rpe: 'distance',
   cardio_manual_duration_rpe: 'duration',
   hold: 'duration',
+  mobility_duration_intensity: 'duration',
   standard_load: 'volume',
   unilateral_duration_distance_load_pair: 'distance',
   unilateral_duration_rpe_pair: 'duration',
@@ -454,7 +472,15 @@ export function mapCatalogRecipeKey(row: RecipeMappingInput): RecipeKey | null {
       return 'unilateral_load_pair';
     case 'left_reps+right_reps+rpe':
       return 'unilateral_reps_pair';
+    case 'duration+intensity':
+      if (isMobilityRow(exerciseClass)) {
+        return 'mobility_duration_intensity';
+      }
+      return null;
     case 'duration+rpe':
+      if (isMobilityRow(exerciseClass)) {
+        return 'mobility_duration_intensity';
+      }
       if (laterality === 'unilateral' && (row.isHold || exerciseClass === 'hold')) {
         return 'unilateral_duration_rpe_pair';
       }
@@ -506,6 +532,10 @@ function isCardioManualRow(row: RecipeMappingInput, exerciseClass: string) {
   return row.isCardio && exerciseClass === 'cardio-manual';
 }
 
+function isMobilityRow(exerciseClass: string) {
+  return exerciseClass === 'mobility' || exerciseClass === 'stretch' || exerciseClass === 'stretching';
+}
+
 function isCardioLiveTrackable(row: RecipeMappingInput, exerciseClass: string) {
   return row.isCardio && row.supportsLiveTracking && exerciseClass === 'cardio-live';
 }
@@ -519,8 +549,9 @@ function getVolumeComparisonScalar(
   recipeKey: RecipeKey,
   metrics: Record<string, number>,
   derivedEffectiveLoadKg?: number | null,
+  context?: ModifierAwareCalculationContext,
 ) {
-  const reps = getSetRepCount(metrics);
+  const reps = getCompletedRepCount(metrics) * getRangeOfMotionWorkMultiplier(context?.setOutcome);
   const normalizedDerivedLoad = finiteOrZero(derivedEffectiveLoadKg ?? 0);
 
   if (reps > 0 && normalizedDerivedLoad > 0) {
@@ -635,14 +666,15 @@ export function getComparisonScalarForRecipe(
   recipeKey: RecipeKey,
   metrics: Record<string, number>,
   derivedEffectiveLoadKg?: number | null,
+  context?: ModifierAwareCalculationContext,
 ) {
   const comparisonKind = recipeComparisonKinds[recipeKey];
 
   switch (comparisonKind) {
     case 'volume':
-      return getVolumeComparisonScalar(recipeKey, metrics, derivedEffectiveLoadKg);
+      return getVolumeComparisonScalar(recipeKey, metrics, derivedEffectiveLoadKg, context);
     case 'reps':
-      return getSetRepCount(metrics);
+      return getCompletedRepCount(metrics) * getRangeOfMotionWorkMultiplier(context?.setOutcome);
     case 'duration':
       return roundMetric(
         finiteOrZero(metrics.duration) + finiteOrZero(metrics.leftDuration) + finiteOrZero(metrics.rightDuration),

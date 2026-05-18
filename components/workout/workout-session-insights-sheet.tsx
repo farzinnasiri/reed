@@ -467,7 +467,7 @@ export function WorkoutSessionInsightsSheet({
                 >
                   <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
                     <Ionicons color="#d97706" name="trophy-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : null}>
+                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
                       <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
                         PRs
                       </ReedText>
@@ -487,7 +487,7 @@ export function WorkoutSessionInsightsSheet({
 
                   <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
                     <Ionicons color="#f59e0b" name="star-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : null}>
+                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
                       <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
                         Near PRs
                       </ReedText>
@@ -507,7 +507,7 @@ export function WorkoutSessionInsightsSheet({
 
                   <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
                     <Ionicons color="#ea580c" name="flame-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : null}>
+                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
                       <ReedText
                         style={styles.sessionInsightsHighlightsSummaryLabel}
                         tone="muted"
@@ -516,7 +516,7 @@ export function WorkoutSessionInsightsSheet({
                         Most demanding
                       </ReedText>
                       <ReedText
-                        numberOfLines={1}
+                        numberOfLines={2}
                         style={styles.sessionInsightsHighlightsSummaryMostDemanding}
                         variant="bodyStrong"
                       >

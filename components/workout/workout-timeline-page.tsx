@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, ScrollView, View } from 'react-native';
 import type { Id } from '@/convex/_generated/dataModel';
+import { formatExerciseSetupLabel } from '@/domains/workout/modifier-formatting';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { canUseGlassBlur, getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
@@ -16,6 +17,7 @@ import {
   shouldUseNativeDriver,
 } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { workoutSemanticPalette } from '@/design/system';
 import { styles } from './workout-surface.styles';
 import type { TimelineRow, TimelineSet } from './workout-surface.types';
 import { formatClock } from './workout-surface.utils';
@@ -48,6 +50,24 @@ type TimelinePageProps = {
 };
 
 const TIMELINE_ROW_GAP = 10;
+
+function getTimelineSetDotColor(setEntry: TimelineSet, theme: ReturnType<typeof useReedTheme>['theme']) {
+  if ((setEntry.setOutcomeDetails?.failedReps ?? 0) > 0) {
+    return theme.colors.dangerText;
+  }
+
+  if (setEntry.warmup) {
+    return theme.mode === 'dark'
+      ? workoutSemanticPalette.warmup.activeBorderDark
+      : workoutSemanticPalette.warmup.activeBorderLight;
+  }
+
+  return theme.colors.controlBorder;
+}
+
+function getTimelineSetupLabel(item: TimelineRow) {
+  return formatExerciseSetupLabel(item.exerciseSetupModifiers);
+}
 
 export function TimelinePage({
   activeRestAfterSetNumber,
@@ -455,9 +475,16 @@ export function TimelinePage({
                         style={({ pressed }) => [getTapScaleStyle(pressed, isWorking)]}
                       >
                         <View style={styles.timelineLineHeader}>
-                          <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
-                            {item.exerciseName}
-                          </ReedText>
+                          <View style={styles.timelineLineTitleStack}>
+                            <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
+                              {item.exerciseName}
+                            </ReedText>
+                            {getTimelineSetupLabel(item) ? (
+                              <ReedText numberOfLines={1} tone="muted" variant="caption">
+                                {getTimelineSetupLabel(item)}
+                              </ReedText>
+                            ) : null}
+                          </View>
                           <View style={styles.timelineRowActions}>
                             <Pressable
                               accessibilityLabel={isExpanded ? `Collapse ${item.exerciseName}` : `Expand ${item.exerciseName}`}
@@ -1039,7 +1066,7 @@ function TimelineSetRow({
             style={[
               styles.timelineSetDot,
               {
-                backgroundColor: setEntry.warmup ? '#f59e0b' : theme.colors.controlBorder,
+                backgroundColor: getTimelineSetDotColor(setEntry, theme),
               },
             ]}
           />

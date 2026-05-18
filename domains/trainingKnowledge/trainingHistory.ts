@@ -1,3 +1,5 @@
+import { formatSetOutcomeDetails } from '../workout/modifier-formatting';
+import type { SetOutcomeDetails } from '../workout/modifier-aware-calculations';
 import { summarizeMetrics, type RecipeKey } from '../workout/recipes';
 import {
   buildWeeklyMuscleStats,
@@ -12,6 +14,7 @@ export type TrainingWindowExerciseInput = WeeklyStatsExerciseInput & {
 export type TrainingWindowLogInput = WeeklyStatsLogInput & {
   loggedAt: number;
   recipeKey: RecipeKey;
+  setOutcome?: SetOutcomeDetails | null;
   source: 'live_session' | 'quick_log';
 };
 
@@ -68,7 +71,7 @@ export function summarizeTrainingWindow(args: {
         exerciseName: exercise?.exerciseName ?? 'Unknown exercise',
         loggedAt: log.loggedAt,
         source: log.source,
-        summary: summarizeMetrics(log.recipeKey, log.metrics),
+        summary: summarizeLogForCoaching(log.recipeKey, log.metrics, log.setOutcome),
       };
     });
 
@@ -85,4 +88,14 @@ export function summarizeTrainingWindow(args: {
     },
     work: weeklyStats,
   };
+}
+
+function summarizeLogForCoaching(
+  recipeKey: RecipeKey,
+  metrics: Record<string, number>,
+  setOutcome: SetOutcomeDetails | null | undefined,
+) {
+  const baseSummary = summarizeMetrics(recipeKey, metrics);
+  const outcomeDetails = formatSetOutcomeDetails(setOutcome, metrics);
+  return outcomeDetails ? `${baseSummary} (${outcomeDetails})` : baseSummary;
 }

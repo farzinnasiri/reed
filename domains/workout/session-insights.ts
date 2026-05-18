@@ -1,4 +1,5 @@
 import { detectSessionRecords, type ActivityRecordInput } from '../trainingKnowledge/personalRecords';
+import type { ExerciseSetupModifiers, SetOutcomeDetails } from './modifier-aware-calculations';
 import {
   getComparisonScalarForRecipe,
   getRecipeDefinition,
@@ -28,6 +29,7 @@ type SessionInsightsExercise = {
   movementPatterns: string[];
   recipeKey: RecipeKey;
   sessionExerciseId: string;
+  setup: ExerciseSetupModifiers | null;
 };
 
 type SessionInsightsLog = {
@@ -40,6 +42,7 @@ type SessionInsightsLog = {
   sessionExerciseId: string;
   setLogId: string;
   setNumber: number;
+  setOutcome: SetOutcomeDetails | null;
   warmup: boolean;
 };
 
@@ -53,6 +56,7 @@ type HistoricalPerformanceEntry = {
   profileId: string;
   recipeKey: RecipeKey;
   sessionId: string | null;
+  setOutcome: SetOutcomeDetails | null;
   warmup: boolean;
 };
 
@@ -568,6 +572,11 @@ function buildPerformance(historicalEntries: HistoricalPerformanceEntry[], enric
       setEntry.log.recipeKey,
       setEntry.log.metrics,
       setEntry.log.derivedEffectiveLoadKg ?? null,
+      {
+        derivedEffectiveLoadKg: setEntry.log.derivedEffectiveLoadKg ?? null,
+        exerciseSetup: setEntry.exercise.setup,
+        setOutcome: setEntry.log.setOutcome,
+      },
     );
     if (score > 0) {
       const current = currentBest.get(setEntry.exercise.exerciseCatalogId);

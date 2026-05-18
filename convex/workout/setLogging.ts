@@ -12,6 +12,12 @@ type DerivedLoadFields = {
   derivedEffectiveLoadKg?: number;
 };
 
+type SetOutcomeDetails = {
+  failedReps?: number;
+  inclineAngleDegrees?: number;
+  rangeOfMotion?: 'full' | 'top_partial' | 'bottom_partial' | 'mid_partial';
+};
+
 export function normalizeSetMetrics(
   recipeKey: SessionExerciseWithRecipe['recipeKey'],
   metrics: Record<string, number>,
@@ -26,6 +32,39 @@ export function summarizeSetMetrics(
   return summarizeMetrics(recipeKey, metrics);
 }
 
+export function normalizeSetOutcomeDetails(
+  sessionExercise: Doc<'liveSessionExercises'>,
+  details: SetOutcomeDetails | null | undefined,
+): SetOutcomeDetails | undefined {
+  const normalized: SetOutcomeDetails = {};
+
+  if (details?.rangeOfMotion && details.rangeOfMotion !== 'full') {
+    if (!sessionExercise.modifierCapabilities?.setOutcome.includes('rangeOfMotion')) {
+      throw new Error('Range of motion is not supported for this exercise.');
+    }
+    normalized.rangeOfMotion = details.rangeOfMotion;
+  }
+
+  if (details?.failedReps !== undefined && details.failedReps > 0) {
+    if (!sessionExercise.modifierCapabilities?.setOutcome.includes('failure')) {
+      throw new Error('Failure tracking is not supported for this exercise.');
+    }
+    normalized.failedReps = Math.max(1, Math.round(details.failedReps));
+  }
+
+  if (details?.inclineAngleDegrees !== undefined) {
+    if (!sessionExercise.modifierCapabilities?.setup.includes('inclineAngle')) {
+      throw new Error('Incline angle is not supported for this exercise.');
+    }
+    if (!Number.isFinite(details.inclineAngleDegrees) || details.inclineAngleDegrees < 0 || details.inclineAngleDegrees > 90) {
+      throw new Error('Incline angle must be between 0° and 90°.');
+    }
+    normalized.inclineAngleDegrees = Math.round(details.inclineAngleDegrees);
+  }
+
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 export async function insertLiveSessionSetActivity(
   ctx: MutationCtx,
   args: {
@@ -34,6 +73,7 @@ export async function insertLiveSessionSetActivity(
     profileId: Id<'profiles'>;
     restSeconds?: number;
     sessionExercise: SessionExerciseWithRecipe;
+    setOutcomeDetails?: SetOutcomeDetails;
     sessionId: Id<'liveSessions'>;
     setNumber: number;
     warmup: boolean;
@@ -54,6 +94,7 @@ export async function insertLiveSessionSetActivity(
     profileId: args.profileId,
     recipeKey: args.sessionExercise.recipeKey,
     restSeconds: args.restSeconds,
+    ...(args.setOutcomeDetails ? { setOutcomeDetails: args.setOutcomeDetails } : {}),
     sessionExerciseId: args.sessionExercise._id,
     sessionId: args.sessionId,
     setNumber: args.setNumber,
@@ -70,6 +111,7 @@ export async function patchLiveSessionSetActivity(
     profileId: Id<'profiles'>;
     sessionExercise: SessionExerciseWithRecipe;
     setLogId: Id<'activityLogs'>;
+    setOutcomeDetails?: SetOutcomeDetails;
     warmup: boolean;
   },
 ) {
@@ -84,6 +126,7 @@ export async function patchLiveSessionSetActivity(
     ...derivedLoadFields,
     loggedAt: args.loggedAt,
     metrics: args.metrics,
+    setOutcomeDetails: args.setOutcomeDetails,
     warmup: args.warmup,
   });
 }

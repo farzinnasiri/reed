@@ -62,7 +62,7 @@ export function WorkoutExerciseRestView({
       <View style={styles.restBody}>
         <View style={styles.restMainGroup}>
           <View style={styles.restTopRow}>
-            <Pressable onPress={onToggleRestRunning} style={({ pressed }) => [styles.timerButton, getTapScaleStyle(pressed, isWorking)]}>
+            <Pressable disabled={isWorking} onPress={onToggleRestRunning} style={({ pressed }) => [styles.timerButton, getTapScaleStyle(pressed, false)]}>
               <WorkoutRestRing
                 durationSeconds={restCard.durationSeconds}
                 isRunning={restRunning}
@@ -75,13 +75,14 @@ export function WorkoutExerciseRestView({
               {[-15, 15].map(delta => (
                 <Pressable
                   key={delta}
+                  disabled={isWorking}
                   onPress={() => onAdjustRest(delta)}
                   style={({ pressed }) => [
                     styles.restStep,
                     {
                       backgroundColor: glassControls.shellBackgroundColor,
                       borderColor: glassControls.shellBorderColor,
-                      ...getTapScaleStyle(pressed, isWorking),
+                      ...getTapScaleStyle(pressed, false),
                     },
                   ]}
                 >
@@ -96,6 +97,7 @@ export function WorkoutExerciseRestView({
           {[30, 60, 90, 120].map(seconds => (
             <Pressable
               key={seconds}
+              disabled={isWorking}
               onPress={() => onPresetRest(seconds)}
               style={({ pressed }) => [
                 styles.presetChip,
@@ -109,7 +111,7 @@ export function WorkoutExerciseRestView({
                       ? glassControls.activeBorderColor
                       : 'transparent',
                   borderWidth: restCard.durationSeconds === seconds ? 3 : 1,
-                  ...getTapScaleStyle(pressed, isWorking),
+                  ...getTapScaleStyle(pressed, false),
                 },
               ]}
             >

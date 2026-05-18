@@ -341,8 +341,15 @@ export const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+  sessionInsightsHighlightsSummaryTextStack: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    minWidth: 0,
+  },
   sessionInsightsHighlightsSummaryMostDemanding: {
+    flexShrink: 1,
     marginTop: 2,
+    maxWidth: '100%',
     textAlign: 'center',
     width: '100%',
   },

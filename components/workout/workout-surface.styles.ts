@@ -254,6 +254,11 @@ export const styles = StyleSheet.create({
   timelineLineTitle: {
     flex: 1,
   },
+  timelineLineTitleStack: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
   timelineRowActions: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -505,6 +510,13 @@ export const styles = StyleSheet.create({
     paddingBottom: 0,
     paddingTop: 2,
   },
+  modifierControlsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
   unilateralSwitchRow: {
     alignSelf: 'center',
     marginBottom: 8,
@@ -580,6 +592,11 @@ export const styles = StyleSheet.create({
   liveElapsedCopy: {
     alignItems: 'center',
     gap: 8,
+    maxWidth: '78%',
+  },
+  liveElapsedLabel: {
+    alignSelf: 'stretch',
+    textAlign: 'center',
   },
   liveCardStartState: {
     flex: 1,

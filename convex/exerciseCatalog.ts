@@ -4,6 +4,10 @@ import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
 import { resolveBodyweightLoadFactor } from '../domains/workout/bodyweight-load-factors';
+import {
+  normalizeExerciseModifierCapabilities,
+  resolveExerciseModifierCapabilities,
+} from '../domains/workout/modifier-capabilities';
 import { resolveCatalogRecipeKey, type RecipeKey } from '../domains/workout/recipes';
 import { recipeKeyOrNullValidator } from './workoutValidators';
 
@@ -116,6 +120,35 @@ export const searchForAddSheet = query({
   },
 });
 
+export const backfillModifierCapabilities = internalMutation({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(args.limit ?? 300, 1000));
+    const exercises = await ctx.db.query('exerciseCatalog').take(limit);
+    let updated = 0;
+
+    for (const exercise of exercises) {
+      const modifierCapabilities = resolveExerciseModifierCapabilities({
+        canonicalFamily: exercise.canonicalFamily,
+        equipment: exercise.equipment,
+        exerciseId: exercise.exerciseId,
+        name: exercise.name,
+        recipeKey: exercise.recipeKey,
+      });
+
+      const current = normalizeExerciseModifierCapabilities(exercise.modifierCapabilities);
+      if (JSON.stringify(current) === JSON.stringify(modifierCapabilities)) {
+        continue;
+      }
+
+      await ctx.db.patch(exercise._id, { modifierCapabilities });
+      updated += 1;
+    }
+
+    return { scanned: exercises.length, updated };
+  },
+});
+
 export const toggleFavorite = mutation({
   args: { exerciseCatalogId: v.id('exerciseCatalog') },
   handler: async (ctx, args) => {
@@ -168,9 +201,17 @@ export const importCatalogBatch = internalMutation({
         recipeKey: resolvedRecipeKey,
         usesBodyweight: row.usesBodyweight,
       });
+      const modifierCapabilities = resolveExerciseModifierCapabilities({
+        canonicalFamily: row.canonicalFamily,
+        equipment: row.equipment,
+        exerciseId: row.exerciseId,
+        name: row.name,
+        recipeKey: resolvedRecipeKey,
+      });
       const patch = {
         ...row,
         ...(resolvedBodyweightLoadFactor === null ? {} : { bodyweightLoadFactor: resolvedBodyweightLoadFactor }),
+        modifierCapabilities,
         recipeKey: resolvedRecipeKey,
         updatedAt: Date.now(),
       };
@@ -276,6 +317,16 @@ function serializeCatalogItem(exercise: SupportedExercise, favoriteIds: Set<Id<'
     exerciseClass: exercise.exerciseClass,
     isFavorite: favoriteIds.has(exercise._id),
     mainMuscleGroups: exercise.mainMuscleGroups,
+    modifierCapabilities: normalizeExerciseModifierCapabilities(
+      exercise.modifierCapabilities ??
+        resolveExerciseModifierCapabilities({
+          canonicalFamily: exercise.canonicalFamily,
+          equipment: exercise.equipment,
+          exerciseId: exercise.exerciseId,
+          name: exercise.name,
+          recipeKey: exercise.recipeKey,
+        }),
+    ),
     name: exercise.name,
     recipeKey: exercise.recipeKey,
   };

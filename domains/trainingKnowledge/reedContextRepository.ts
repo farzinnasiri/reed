@@ -4,6 +4,7 @@ import type { ReedContextBlock, ReedTimeRange } from '../../convex/reedContextTy
 import { resolveReedTimeRange } from '../../convex/reedContextTime';
 import { summarizeTrainingWindow } from './trainingHistory';
 import { buildBodyweightTrend } from './bodyStatus';
+import { formatSetOutcomeDetails } from '../workout/modifier-formatting';
 import { summarizeMetrics, type RecipeKey } from '../workout/recipes';
 
 export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
@@ -31,6 +32,7 @@ export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
       loggedAt: log.loggedAt,
       metrics: log.metrics,
       recipeKey: log.recipeKey as RecipeKey,
+      setOutcome: log.setOutcomeDetails ?? null,
       source: log.source,
     })),
     now: args.clientNow,
@@ -104,7 +106,7 @@ export async function exercisePerformanceHistoryContext(ctx: QueryCtx, args: {
   const recent = [...workingLogs]
     .sort((left, right) => right.loggedAt - left.loggedAt)
     .slice(0, 8)
-    .map(log => summarizeMetrics(log.recipeKey as RecipeKey, log.metrics));
+    .map(log => summarizeLogForCoaching(log.recipeKey as RecipeKey, log.metrics, log.setOutcomeDetails ?? null));
 
   return {
     title: `${exercise.name} history: ${range.label}`,
@@ -149,6 +151,16 @@ function maxMetric(logs: Array<{ metrics: Record<string, number> }>, key: string
     if (typeof value === 'number' && Number.isFinite(value)) max = max === null ? value : Math.max(max, value);
   }
   return max;
+}
+
+function summarizeLogForCoaching(
+  recipeKey: RecipeKey,
+  metrics: Record<string, number>,
+  setOutcome: Parameters<typeof formatSetOutcomeDetails>[0],
+) {
+  const baseSummary = summarizeMetrics(recipeKey, metrics);
+  const outcomeDetails = formatSetOutcomeDetails(setOutcome, metrics);
+  return outcomeDetails ? `${baseSummary} (${outcomeDetails})` : baseSummary;
 }
 
 function formatNumber(value: number) {

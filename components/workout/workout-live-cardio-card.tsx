@@ -57,7 +57,7 @@ export function WorkoutLiveCardioCard({
           <LiveCardioElapsedTimer
             elapsedSeconds={liveCardioFinishSummary.elapsedSeconds}
             isRunning={false}
-            label="Workout effort complete"
+            label="Workout complete"
             size={ringSize}
           />
           <View style={styles.liveSummaryMeta}>
@@ -75,7 +75,7 @@ export function WorkoutLiveCardioCard({
               styles.livePrimaryButton,
               {
                 backgroundColor: theme.colors.accentPrimary,
-                ...getTapScaleStyle(pressed, isWorking),
+                ...getTapScaleStyle(pressed, false),
               },
             ]}
           >
@@ -90,7 +90,7 @@ export function WorkoutLiveCardioCard({
               styles.liveFinishButton,
               {
                 borderColor: theme.colors.controlActiveBorder,
-                ...getTapScaleStyle(pressed, isWorking || !liveCardioFinishSummary.nextExerciseId),
+                ...getTapScaleStyle(pressed, !liveCardioFinishSummary.nextExerciseId),
               },
             ]}
           >
@@ -121,7 +121,7 @@ export function WorkoutLiveCardioCard({
               onPress={onToggleLiveCardioRunning}
               style={({ pressed }) => [
                 styles.liveRingButton,
-                getTapScaleStyle(pressed, isWorking),
+                getTapScaleStyle(pressed, false),
               ]}
             >
               <LiveCardioElapsedTimer
@@ -139,7 +139,7 @@ export function WorkoutLiveCardioCard({
                   styles.livePrimaryButton,
                   {
                     backgroundColor: theme.colors.accentPrimary,
-                    ...getTapScaleStyle(pressed, isWorking),
+                    ...getTapScaleStyle(pressed, false),
                   },
                 ]}
               >
@@ -158,7 +158,7 @@ export function WorkoutLiveCardioCard({
                   styles.liveFinishButton,
                   {
                     borderColor: theme.colors.controlActiveBorder,
-                    ...getTapScaleStyle(pressed, isWorking),
+                    ...getTapScaleStyle(pressed, false),
                   },
                 ]}
               >
@@ -236,7 +236,7 @@ export function WorkoutLiveCardioCard({
               styles.livePrimaryButton,
               {
                 backgroundColor: theme.colors.accentPrimary,
-                ...getTapScaleStyle(pressed, isWorking),
+                ...getTapScaleStyle(pressed, false),
               },
             ]}
           >
@@ -278,7 +278,7 @@ function StepButton({
         {
           backgroundColor: theme.colors.controlFill,
           borderColor: theme.colors.controlBorder,
-          ...getTapScaleStyle(pressed, disabled),
+          ...getTapScaleStyle(pressed, false),
         },
       ]}
     >
@@ -324,7 +324,7 @@ function LiveCardioElapsedTimer({
           >
             {formatClock(elapsedSeconds)}
           </ReedText>
-          <ReedText style={{ color: theme.colors.textMuted }} variant="section">
+          <ReedText numberOfLines={2} style={[styles.liveElapsedLabel, { color: theme.colors.textMuted }]} variant="section">
             {label ?? (isRunning ? 'Tap to pause' : elapsedSeconds > 0 ? 'Tap to resume' : 'Tap to start')}
           </ReedText>
         </View>

@@ -1,6 +1,14 @@
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
-import { activeProcessValidator, recipeKeyOrNullValidator, recipeKeyValidator, setMetricsValidator } from './workoutValidators';
+import {
+  activeProcessValidator,
+  exerciseModifierCapabilitiesValidator,
+  exerciseSetupModifiersValidator,
+  recipeKeyOrNullValidator,
+  recipeKeyValidator,
+  setMetricsValidator,
+  setOutcomeDetailsValidator,
+} from './workoutValidators';
 import {
   bodyMetricKeyValidator,
   bodyMetricUnitValidator,
@@ -64,6 +72,7 @@ export default defineSchema({
     canonicalFamily: v.string(),
     bodyweightLoadFactor: v.optional(v.number()),
     exerciseClass: v.string(),
+    modifierCapabilities: v.optional(exerciseModifierCapabilitiesValidator),
     rawMetricRecipe: v.string(),
     recipeKey: recipeKeyOrNullValidator,
     isSupportedInLiveSession: v.boolean(),
@@ -134,6 +143,8 @@ export default defineSchema({
     recipeKey: recipeKeyOrNullValidator,
     defaultSummaryFormat: v.optional(v.string()),
     exerciseClass: v.string(),
+    modifierCapabilities: v.optional(exerciseModifierCapabilitiesValidator),
+    setupModifiers: v.optional(exerciseSetupModifiersValidator),
   })
     .index('by_session_id_and_position', ['sessionId', 'position'])
     .index('by_profile_id_and_added_at', ['profileId', 'addedAt']),
@@ -146,6 +157,7 @@ export default defineSchema({
     profileId: v.id('profiles'),
     recipeKey: recipeKeyValidator,
     restSeconds: v.optional(v.number()),
+    setOutcomeDetails: v.optional(setOutcomeDetailsValidator),
     sessionExerciseId: v.optional(v.id('liveSessionExercises')),
     sessionId: v.optional(v.id('liveSessions')),
     setNumber: v.number(),

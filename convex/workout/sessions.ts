@@ -24,11 +24,12 @@ import {
   deleteLiveSessionSetActivity,
   insertLiveSessionSetActivity,
   normalizeSetMetrics,
+  normalizeSetOutcomeDetails,
   patchLiveSessionSetActivity,
   summarizeSetMetrics,
 } from './setLogging';
 import { buildCurrentLiveSessionState } from './sessionState';
-import { setMetricsValidator } from './validators';
+import { setMetricsValidator, setOutcomeDetailsValidator } from './validators';
 
 const DEFAULT_REST_SECONDS = 90;
 
@@ -399,6 +400,7 @@ export const addExercise = mutation({
       exerciseCatalogId: catalogExercise._id,
       exerciseClass: catalogExercise.exerciseClass,
       exerciseName: catalogExercise.name,
+      modifierCapabilities: catalogExercise.modifierCapabilities,
       position: existingEntries.length,
       profileId: profile._id,
       recipeKey: resolvedRecipeKey,
@@ -443,6 +445,7 @@ export const selectExercise = mutation({
 export const logSet = mutation({
   args: {
     metrics: setMetricsValidator,
+    setOutcomeDetails: v.optional(setOutcomeDetailsValidator),
     sessionExerciseId: v.id('liveSessionExercises'),
     warmup: v.boolean(),
   },
@@ -462,6 +465,7 @@ export const logSet = mutation({
     }
 
     const normalizedMetrics = normalizeSetMetrics(sessionExercise.recipeKey, args.metrics);
+    const normalizedSetOutcomeDetails = normalizeSetOutcomeDetails(sessionExercise, args.setOutcomeDetails);
     const existingLogs = await ctx.db
       .query('activityLogs')
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
@@ -470,12 +474,15 @@ export const logSet = mutation({
     const shouldOpenRest = recipeDefinition.processKind === 'rest_after_log';
     const loggedAt = Date.now();
 
+    await patchAssistanceSetupFromMetrics(ctx, sessionExercise, normalizedMetrics);
+
     await insertLiveSessionSetActivity(ctx, {
       loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
       restSeconds: shouldOpenRest ? DEFAULT_REST_SECONDS : undefined,
       sessionExercise,
+      setOutcomeDetails: normalizedSetOutcomeDetails,
       sessionId: session._id,
       setNumber,
       warmup: args.warmup,
@@ -508,6 +515,7 @@ export const updateSet = mutation({
   args: {
     metrics: setMetricsValidator,
     setLogId: v.id('activityLogs'),
+    setOutcomeDetails: v.optional(setOutcomeDetailsValidator),
     warmup: v.boolean(),
   },
   handler: async (ctx, args) => {
@@ -526,7 +534,10 @@ export const updateSet = mutation({
 
     const sessionExercise = await requireSessionExercise(ctx, session, profile._id, setLog.sessionExerciseId);
     const normalizedMetrics = normalizeSetMetrics(sessionExercise.recipeKey, args.metrics);
+    const normalizedSetOutcomeDetails = normalizeSetOutcomeDetails(sessionExercise, args.setOutcomeDetails);
     const loggedAt = Date.now();
+
+    await patchAssistanceSetupFromMetrics(ctx, sessionExercise, normalizedMetrics);
 
     await patchLiveSessionSetActivity(ctx, {
       loggedAt,
@@ -534,6 +545,7 @@ export const updateSet = mutation({
       profileId: profile._id,
       sessionExercise,
       setLogId: setLog._id,
+      setOutcomeDetails: normalizedSetOutcomeDetails,
       warmup: args.warmup,
     });
 
@@ -880,6 +892,32 @@ async function requireSessionExercise(
   }
 
   return sessionExercise as SessionExerciseWithRecipe;
+}
+
+async function patchAssistanceSetupFromMetrics(
+  ctx: MutationCtx,
+  sessionExercise: SessionExerciseWithRecipe,
+  metrics: Record<string, number>,
+) {
+  if (sessionExercise.recipeKey !== 'assist_bodyweight') {
+    return;
+  }
+
+  if (!sessionExercise.modifierCapabilities?.setup.includes('assistanceSupport')) {
+    return;
+  }
+
+  const assistanceSupportKg = metrics.assistLoad;
+  if (typeof assistanceSupportKg !== 'number' || !Number.isFinite(assistanceSupportKg) || assistanceSupportKg < 0) {
+    return;
+  }
+
+  await ctx.db.patch(sessionExercise._id, {
+    setupModifiers: {
+      ...(sessionExercise.setupModifiers ?? {}),
+      assistanceSupportKg,
+    },
+  });
 }
 
 async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessions'>) {

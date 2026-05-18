@@ -27,6 +27,7 @@ import type {
   LiveSessionSummary,
   MetricValues,
   RestCard,
+  SetOutcomeDetails,
   TimelineRow,
   TimelineSet,
   WorkoutPage,
@@ -85,6 +86,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [warmup, setWarmup] = useState(false);
   const [metricValues, setMetricValues] = useState<MetricValues>({});
+  const [setOutcomeDetails, setSetOutcomeDetails] = useState<SetOutcomeDetails>({});
   const [restRemaining, setRestRemaining] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [isPickerInteracting, setIsPickerInteracting] = useState(false);
@@ -133,6 +135,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     lastCaptureCardKeyRef.current = captureCardKey;
     setIsPickerInteracting(false);
     setMetricValues(captureCard.initialMetrics);
+    setSetOutcomeDetails({});
     setWarmup(false);
     setErrorMessage(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -143,6 +146,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return;
     }
     setMetricValues(activeSetEditor.metrics);
+    setSetOutcomeDetails(activeSetEditor.setOutcomeDetails ?? {});
     setWarmup(activeSetEditor.warmup);
     setErrorMessage(null);
   }, [activeSetEditor]);
@@ -358,6 +362,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         sessionExerciseId,
         setLogId: setEntry.setLogId,
         setNumber: setEntry.setNumber,
+        setOutcomeDetails: setEntry.setOutcomeDetails,
         warmup: setEntry.warmup,
       });
       setLiveCardioFinishSummary(null);
@@ -418,6 +423,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         await updateSet({
           metrics: metricValues,
           setLogId: activeSetEditor.setLogId,
+          setOutcomeDetails,
           warmup,
         });
         setEditingSet(null);
@@ -427,6 +433,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       await logSet({
         metrics: metricValues,
         sessionExerciseId: captureCard.sessionExerciseId,
+        setOutcomeDetails,
         warmup,
       });
     });
@@ -830,6 +837,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           isWorking,
           metricValues,
           onCaptureSwipeRight: handleCaptureSwipeRight,
+          onSetOutcomeDetailsChange: setSetOutcomeDetails,
           onPickerInteractionEnd: () => setIsPickerInteracting(false),
           onPickerInteractionStart: () => setIsPickerInteracting(true),
           onUpdateMetric: (key, nextValue) =>
@@ -838,6 +846,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
               [key]: nextValue,
             })),
           onWarmupToggle: () => setWarmup(current => !current),
+          setOutcomeDetails,
           warmup,
         }}
         liveCardio={{

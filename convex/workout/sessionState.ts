@@ -1,6 +1,11 @@
 import type { Doc, Id } from '../_generated/dataModel';
 import { getLiveCardioSnapshot } from '../../domains/workout/liveCardio';
 import { getRestSnapshot } from '../../domains/workout/rest';
+import { formatSetOutcomeDetails } from '../../domains/workout/modifier-formatting';
+import {
+  emptyExerciseModifierCapabilities,
+  normalizeExerciseModifierCapabilities,
+} from '../../domains/workout/modifier-capabilities';
 import {
   getLiveCardioTrackedFields,
   getRecipeDefinition,
@@ -42,7 +47,8 @@ export function buildCurrentLiveSessionState(args: {
 
     return {
       exerciseName: sessionExercise.exerciseName,
-      lastLoggedSummary: lastLog ? summarizeMetrics(lastLog.recipeKey, lastLog.metrics) : null,
+      exerciseSetupModifiers: sessionExercise.setupModifiers ?? {},
+      lastLoggedSummary: lastLog ? summarizeActivityLog(lastLog) : null,
       sessionExerciseId: sessionExercise._id,
       sets: logs.map(log => ({
         derivedBodyweightKg: log.derivedBodyweightKg ?? null,
@@ -50,8 +56,9 @@ export function buildCurrentLiveSessionState(args: {
         metrics: log.metrics,
         restSeconds: log.restSeconds ?? null,
         setLogId: log._id,
+        setOutcomeDetails: log.setOutcomeDetails ?? null,
         setNumber: log.setNumber,
-        summary: summarizeMetrics(log.recipeKey, log.metrics),
+        summary: summarizeActivityLog(log),
         warmup: log.warmup,
       })),
       setCount: logs.length,
@@ -93,7 +100,7 @@ export function buildCurrentLiveSessionState(args: {
           isRunning: liveCardioSnapshot.isRunning,
           layoutKind: activeRecipeDefinition.layoutKind,
           nextSetNumber: activeLogs.length + 1,
-          previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+          previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
           processKind: activeRecipeDefinition.processKind,
           recipeKey: liveCardioProcess.recipeKey,
           sessionExerciseId: activeSessionExercise._id,
@@ -113,15 +120,23 @@ export function buildCurrentLiveSessionState(args: {
     };
   }
 
-  const captureInput = prepareRecipeCaptureInput(activeSessionExercise.recipeKey, previousSet?.metrics ?? null);
+  const setupSeedMetrics =
+    !previousSet && activeSessionExercise.recipeKey === 'assist_bodyweight'
+      ? { assistLoad: activeSessionExercise.setupModifiers?.assistanceSupportKg ?? 0 }
+      : null;
+  const captureInput = prepareRecipeCaptureInput(activeSessionExercise.recipeKey, previousSet?.metrics ?? setupSeedMetrics);
   const captureCard = {
     currentSetNumber: activeLogs.length + 1,
     exerciseName: activeSessionExercise.exerciseName,
+    exerciseSetupModifiers: activeSessionExercise.setupModifiers ?? {},
     fields: captureInput.fields,
     initialMetrics: captureInput.initialMetrics,
     layoutKind: captureInput.layoutKind,
+    modifierCapabilities: normalizeExerciseModifierCapabilities(
+      activeSessionExercise.modifierCapabilities ?? emptyExerciseModifierCapabilities,
+    ),
     previousMetrics: captureInput.previousMetrics,
-    previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+    previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
     processKind: captureInput.processKind,
     recipeKey: captureInput.recipeKey,
     sessionExerciseId: activeSessionExercise._id,
@@ -180,8 +195,14 @@ function buildRestCard(
     isComplete: restSnapshot.isComplete,
     isRunning: restSnapshot.isRunning,
     nextSetNumber: restProcess.nextSetNumber,
-    previousSetSummary: previousSet ? summarizeMetrics(previousSet.recipeKey, previousSet.metrics) : null,
+    previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
     remainingSeconds: restSnapshot.remainingSeconds,
     sessionExerciseId: restExercise._id,
   };
+}
+
+function summarizeActivityLog(log: Doc<'activityLogs'>) {
+  const baseSummary = summarizeMetrics(log.recipeKey, log.metrics);
+  const details = formatSetOutcomeDetails(log.setOutcomeDetails ?? null, log.metrics);
+  return details ? `${baseSummary} · ${details}` : baseSummary;
 }
