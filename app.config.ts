@@ -26,7 +26,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   userInterfaceStyle: 'automatic',
   newArchEnabled: true,
   splash: {
-    image: './assets/images/logo-mark-dark.svg',
+    image: './assets/images/logo-mark-dark.png',
     resizeMode: 'contain',
     backgroundColor: '#f7f7f4',
   },
@@ -53,12 +53,12 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        image: './assets/images/logo-mark-dark.svg',
+        image: './assets/images/logo-mark-dark.png',
         imageWidth: 180,
         resizeMode: 'contain',
         backgroundColor: '#f7f7f4',
         dark: {
-          image: './assets/images/logo-mark.svg',
+          image: './assets/images/logo-mark.png',
           backgroundColor: '#040404',
         },
       },
