@@ -47,7 +47,6 @@ export function ReedHeader({
             onPress={onOpenAiSettings}
             style={({ pressed }) => [
               styles.headerActionIconOnly,
-              { borderColor: theme.colors.controlBorder },
               getTapScaleStyle(pressed),
             ]}
           >
@@ -60,7 +59,6 @@ export function ReedHeader({
             onPress={onOpenCoachItems}
             style={({ pressed }) => [
               styles.headerAction,
-              { borderColor: theme.colors.controlBorder },
               getTapScaleStyle(pressed),
             ]}
           >

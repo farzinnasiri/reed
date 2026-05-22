@@ -20,11 +20,14 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewType | null>(null);
+  const hasInitialScrollSettledRef = useRef(false);
+  const hasInitialComposerAlignmentRef = useRef(false);
   const [isViewingAiSettings, setIsViewingAiSettings] = useState(false);
   const [isViewingCoachItems, setIsViewingCoachItems] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const [isThreadReady, setIsThreadReady] = useState(false);
 
   const runtime = useMemo(() => createLocalMockReedRuntime(), []);
   const presence = useQuery(api.reed.getPresence, {});
@@ -32,6 +35,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const {
     coachItems,
     hasMoreMessages,
+    isLoadingInitialMessages,
     isMessageSaved,
     loadOlderMessages,
     messages,
@@ -57,7 +61,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const keyboardLift = Platform.OS === 'android' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
   const composerBottomPadding = keyboardLift > 0 ? theme.spacing.xs : dockReservedSpace + theme.spacing.xs;
   const scrollBottomSpace = composerDockHeight > 0
-    ? composerBottomPadding + keyboardLift + composerDockHeight + theme.spacing.lg
+    ? keyboardLift + composerDockHeight + theme.spacing.lg
     : composerBottomPadding + keyboardLift + theme.spacing.xxxl;
 
   useEffect(() => {
@@ -75,9 +79,54 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   }, []);
 
   useEffect(() => {
+    if (isLoadingInitialMessages) {
+      return;
+    }
+
+    if (messages.length === 0) {
+      setIsThreadReady(true);
+      return;
+    }
+
+    if (hasInitialScrollSettledRef.current) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: false });
+      requestAnimationFrame(() => {
+        hasInitialScrollSettledRef.current = true;
+        if (composerDockHeight > 0 && !hasInitialComposerAlignmentRef.current) {
+          hasInitialComposerAlignmentRef.current = true;
+          scrollRef.current?.scrollToEnd({ animated: false });
+          requestAnimationFrame(() => setIsThreadReady(true));
+        }
+      });
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [composerDockHeight, isLoadingInitialMessages, messages.length]);
+
+  useEffect(() => {
+    if (!hasInitialScrollSettledRef.current || hasInitialComposerAlignmentRef.current || composerDockHeight <= 0) {
+      return;
+    }
+
+    hasInitialComposerAlignmentRef.current = true;
+    const timeout = setTimeout(() => {
+      scrollRef.current?.scrollToEnd({ animated: false });
+      requestAnimationFrame(() => setIsThreadReady(true));
+    }, 0);
+    return () => clearTimeout(timeout);
+  }, [composerDockHeight]);
+
+  useEffect(() => {
+    if (!isThreadReady) return;
+    if (!hasInitialScrollSettledRef.current) return;
+    if (keyboardLift <= 0 && voiceState.status === 'idle') return;
+
     const timeout = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(timeout);
-  }, [keyboardLift, messages, openCoachItems.length, voiceState.status]);
+  }, [keyboardLift, voiceState.status]);
 
   function clearComposerState() {
     setComposerText('');
@@ -135,6 +184,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         contentPaddingTop={contentTopPadding}
         hasMoreMessages={hasMoreMessages}
         messages={messages}
+        isReady={isThreadReady}
         onLoadOlderMessages={loadOlderMessages}
         isMessageSaved={isMessageSaved}
         onSaveCoachItem={saveCoachItem}

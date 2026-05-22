@@ -6,6 +6,7 @@ import {
   bodyweightTrendContext,
   exercisePerformanceHistoryContext,
   summarizeTrainingWindowContext,
+  trainingGoalsContext,
 } from '../domains/trainingKnowledge/reedContextRepository';
 
 export const runContextTools = internalQuery({
@@ -30,6 +31,9 @@ export const runContextTools = internalQuery({
           exerciseQuery: call.args.exerciseQuery,
           range: call.args.range,
         }));
+      }
+      if (call.name === 'get_training_goals') {
+        blocks.push(await trainingGoalsContext(ctx, { limit: call.args.limit, profileId: args.profileId, status: call.args.status }));
       }
     }
     return blocks;

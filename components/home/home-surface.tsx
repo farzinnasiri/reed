@@ -20,11 +20,13 @@ import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
+import { GoalsHomeCard } from './goals-home-card';
 import { QuickLogSheet } from './quick-log-sheet';
 
 type HomeSurfaceProps = {
   hasActiveSession: boolean;
   homeHeadline: string;
+  onOpenGoals: () => void;
   onOpenWorkout: () => void;
 };
 
@@ -44,6 +46,7 @@ type WeeklyBreakdownStats = {
 export function HomeSurface({
   hasActiveSession,
   homeHeadline,
+  onOpenGoals,
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
@@ -201,6 +204,8 @@ export function HomeSurface({
       </GlassSurface>
 
       <QuickLogSheet onClose={() => setIsQuickLogOpen(false)} visible={isQuickLogOpen} />
+
+      <GoalsHomeCard onOpenGoals={onOpenGoals} />
 
       <GlassSurface style={styles.card}>
         <View style={styles.cardHeader}>

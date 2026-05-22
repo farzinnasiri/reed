@@ -14,6 +14,7 @@ export function ReedThread({
   contentPaddingTop,
   hasMoreMessages,
   isMessageSaved,
+  isReady,
   messages,
   onLoadOlderMessages,
   onSaveCoachItem,
@@ -23,51 +24,89 @@ export function ReedThread({
   contentPaddingTop: number;
   hasMoreMessages: boolean;
   isMessageSaved: (message: ReedMessage) => boolean;
+  isReady: boolean;
   messages: ReedMessage[];
   onLoadOlderMessages: () => void;
   onSaveCoachItem: (message: ReedMessage) => void;
   scrollRef: RefObject<ScrollViewType | null>;
 }) {
   const { theme } = useReedTheme();
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  function handleScrollToBottom() {
+    scrollRef.current?.scrollToEnd({ animated: true });
+    setShowScrollToBottom(false);
+  }
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingBottom: contentPaddingBottom,
-          paddingHorizontal: theme.spacing.sm,
-          paddingTop: contentPaddingTop,
-        },
-      ]}
-      keyboardShouldPersistTaps="handled"
-      onScroll={event => {
-        if (hasMoreMessages && event.nativeEvent.contentOffset.y < 80) {
-          onLoadOlderMessages();
-        }
-      }}
-      scrollEventThrottle={120}
-      ref={scrollRef}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.thread}>
-        {messages.map((message, index) => {
-          const previousMessage = messages[index - 1];
-          const shouldShowDateIndicator = !previousMessage || !isSameMessageDay(previousMessage.createdAt, message.createdAt);
+    <View style={[styles.threadRoot, !isReady && styles.threadRootHidden]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: contentPaddingBottom,
+            paddingHorizontal: theme.spacing.sm,
+            paddingTop: contentPaddingTop,
+          },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        onContentSizeChange={() => {
+          if (!isReady) {
+            scrollRef.current?.scrollToEnd({ animated: false });
+          }
+        }}
+        onScroll={event => {
+          if (hasMoreMessages && event.nativeEvent.contentOffset.y < 80) {
+            onLoadOlderMessages();
+          }
 
-          return (
-            <View key={message.id} style={styles.messageCluster}>
-              {shouldShowDateIndicator ? <DateIndicator createdAt={message.createdAt} /> : null}
-              <MessageRow
-                isSaved={isMessageSaved(message)}
-                message={message}
-                onSaveCoachItem={onSaveCoachItem}
-              />
-            </View>
-          );
-        })}
-      </View>
-    </ScrollView>
+          const distanceFromBottom = event.nativeEvent.contentSize.height
+            - event.nativeEvent.layoutMeasurement.height
+            - event.nativeEvent.contentOffset.y;
+          setShowScrollToBottom(distanceFromBottom > 260);
+        }}
+        scrollEventThrottle={16}
+        ref={scrollRef}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.thread}>
+          {messages.map((message, index) => {
+            const previousMessage = messages[index - 1];
+            const shouldShowDateIndicator = !previousMessage || !isSameMessageDay(previousMessage.createdAt, message.createdAt);
+
+            return (
+              <View key={message.id} style={styles.messageCluster}>
+                {shouldShowDateIndicator ? <DateIndicator createdAt={message.createdAt} /> : null}
+                <MessageRow
+                  isSaved={isMessageSaved(message)}
+                  message={message}
+                  onSaveCoachItem={onSaveCoachItem}
+                />
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      {showScrollToBottom ? (
+        <Pressable
+          accessibilityLabel="Scroll to latest message"
+          accessibilityRole="button"
+          onPress={handleScrollToBottom}
+          style={({ pressed }) => [
+            styles.scrollToBottomButton,
+            {
+              backgroundColor: theme.colors.controlFill,
+              borderColor: theme.colors.controlBorder,
+              bottom: Math.max(88, contentPaddingBottom - theme.spacing.md),
+            },
+            getTapScaleStyle(pressed),
+          ]}
+        >
+          <Ionicons color={String(theme.colors.textMuted)} name="arrow-down" size={18} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 

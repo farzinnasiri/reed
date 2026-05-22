@@ -64,7 +64,19 @@ export function formatReedLastSeen(lastSeenAt: number, now: number = Date.now())
   const elapsedMinutes = Math.max(0, Math.floor((now - lastSeenAt) / 60_000));
   if (elapsedMinutes < 1) return 'Last seen just now';
   if (elapsedMinutes === 1) return 'Last seen 1 minute ago';
-  return `Last seen ${elapsedMinutes} minutes ago`;
+  if (elapsedMinutes < 60) return `Last seen ${elapsedMinutes} minutes ago`;
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours === 1) return 'Last seen 1 hour ago';
+  if (elapsedHours < 24) return `Last seen ${elapsedHours} hours ago`;
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays === 1) return 'Last seen 1 day ago';
+  if (elapsedDays < 7) return `Last seen ${elapsedDays} days ago`;
+
+  const elapsedWeeks = Math.floor(elapsedDays / 7);
+  if (elapsedWeeks === 1) return 'Last seen 1 week ago';
+  return `Last seen ${elapsedWeeks} weeks ago`;
 }
 
 export function getCoachItemColor(theme: ReedTheme, type: CoachItem['type']) {

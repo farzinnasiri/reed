@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -1250,8 +1251,13 @@ function ProfileDetailSurface({
         </View>
         <PlainHint
           icon="flag-outline"
-          title={primaryDetail?.focusAreas?.length ? 'Main focus' : 'Add a target'}
-          body={primaryDetail?.focusAreas?.length ? primaryDetail.focusAreas.map(formatGoalToken).join(' · ') : 'Pick target lifts, skills, or conditioning work.'}
+          title={primaryDetail?.focusAreas?.length ? 'Direction' : 'Add direction'}
+          body={primaryDetail?.focusAreas?.length ? primaryDetail.focusAreas.map(formatGoalToken).join(' · ') : 'Pick long-term lifts, skills, or conditioning work.'}
+        />
+        <ReedButton
+          label="Open goals"
+          onPress={() => router.push('/(app)/goals')}
+          variant="secondary"
         />
         {profileData.trainingProfile.userNotes ? (
           <View style={[styles.notesBlock, { borderColor: theme.colors.controlBorder }]}>

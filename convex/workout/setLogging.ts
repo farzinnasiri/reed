@@ -2,6 +2,7 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx } from '../_generated/server';
 import { isBodyweightLoadRecipeKey } from '../../domains/workout/bodyweight-load-factors';
 import { roundMetric, summarizeMetrics, validateRecipeMetrics } from '../../domains/workout/recipes';
+import { evaluateActiveTargetsForProfile } from '../trainingTargets';
 
 type SessionExerciseWithRecipe = Doc<'liveSessionExercises'> & {
   recipeKey: NonNullable<Doc<'liveSessionExercises'>['recipeKey']>;
@@ -86,7 +87,7 @@ export async function insertLiveSessionSetActivity(
     sessionExercise: args.sessionExercise,
   });
 
-  return await ctx.db.insert('activityLogs', {
+  const activityLogId = await ctx.db.insert('activityLogs', {
     ...derivedLoadFields,
     exerciseCatalogId: args.sessionExercise.exerciseCatalogId,
     loggedAt: args.loggedAt,
@@ -101,6 +102,9 @@ export async function insertLiveSessionSetActivity(
     source: 'live_session',
     warmup: args.warmup,
   });
+
+  await evaluateActiveTargetsForProfile(ctx, args.profileId, args.loggedAt);
+  return activityLogId;
 }
 
 export async function patchLiveSessionSetActivity(
@@ -129,6 +133,7 @@ export async function patchLiveSessionSetActivity(
     setOutcomeDetails: args.setOutcomeDetails,
     warmup: args.warmup,
   });
+  await evaluateActiveTargetsForProfile(ctx, args.profileId, args.loggedAt);
 }
 
 export async function deleteLiveSessionSetActivity(
@@ -150,6 +155,7 @@ export async function deleteLiveSessionSetActivity(
   }
 
   await ctx.db.delete(setLog._id);
+  await evaluateActiveTargetsForProfile(ctx, setLog.profileId, Date.now());
 
   return {
     deletedSetNumber: setLog.setNumber,
@@ -168,7 +174,7 @@ export async function insertQuickLogActivity(
 ) {
   const derivedLoadFields = await resolveQuickLogDerivedLoadFields(ctx, args);
 
-  return await ctx.db.insert('activityLogs', {
+  const activityLogId = await ctx.db.insert('activityLogs', {
     ...derivedLoadFields,
     exerciseCatalogId: args.preset.exerciseCatalogId,
     loggedAt: args.loggedAt,
@@ -179,6 +185,9 @@ export async function insertQuickLogActivity(
     source: 'quick_log',
     warmup: false,
   });
+
+  await evaluateActiveTargetsForProfile(ctx, args.profileId, args.loggedAt);
+  return activityLogId;
 }
 
 async function resolveLiveSessionSetDerivedLoadFields(

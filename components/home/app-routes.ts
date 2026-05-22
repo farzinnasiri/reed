@@ -10,6 +10,7 @@ export const appModeRoutes = {
 export function appModeFromRouteSegment(segment: string | undefined): AppMode {
   switch (segment) {
     case 'home':
+    case 'goals':
       return 'home';
     case 'reed':
       return 'chat';

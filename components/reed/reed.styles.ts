@@ -37,17 +37,13 @@ export const styles = StyleSheet.create({
   },
   headerAction: {
     alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: 7,
     minHeight: 44,
-    paddingHorizontal: 14,
+    paddingHorizontal: 8,
   },
   headerActionIconOnly: {
     alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
     height: 44,
     justifyContent: 'center',
     width: 44,
@@ -113,6 +109,23 @@ export const styles = StyleSheet.create({
   thread: {
     gap: 14,
     paddingTop: 4,
+  },
+  threadRoot: {
+    flex: 1,
+  },
+  threadRootHidden: {
+    opacity: 0,
+  },
+  scrollToBottomButton: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    position: 'absolute',
+    width: 42,
+    zIndex: 8,
   },
   messageCluster: {
     gap: 14,

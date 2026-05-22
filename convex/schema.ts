@@ -18,6 +18,13 @@ import {
   strengthAssessmentKindValidator,
   trainingProfileValidator,
 } from './profileValidators';
+import {
+  targetCompletionSourceValidator,
+  targetProgressSummaryValidator,
+  targetRuleValidator,
+  targetStatusValidator,
+  targetVerifiedSnapshotValidator,
+} from './targetValidators';
 
 export default defineSchema({
   profiles: defineTable({
@@ -169,6 +176,29 @@ export default defineSchema({
     .index('by_profile_id_and_logged_at', ['profileId', 'loggedAt'])
     .index('by_profile_id_and_exercise_catalog_id_and_logged_at', ['profileId', 'exerciseCatalogId', 'loggedAt'])
     .index('by_profile_id_and_source_and_logged_at', ['profileId', 'source', 'loggedAt']),
+  trainingTargets: defineTable({
+    archivedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    completionNote: v.optional(v.string()),
+    completionSource: v.optional(targetCompletionSourceValidator),
+    createdAt: v.number(),
+    endsAt: v.number(),
+    lastEvaluatedAt: v.optional(v.number()),
+    missedAt: v.optional(v.number()),
+    notes: v.optional(v.string()),
+    previewText: v.string(),
+    profileId: v.id('profiles'),
+    progressSummary: targetProgressSummaryValidator,
+    rule: targetRuleValidator,
+    startsAt: v.number(),
+    status: targetStatusValidator,
+    title: v.string(),
+    updatedAt: v.number(),
+    verifiedSnapshot: v.optional(targetVerifiedSnapshotValidator),
+  })
+    .index('by_profile_id_and_status', ['profileId', 'status'])
+    .index('by_profile_id_and_status_and_updated_at', ['profileId', 'status', 'updatedAt'])
+    .index('by_profile_id_and_ends_at', ['profileId', 'endsAt']),
   reedThreads: defineTable({
     profileId: v.id('profiles'),
     status: v.union(v.literal('active'), v.literal('archived')),

@@ -4,9 +4,11 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
-import type { ReedContextToolCall } from './reedContextTypes';
+import type { ReedContextToolCall, ReedTimeRange } from './reedContextTypes';
 
 const CONTEXT_PLANNER_MODEL_NAME = process.env.REED_CONTEXT_PLANNER_MODEL ?? 'gemini-2.5-flash-lite';
+
+const goalStatusSchema = z.enum(['all', 'active', 'completed', 'missed', 'archived']);
 
 const timeRangeSchema = z.object({
   preset: z.enum(['today', 'yesterday', 'this_week', 'last_week', 'last_n_days', 'last_n_weeks']),
@@ -24,6 +26,11 @@ const contextTools = [
     name: 'get_bodyweight_trend',
     description: 'Retrieve deterministic bodyweight entries, latest value, and change over a semantic time range. Use when bodyweight could materially affect the answer.',
     schema: z.object({ range: timeRangeSchema }),
+  }),
+  tool(async () => 'planned', {
+    name: 'get_training_goals',
+    description: 'Read-only. Retrieve structured concrete training goals and deterministic progress. Use when the user asks about goals, targets, progress toward a goal, missed goals, completed goals, ongoing/active goals, priorities, or what to focus on. Use status=all when unsure.',
+    schema: z.object({ status: goalStatusSchema.optional(), limit: z.number().int().min(1).max(50).optional() }),
   }),
   tool(async () => 'planned', {
     name: 'get_exercise_performance_history',
@@ -91,6 +98,16 @@ function parseToolCalls(toolCalls: unknown): ReedContextToolCall[] {
       parsed.push({ name, args: { range: args.range } });
       continue;
     }
+    if (name === 'get_training_goals' && isObject(args)) {
+      parsed.push({
+        name,
+        args: {
+          ...(isGoalStatus(args.status) ? { status: args.status } : {}),
+          ...(typeof args.limit === 'number' ? { limit: Math.max(1, Math.min(50, Math.round(args.limit))) } : {}),
+        },
+      });
+      continue;
+    }
     if (name === 'get_exercise_performance_history' && isObject(args) && typeof args.exerciseQuery === 'string' && isTimeRange(args.range)) {
       parsed.push({ name, args: { exerciseQuery: args.exerciseQuery.slice(0, 80), range: args.range } });
     }
@@ -102,7 +119,11 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isTimeRange(value: unknown): value is ReedContextToolCall['args']['range'] {
+function isGoalStatus(value: unknown): value is NonNullable<Extract<ReedContextToolCall, { name: 'get_training_goals' }>['args']['status']> {
+  return value === 'all' || value === 'active' || value === 'completed' || value === 'missed' || value === 'archived';
+}
+
+function isTimeRange(value: unknown): value is ReedTimeRange {
   if (!isObject(value) || typeof value.preset !== 'string') return false;
   if (['today', 'yesterday', 'this_week', 'last_week'].includes(value.preset)) return true;
   if (value.preset === 'last_n_days') return typeof value.days === 'number';

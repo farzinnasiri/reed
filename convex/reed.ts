@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
@@ -139,6 +140,28 @@ export const listMessages = query({
       hasMore: rows.length > limit,
       messages: rows.slice(0, limit).reverse(),
     };
+  },
+});
+
+
+export const listMessagesPaginated = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const thread = await getActiveThread(ctx, profile._id);
+    if (!thread) {
+      return {
+        continueCursor: '',
+        isDone: true,
+        page: [],
+      };
+    }
+
+    return await ctx.db
+      .query('reedMessages')
+      .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', thread._id))
+      .order('desc')
+      .paginate(args.paginationOpts);
   },
 });
 

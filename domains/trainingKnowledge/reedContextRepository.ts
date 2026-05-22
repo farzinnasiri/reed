@@ -136,6 +136,178 @@ export async function exercisePerformanceHistoryContext(ctx: QueryCtx, args: {
   };
 }
 
+export async function trainingGoalsContext(ctx: QueryCtx, args: {
+  limit?: number;
+  profileId: Id<'profiles'>;
+  status?: 'all' | 'active' | 'completed' | 'missed' | 'archived';
+}): Promise<ReedContextBlock> {
+  const status = args.status ?? 'all';
+  const limit = Math.max(1, Math.min(args.limit ?? 30, 50));
+  const targets = await loadTrainingTargetsForContext(ctx, args.profileId, status, limit);
+  const exerciseIds = targets.flatMap(target => target.rule.exerciseCatalogId ? [target.rule.exerciseCatalogId] : []);
+  const exercises = await loadExerciseMap(ctx, getUniqueIds(exerciseIds));
+  const goals = targets.map(target => {
+    const exercise = target.rule.exerciseCatalogId ? exercises.get(target.rule.exerciseCatalogId) : null;
+    return {
+      id: target._id,
+      title: target.title,
+      preview: target.previewText,
+      status: target.status,
+      notes: target.notes ?? null,
+      timing: {
+        startsAt: target.startsAt,
+        endsAt: target.endsAt,
+        dueLabel: formatDateForContext(target.endsAt),
+      },
+      exercise: exercise ? {
+        id: exercise._id,
+        name: exercise.name,
+      } : null,
+      rule: {
+        cadence: target.rule.cadence,
+        metricKind: target.rule.metricKind,
+        threshold: target.rule.threshold,
+        thresholdUnit: target.rule.thresholdUnit,
+        periodCount: target.rule.periodCount ?? null,
+        minLoadKg: target.rule.minLoadKg ?? null,
+        minReps: target.rule.minReps ?? null,
+        minDurationSeconds: target.rule.minDurationSeconds ?? null,
+      },
+      progress: {
+        current: target.progressSummary.current,
+        currentLabel: target.progressSummary.currentLabel,
+        required: target.progressSummary.required,
+        requiredLabel: target.progressSummary.requiredLabel,
+        satisfiedPeriods: target.progressSummary.satisfiedPeriods ?? null,
+        totalPeriods: target.progressSummary.totalPeriods ?? null,
+        lastEvaluatedAt: target.lastEvaluatedAt ?? null,
+      },
+      completion: {
+        completedAt: target.completedAt ?? null,
+        completionSource: target.completionSource ?? null,
+        missedAt: target.missedAt ?? null,
+        archivedAt: target.archivedAt ?? null,
+      },
+    };
+  });
+  const counts = {
+    active: targets.filter(target => target.status === 'active').length,
+    completed: targets.filter(target => target.status === 'completed').length,
+    missed: targets.filter(target => target.status === 'missed').length,
+    archived: targets.filter(target => target.status === 'archived').length,
+  };
+
+  return {
+    title: `Training goals (${status})`,
+    content: formatTrainingGoalsForContext({ counts, goals, status }),
+  };
+}
+
+function formatTrainingGoalsForContext(args: {
+  counts: { active: number; archived: number; completed: number; missed: number };
+  goals: Array<{
+    completion: {
+      archivedAt: number | null;
+      completedAt: number | null;
+      completionSource: 'verified' | 'manual' | null;
+      missedAt: number | null;
+    };
+    exercise: { id: Id<'exerciseCatalog'>; name: string } | null;
+    notes: string | null;
+    preview: string;
+    progress: {
+      currentLabel: string;
+      lastEvaluatedAt: number | null;
+      requiredLabel: string;
+      satisfiedPeriods: number | null;
+      totalPeriods: number | null;
+    };
+    status: 'active' | 'archived' | 'completed' | 'missed';
+    timing: { dueLabel: string; endsAt: number; startsAt: number };
+    title: string;
+  }>;
+  status: 'all' | 'active' | 'completed' | 'missed' | 'archived';
+}) {
+  if (args.goals.length === 0) {
+    return args.status === 'all'
+      ? 'The user has no concrete training goals recorded.'
+      : `The user has no ${args.status} concrete training goals recorded.`;
+  }
+
+  const header = [
+    args.status === 'all'
+      ? 'Concrete training goals available to Reed, read-only.'
+      : `${capitalize(args.status)} concrete training goals available to Reed, read-only.`,
+    `Returned ${args.goals.length} goal${args.goals.length === 1 ? '' : 's'}: ${args.counts.active} active, ${args.counts.completed} completed, ${args.counts.missed} missed, ${args.counts.archived} archived.`,
+  ].join(' ');
+
+  const lines = args.goals.map((goal, index) => {
+    const statusSentence = formatGoalStatusSentence(goal);
+    const periodSentence = goal.progress.totalPeriods
+      ? `Period progress is ${goal.progress.satisfiedPeriods ?? 0} of ${goal.progress.totalPeriods} required periods.`
+      : null;
+    const exerciseSentence = goal.exercise ? `Exercise: ${goal.exercise.name}.` : null;
+    const notesSentence = goal.notes ? `User note: ${goal.notes}` : null;
+
+    return [
+      `${index + 1}. ${goal.preview}`,
+      statusSentence,
+      `Progress: ${goal.progress.currentLabel} toward ${goal.progress.requiredLabel}.`,
+      periodSentence,
+      exerciseSentence,
+      notesSentence,
+    ].filter(Boolean).join(' ');
+  });
+
+  return [header, ...lines].join('\n');
+}
+
+function formatGoalStatusSentence(goal: {
+  completion: {
+    archivedAt: number | null;
+    completedAt: number | null;
+    completionSource: 'verified' | 'manual' | null;
+    missedAt: number | null;
+  };
+  status: 'active' | 'archived' | 'completed' | 'missed';
+  timing: { dueLabel: string };
+}) {
+  if (goal.status === 'active') {
+    return `Status: active; due ${goal.timing.dueLabel}.`;
+  }
+  if (goal.status === 'completed') {
+    const source = goal.completion.completionSource === 'manual' ? 'marked complete manually' : 'completed from logged evidence';
+    return `Status: completed; ${source}${goal.completion.completedAt ? ` on ${formatDateForContext(goal.completion.completedAt)}` : ''}.`;
+  }
+  if (goal.status === 'missed') {
+    return `Status: missed; deadline was ${goal.timing.dueLabel}${goal.completion.missedAt ? ` and it was marked missed on ${formatDateForContext(goal.completion.missedAt)}` : ''}.`;
+  }
+  return `Status: archived${goal.completion.archivedAt ? ` on ${formatDateForContext(goal.completion.archivedAt)}` : ''}.`;
+}
+
+function capitalize(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+async function loadTrainingTargetsForContext(
+  ctx: QueryCtx,
+  profileId: Id<'profiles'>,
+  status: 'all' | 'active' | 'completed' | 'missed' | 'archived',
+  limit: number,
+) {
+  if (status === 'all') {
+    return await ctx.db
+      .query('trainingTargets')
+      .withIndex('by_profile_id_and_ends_at', q => q.eq('profileId', profileId))
+      .take(limit);
+  }
+
+  return await ctx.db
+    .query('trainingTargets')
+    .withIndex('by_profile_id_and_status', q => q.eq('profileId', profileId).eq('status', status))
+    .take(limit);
+}
+
 async function findExercise(ctx: QueryCtx, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return null;
