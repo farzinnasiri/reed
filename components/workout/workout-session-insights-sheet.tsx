@@ -397,6 +397,7 @@ export function WorkoutSessionInsightsSheet({
                       { label: 'Reps', value: 'reps' },
                       { label: 'Volume', value: 'volume' },
                     ]}
+                    style={styles.sessionInsightsBreakdownControl}
                     value={muscleMetricMode}
                     variant="pill"
                   />

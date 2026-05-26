@@ -158,6 +158,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
     paddingBottom: 0,
+    paddingHorizontal: 16,
     paddingTop: 2,
   },
   navButton: {

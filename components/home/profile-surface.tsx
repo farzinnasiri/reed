@@ -1026,8 +1026,9 @@ function ProgressSurface({
               { label: 'Reps', value: 'reps' },
               { label: 'Load', value: 'load' },
             ]}
+            style={styles.periodControl}
             value={metric}
-            variant="ghost"
+            variant="pill"
           />
 
           <View style={[styles.trainingVisualRow, isCompact && styles.trainingVisualRowCompact]}>
@@ -1132,6 +1133,7 @@ function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) 
         { label: '30D', value: '30d' },
         { label: '90D', value: '90d' },
       ]}
+      style={styles.periodControl}
       value={value}
       variant="pill"
     />
@@ -2271,6 +2273,10 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: 12,
   },
+  periodControl: {
+    minWidth: 316,
+    width: '100%',
+  },
   progressContent: {
     gap: 16,
   },
@@ -2290,13 +2296,14 @@ const styles = StyleSheet.create({
   },
   progressHeader: {
     alignItems: 'flex-start',
-    flexDirection: 'row',
+    flexDirection: 'column',
     gap: 12,
     justifyContent: 'space-between',
   },
   progressHeaderCopy: {
-    flex: 1,
+    alignSelf: 'stretch',
     gap: 2,
+    minWidth: 0,
   },
   progressMetricRow: {
     flexDirection: 'row',

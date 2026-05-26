@@ -37,7 +37,7 @@ export function formatElapsedCompact(startedAt: number, now: number) {
 }
 
 export function formatClock(totalSeconds: number) {
-  const safeSeconds = Math.max(0, totalSeconds);
+  const safeSeconds = Math.max(0, Math.round(totalSeconds));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const seconds = safeSeconds % 60;

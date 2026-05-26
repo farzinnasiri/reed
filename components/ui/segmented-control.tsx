@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
@@ -19,6 +19,7 @@ type SegmentedControlProps<T extends string> = {
   iconOnly?: boolean;
   onChange: (value: T) => void;
   options: SegmentedOption<T>[];
+  style?: StyleProp<ViewStyle>;
   value: T;
   variant?: 'default' | 'ghost' | 'pill';
 };
@@ -34,6 +35,7 @@ export function SegmentedControl<T extends string>({
   iconOnly = false,
   onChange,
   options,
+  style,
   value,
   variant = 'default',
 }: SegmentedControlProps<T>) {
@@ -83,6 +85,7 @@ export function SegmentedControl<T extends string>({
               backgroundColor: control.shellBackgroundColor,
               borderColor: control.shellBorderColor,
             },
+        style,
       ]}
     >
       {activeLayout ? (

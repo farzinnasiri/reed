@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useSegments } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from 'convex/react';
 import { AppShellContext } from '@/components/home/app-shell-context';
@@ -112,8 +112,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
         setIsEditingSettingsProfile,
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <View
         style={[
           styles.shellRoot,
           {
@@ -149,7 +148,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
             <GlassTabPill items={tabItems} onPress={handleChangeMode} />
           </View>
         ) : null}
-      </KeyboardAvoidingView>
+      </View>
     </AppShellContext.Provider>
   );
 }
