@@ -10,16 +10,19 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ConvexProvider } from 'convex/react';
+import { useQuery } from 'convex/react';
 import { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 import { authClient } from '@/lib/auth-client';
+import { AppSplash } from '@/components/ui/app-splash';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { ReedThemeProvider, useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { convex, missingPublicEnv } from '@/lib/convex';
+import { api } from '@/convex/_generated/api';
 
 export {
   ErrorBoundary,
@@ -100,19 +103,49 @@ function RootApp() {
   return (
     <ConvexProvider client={convex}>
       <ConvexBetterAuthProvider client={convex} authClient={authClient}>
-        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            animation: Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
-            contentStyle: { backgroundColor: theme.colors.canvas },
-            fullScreenGestureEnabled: true,
-            fullScreenGestureShadowEnabled: false,
-            gestureEnabled: true,
-            headerShown: false,
-          }}
-        />
+        <RootNavigator />
       </ConvexBetterAuthProvider>
     </ConvexProvider>
+  );
+}
+
+function RootNavigator() {
+  const { theme } = useReedTheme();
+  const { data: session, isPending } = authClient.useSession();
+  const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
+  const isAppReady = Boolean(session && viewer?.onboardingCompletedAt);
+
+  if (isPending || (session && viewer === undefined)) {
+    return (
+      <>
+        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+        <ScreenBackdrop>
+          <AppSplash />
+        </ScreenBackdrop>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          animation: Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
+          contentStyle: { backgroundColor: theme.colors.canvas },
+          fullScreenGestureEnabled: true,
+          fullScreenGestureShadowEnabled: false,
+          gestureEnabled: true,
+          headerShown: false,
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Protected guard={isAppReady}>
+          <Stack.Screen name="(app)" />
+        </Stack.Protected>
+        <Stack.Screen name="+not-found" />
+      </Stack>
+    </>
   );
 }
 

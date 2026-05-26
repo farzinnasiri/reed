@@ -2,13 +2,35 @@
 
 Use the Makefile targets. They load the correct env file and sync the public Convex URLs to EAS before starting the build.
 
-## Android Development Build
+## Android Build Commands
+
+Development-client APK for testing native/dev-client behavior:
 
 ```sh
 make android-dev-client
 ```
 
-This creates an Android development-client APK from `.env.dev`.
+Regular arm64 APK against the dev backend:
+
+```sh
+make android-arm-dev
+```
+
+Regular arm64 APK against the production backend:
+
+```sh
+make android-arm-prod
+```
+
+Play Store style production bundle:
+
+```sh
+npx eas-cli build -p android -e production
+```
+
+The Makefile targets load the matching `.env.*` file and sync `EXPO_PUBLIC_CONVEX_URL` plus `EXPO_PUBLIC_CONVEX_SITE_URL` into EAS before submitting the build.
+
+## Testing A Development Build
 
 After installing it on the phone, start Metro with:
 
@@ -20,23 +42,6 @@ Use this when Metro cache needs clearing:
 
 ```sh
 make expo-clean ENV=dev
-```
-
-## Regular Android Builds
-
-Use these when you want an installable APK that does not depend on the development client runtime. The Makefile APK targets are arm64-only for S22 Ultra style devices instead of universal APKs.
-
-```sh
-make android-arm-dev
-make android-arm-prod
-```
-
-`android-arm-dev` builds against `.env.dev`. `android-arm-prod` builds against `.env.prod`.
-
-For a Play Store style production bundle, use the EAS production profile directly:
-
-```sh
-npx eas-cli build -p android -e production
 ```
 
 ## Before Building

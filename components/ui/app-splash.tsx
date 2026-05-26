@@ -1,15 +1,9 @@
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 
-type AppSplashProps = {
-  showStatus?: boolean;
-  showSpinner?: boolean;
-  message?: string;
-};
-
-export function AppSplash({ message = 'Opening Reed.', showSpinner = true, showStatus = true }: AppSplashProps) {
+export function AppSplash() {
   const { theme } = useReedTheme();
 
   return (
@@ -36,15 +30,6 @@ export function AppSplash({ message = 'Opening Reed.', showSpinner = true, showS
         </Svg>
         <ReedText variant="brand">reed</ReedText>
       </View>
-
-      {showStatus ? (
-        <View style={styles.status}>
-          {showSpinner ? <ActivityIndicator color={String(theme.colors.accentPrimary)} /> : null}
-          <ReedText tone="muted" variant="caption">
-            {message}
-          </ReedText>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -62,11 +47,5 @@ const styles = StyleSheet.create({
   logo: {
     height: 132,
     width: 132,
-  },
-  status: {
-    alignItems: 'center',
-    bottom: 56,
-    gap: 10,
-    position: 'absolute',
   },
 });

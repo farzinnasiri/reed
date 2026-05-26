@@ -154,11 +154,11 @@ export default function HomeScreen() {
   return (
     <ScreenBackdrop>
       {isPending ? (
-        <AppSplash message="Checking the current session." />
+        <AppSplash />
       ) : session && viewer === undefined ? (
-        <AppSplash showStatus={false} />
+        <AppSplash />
       ) : session && viewer === null ? (
-        <AppSplash showStatus={false} />
+        <AppSplash />
       ) : session && welcomeName ? (
         <LoveLetter
           displayName={welcomeName}

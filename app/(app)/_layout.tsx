@@ -1,4 +1,4 @@
-import { Redirect, Stack } from 'expo-router';
+import { Stack } from 'expo-router';
 import { Platform } from 'react-native';
 import { useQuery } from 'convex/react';
 import { AppShell } from '@/components/home/app-shell';
@@ -16,25 +16,33 @@ export default function AuthenticatedAppLayout() {
   if (isAuthPending) {
     return (
       <ScreenBackdrop>
-        <AppSplash message="Checking the current session." />
+        <AppSplash />
       </ScreenBackdrop>
     );
   }
 
   if (!session) {
-    return <Redirect href="/" />;
+    return (
+      <ScreenBackdrop>
+        <AppSplash />
+      </ScreenBackdrop>
+    );
   }
 
   if (viewer === undefined || viewer === null) {
     return (
       <ScreenBackdrop>
-        <AppSplash showStatus={false} />
+        <AppSplash />
       </ScreenBackdrop>
     );
   }
 
   if (!viewer.onboardingCompletedAt) {
-    return <Redirect href="/" />;
+    return (
+      <ScreenBackdrop>
+        <AppSplash />
+      </ScreenBackdrop>
+    );
   }
 
   return (
