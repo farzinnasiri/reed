@@ -5,9 +5,9 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion, shouldUseNativeDriver } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { QUICK_ACTIONS, VOICE_WAVEFORM_BARS, resolveQuickActionPrompt } from './reed.presenter';
+import { VOICE_WAVEFORM_BARS } from './reed.presenter';
 import { styles } from './reed.styles';
-import type { VoiceComposerState } from './reed.types';
+import type { ReedQuickAction, VoiceComposerState } from './reed.types';
 
 export function ReedComposer({
   composerText,
@@ -18,6 +18,7 @@ export function ReedComposer({
   onSendVoiceDraft,
   onStartVoice,
   onStopVoice,
+  quickActions,
   shouldShowQuickActions,
   voiceState,
 }: {
@@ -29,6 +30,7 @@ export function ReedComposer({
   onSendVoiceDraft: (text: string) => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
+  quickActions: ReedQuickAction[];
   shouldShowQuickActions: boolean;
   voiceState: VoiceComposerState;
 }) {
@@ -42,12 +44,12 @@ export function ReedComposer({
           showsHorizontalScrollIndicator={false}
           style={styles.quickActionsScroller}
         >
-          {QUICK_ACTIONS.map(action => (
+          {quickActions.map(action => (
             <QuickActionChip
               disabled={disabled}
-              key={action}
-              label={action}
-              onPress={() => onQuickAction(resolveQuickActionPrompt(action))}
+              key={action.id}
+              label={action.label}
+              onPress={() => onQuickAction(action.prompt)}
             />
           ))}
         </ScrollView>

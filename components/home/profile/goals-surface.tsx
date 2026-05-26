@@ -340,7 +340,7 @@ function dedupeExercises(exercises: ExerciseItem[]) {
 function Choice({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   const { theme } = useReedTheme();
   const controls = getGlassControlTokens(theme);
-  return <Pressable onPress={onPress} style={({ pressed }) => [styles.choice, { backgroundColor: active ? controls.activeBackgroundColor : controls.shellBackgroundColor, borderColor: active ? theme.colors.accentPrimary : controls.shellBorderColor }, getTapScaleStyle(pressed)]}><ReedText variant="caption">{label}</ReedText></Pressable>;
+  return <Pressable onPress={onPress} style={({ pressed }) => [styles.choice, { backgroundColor: active ? controls.activeBackgroundColor : controls.shellBackgroundColor, borderColor: active ? theme.colors.accentPrimary : controls.shellBorderColor }, getTapScaleStyle(pressed)]}><ReedText ellipsizeMode="tail" numberOfLines={1} style={styles.choiceLabel} variant="caption">{label}</ReedText></Pressable>;
 }
 
 function buildPreview({ cadence, days, exerciseName, metric, periodCount, threshold }: { cadence: Cadence; days: string; exerciseName?: string; metric: { kind: MetricKind; label: string; unit: string; requiresExercise: boolean }; periodCount: string; threshold: string }) {
@@ -355,7 +355,8 @@ function cadenceLabel(cadence: Cadence) { return cadence === 'once' ? 'By date' 
 function formatDate(ts: number) { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts)); }
 
 const styles = StyleSheet.create({
-  choice: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 8 },
+  choice: { borderRadius: 999, borderWidth: 1, maxWidth: '100%', minWidth: 0, paddingHorizontal: 12, paddingVertical: 8 },
+  choiceLabel: { maxWidth: '100%', minWidth: 0, textAlign: 'center' },
   creatorScroll: { flex: 1, minHeight: 0 },
   creatorStack: { gap: 14, paddingBottom: 96 },
   emptyState: { borderRadius: 18, borderWidth: 1, gap: 10, padding: 16 },

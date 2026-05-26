@@ -15,8 +15,8 @@ import { CreateGoalSheet } from './profile/goals-surface';
 import { ProgressGradient, getProgressRatio } from './goals-home-card';
 
 type TrainingTarget = NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number];
-type StatusFilter = 'all' | 'active' | 'completed' | 'missed' | 'archived';
-type SortOrder = 'due' | 'most' | 'least' | 'updated' | 'newest';
+type StatusFilter = 'active' | 'completed' | 'missed';
+type SortOrder = 'due' | 'most' | 'newest';
 
 export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
   const { theme } = useReedTheme();
@@ -24,13 +24,13 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [sortOrder, setSortOrder] = useState<SortOrder>('due');
   const [isCreating, setIsCreating] = useState(false);
-  const visibleTargets = useMemo(() => sortTargets((targets ?? []).filter(target => statusFilter === 'all' || target.status === statusFilter), sortOrder), [sortOrder, statusFilter, targets]);
+  const visibleTargets = useMemo(() => sortTargets((targets ?? []).filter(target => target.status === statusFilter), sortOrder), [sortOrder, statusFilter, targets]);
 
   return (
     <ScrollView
       contentContainerStyle={[styles.content, { paddingBottom: 132, paddingHorizontal: theme.spacing.md, paddingTop: theme.spacing.xl }]}
       showsVerticalScrollIndicator={false}
-      style={styles.root}
+      style={[styles.root, { backgroundColor: theme.colors.canvas }]}
     >
       <ScreenHeader variant="identity" action={{ accessibilityLabel: 'Create goal', iconName: 'add', onPress: () => setIsCreating(true) }}>
         <Pressable onPress={onBack} style={({ pressed }) => [styles.backRow, getTapScaleStyle(pressed)]}>
@@ -41,18 +41,15 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
 
       <GlassSurface style={styles.card}>
         <View style={styles.leadBlock}>
-          <ReedText variant="section">Concrete targets</ReedText>
-          <ReedText tone="muted" variant="caption">Filter, sort, and inspect measurable goals. Editing rules stay intentionally locked for now.</ReedText>
+          <ReedText variant="section">Your goals</ReedText>
         </View>
         <SegmentedControl<StatusFilter>
           compact
           onChange={setStatusFilter}
           options={[
-            { label: 'All', value: 'all' },
             { label: 'Active', value: 'active' },
             { label: 'Done', value: 'completed' },
             { label: 'Missed', value: 'missed' },
-            { label: 'Archived', value: 'archived' },
           ]}
           value={statusFilter}
         />
@@ -61,9 +58,7 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
           onChange={setSortOrder}
           options={[
             { label: 'Due', value: 'due' },
-            { label: 'Most', value: 'most' },
-            { label: 'Least', value: 'least' },
-            { label: 'Updated', value: 'updated' },
+            { label: 'Progress', value: 'most' },
             { label: 'New', value: 'newest' },
           ]}
           value={sortOrder}
@@ -178,8 +173,6 @@ function IconAction({ accessibilityLabel, icon, onPress }: { accessibilityLabel:
 function sortTargets(targets: TrainingTarget[], sortOrder: SortOrder) {
   return [...targets].sort((left, right) => {
     if (sortOrder === 'most') return getProgressRatio(right) - getProgressRatio(left);
-    if (sortOrder === 'least') return getProgressRatio(left) - getProgressRatio(right);
-    if (sortOrder === 'updated') return right.updatedAt - left.updatedAt;
     if (sortOrder === 'newest') return right.createdAt - left.createdAt;
     return left.endsAt - right.endsAt;
   });

@@ -69,10 +69,15 @@ export function ChipSelect<T extends string>({
             ]}
           >
             <ReedText
+              ellipsizeMode="tail"
+              numberOfLines={2}
               style={{
                 color: isActive
                   ? theme.colors.accentPrimaryText
                   : theme.colors.textPrimary,
+                maxWidth: '100%',
+                minWidth: 0,
+                textAlign: 'center',
               }}
               variant="bodyStrong"
             >
@@ -96,7 +101,9 @@ const styles = StyleSheet.create({
     borderRadius: reedRadii.sm,
     borderWidth: 1,
     justifyContent: 'center',
+    maxWidth: '100%',
     minHeight: 44,
+    minWidth: 0,
     paddingHorizontal: 16,
     paddingVertical: 10,
   },

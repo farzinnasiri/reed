@@ -31,6 +31,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
 
   const runtime = useMemo(() => createLocalMockReedRuntime(), []);
   const presence = useQuery(api.reed.getPresence, {});
+  const quickActions = useQuery(api.reed.listQuickActions, {});
   const { isOnline: isReedOnline, label: reedPresenceLabel, markOnline, shouldDelayAssistantStart } = useReedPresence(presence?.lastMessageAt ?? null);
   const {
     coachItems,
@@ -55,7 +56,8 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     () => coachItems.filter(item => item.status === 'open'),
     [coachItems],
   );
-  const shouldShowQuickActions = !isReedOnline && voiceState.status === 'idle';
+  const visibleQuickActions = quickActions ?? [];
+  const shouldShowQuickActions = !isReedOnline && voiceState.status === 'idle' && visibleQuickActions.length > 0;
   const headerTopInset = insets.top + theme.spacing.sm;
   const contentTopPadding = headerTopInset + 44 + theme.spacing.lg;
   const keyboardLift = Platform.OS === 'android' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
@@ -225,6 +227,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
               setComposerText(nextText);
             }
           }}
+          quickActions={visibleQuickActions}
           shouldShowQuickActions={shouldShowQuickActions}
           voiceState={voiceState}
         />

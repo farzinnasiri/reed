@@ -34,6 +34,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
 
   const showDock = !(activeMode === 'workout' && hasActiveWorkoutSession) && !isEditingSettingsProfile;
   const isFullscreenWorkout = activeMode === 'workout' && hasActiveWorkoutSession;
+  const shellTopInset = activeMode === 'chat' ? 0 : insets.top;
   const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
   const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
 
@@ -99,7 +100,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
     }
 
     setIsEditingSettingsProfile(false);
-    router.push(appModeRoutes[mode]);
+    router.replace(appModeRoutes[mode]);
   }
 
   return (
@@ -116,14 +117,12 @@ export function AppShell({ children, displayName }: AppShellProps) {
         style={[
           styles.shellRoot,
           {
-            paddingBottom: isFullscreenWorkout ? 0 : theme.spacing.lg,
-            paddingHorizontal: activeMode === 'chat' ? 0 : theme.spacing.lg,
-            paddingTop: activeMode === 'chat' ? 0 : theme.spacing.xl,
+            backgroundColor: theme.colors.canvas,
           },
         ]}
       >
-        <View style={styles.shellContentStack}>
-          <View style={[styles.shellContentLayer, { pointerEvents: 'box-none' }]}> 
+        <View style={[styles.shellContentStack, { backgroundColor: theme.colors.canvas }]}> 
+          <View style={[styles.shellContentLayer, { backgroundColor: theme.colors.canvas, pointerEvents: 'box-none', top: shellTopInset }]}> 
             <View style={[styles.shellScreenCanvas, { backgroundColor: theme.colors.canvas }]}> 
               {children}
             </View>

@@ -39,6 +39,34 @@ const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_to
 const reentryStateValidator = v.union(v.literal('hot'), v.literal('warm'), v.literal('cold'));
 type ReedRoute = 'coach_direct' | 'training_tools' | 'refuse_readonly';
 
+const quickActionValidator = v.object({
+  id: v.string(),
+  label: v.string(),
+  prompt: v.string(),
+  sortOrder: v.number(),
+});
+
+const DEFAULT_QUICK_ACTIONS = [
+  {
+    id: 'week-review',
+    label: 'How did this week go?',
+    prompt: 'How did this week go?',
+    sortOrder: 10,
+  },
+  {
+    id: 'next-focus',
+    label: 'Next focus',
+    prompt: 'What should I focus on next?',
+    sortOrder: 20,
+  },
+  {
+    id: 'check-progress',
+    label: 'Check my progress',
+    prompt: 'Am I improving on my recent training?',
+    sortOrder: 30,
+  },
+] as const;
+
 const attitudePayloadValidator = v.object({
   description: v.string(),
   key: v.string(),
@@ -175,6 +203,12 @@ export const getPresence = query({
     const reentryState = classifyReentry(lastMessageAt, now).state;
     return { lastMessageAt, reentryState };
   },
+});
+
+export const listQuickActions = query({
+  args: {},
+  returns: v.array(quickActionValidator),
+  handler: async () => [...DEFAULT_QUICK_ACTIONS].sort((left, right) => left.sortOrder - right.sortOrder),
 });
 
 export const listAttitudes = query({

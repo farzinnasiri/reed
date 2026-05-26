@@ -156,9 +156,9 @@ export default function HomeScreen() {
       {isPending ? (
         <AppSplash message="Checking the current session." />
       ) : session && viewer === undefined ? (
-        <AppSplash message="Finishing your account setup." />
+        <AppSplash showStatus={false} />
       ) : session && viewer === null ? (
-        <AppSplash message="Finishing your account setup." />
+        <AppSplash showStatus={false} />
       ) : session && welcomeName ? (
         <LoveLetter
           displayName={welcomeName}

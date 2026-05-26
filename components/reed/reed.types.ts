@@ -8,6 +8,13 @@ export type ReedSurfaceProps = {
   dockReservedSpace: number;
 };
 
+export type ReedQuickAction = {
+  id: string;
+  label: string;
+  prompt: string;
+  sortOrder: number;
+};
+
 export type CoachItem = {
   body: string;
   id: string;

@@ -139,7 +139,12 @@ export function SegmentedControl<T extends string>({
             {option.icon ? <View style={styles.iconWrap}>{option.icon}</View> : shouldStackItems ? <View style={styles.iconSpacer} /> : null}
             {iconOnly ? null : option.label ? (
               <ReedText
+                adjustsFontSizeToFit
+                ellipsizeMode="tail"
+                minimumFontScale={0.78}
+                numberOfLines={1}
                 style={[
+                  styles.label,
                   shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
                   {
                     color:
@@ -216,8 +221,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     zIndex: 1,
   },
+  label: {
+    maxWidth: '100%',
+    minWidth: 0,
+    textAlign: 'center',
+  },
   itemCompact: {
     minHeight: 40,
+    paddingHorizontal: 8,
   },
   pillItem: {
     borderRadius: reedRadii.pill,

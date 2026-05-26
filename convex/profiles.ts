@@ -50,12 +50,62 @@ function profilePatchFromAuthUser(user: {
   };
 }
 
-export async function requireViewerProfile(ctx: QueryCtx | MutationCtx) {
-  const authUser = await authComponent.getAuthUser(ctx);
-  const profile = await ctx.db
+function authSyncPatchForExistingProfile(
+  profile: { avatarUrl?: string; displayName?: string; email: string; onboardingCompletedAt?: number },
+  user: { email: string; image?: string | null; name?: string | null; _id: string },
+) {
+  const patch: {
+    avatarUrl?: string;
+    displayName?: string;
+    email?: string;
+    updatedAt?: number;
+  } = {};
+  const nextAvatarUrl = user.image ?? undefined;
+
+  if (profile.email !== user.email) {
+    patch.email = user.email;
+  }
+
+  if (profile.avatarUrl !== nextAvatarUrl) {
+    patch.avatarUrl = nextAvatarUrl;
+  }
+
+  // Display name becomes app-owned once onboarding has run. Better Auth often
+  // derives a default name from the email local-part on mobile sign-up; syncing
+  // that value on every boot would overwrite the user's chosen Reed name.
+  if (!profile.onboardingCompletedAt && !profile.displayName && user.name) {
+    patch.displayName = user.name;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = Date.now();
+  }
+
+  return patch;
+}
+
+async function getProfileForAuthUser(ctx: QueryCtx | MutationCtx, authUser: { email: string; _id: string }) {
+  const byAuthUserId = await ctx.db
     .query('profiles')
     .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
     .unique();
+
+  if (byAuthUserId) {
+    return byAuthUserId;
+  }
+
+  // Native auth sessions can be recreated while the email remains the durable
+  // account identity. Fall back to email so we don't create a second profile
+  // with the auth provider's default email-local-part name.
+  return await ctx.db
+    .query('profiles')
+    .withIndex('by_email', q => q.eq('email', authUser.email))
+    .first();
+}
+
+export async function requireViewerProfile(ctx: QueryCtx | MutationCtx) {
+  const authUser = await authComponent.getAuthUser(ctx);
+  const profile = await getProfileForAuthUser(ctx, authUser);
 
   if (!profile) {
     throw new ConvexError('Viewer profile is missing. Reload the app and try again.');
@@ -74,10 +124,7 @@ export const viewer = query({
       return null;
     }
 
-    return await ctx.db
-      .query('profiles')
-      .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
-      .unique();
+    return await getProfileForAuthUser(ctx, authUser);
   },
 });
 
@@ -223,14 +270,16 @@ export const ensureViewerProfile = mutation({
   returns: profileValidator,
   handler: async ctx => {
     const authUser = await authComponent.getAuthUser(ctx);
-    const patch = profilePatchFromAuthUser(authUser);
     const existingProfile = await ctx.db
       .query('profiles')
       .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
       .unique();
 
     if (existingProfile) {
-      await ctx.db.patch(existingProfile._id, patch);
+      const patch = authSyncPatchForExistingProfile(existingProfile, authUser);
+      if (Object.keys(patch).length > 0) {
+        await ctx.db.patch(existingProfile._id, patch);
+      }
       const updatedProfile = await ctx.db.get(existingProfile._id);
 
       if (!updatedProfile) {
@@ -240,6 +289,27 @@ export const ensureViewerProfile = mutation({
       return updatedProfile;
     }
 
+    const existingEmailProfile = await ctx.db
+      .query('profiles')
+      .withIndex('by_email', q => q.eq('email', authUser.email))
+      .first();
+
+    if (existingEmailProfile) {
+      await ctx.db.patch(existingEmailProfile._id, {
+        ...authSyncPatchForExistingProfile(existingEmailProfile, authUser),
+        authUserId: authUser._id,
+        updatedAt: Date.now(),
+      });
+      const linkedProfile = await ctx.db.get(existingEmailProfile._id);
+
+      if (!linkedProfile) {
+        throw new ConvexError('Profile disappeared during account linking');
+      }
+
+      return linkedProfile;
+    }
+
+    const patch = profilePatchFromAuthUser(authUser);
     const profileId = await ctx.db.insert('profiles', patch);
     const createdProfile = await ctx.db.get(profileId);
 

@@ -26,7 +26,7 @@ export default function HomeRoute() {
       hasActiveSession={hasActiveWorkoutSession}
       homeHeadline={homeHeadline}
       onOpenGoals={() => router.push('/(app)/goals')}
-      onOpenWorkout={() => router.push(appModeRoutes.workout)}
+      onOpenWorkout={() => router.replace(appModeRoutes.workout)}
     />
   );
 }

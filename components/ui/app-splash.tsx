@@ -4,10 +4,12 @@ import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 
 type AppSplashProps = {
+  showStatus?: boolean;
+  showSpinner?: boolean;
   message?: string;
 };
 
-export function AppSplash({ message = 'Opening Reed.' }: AppSplashProps) {
+export function AppSplash({ message = 'Opening Reed.', showSpinner = true, showStatus = true }: AppSplashProps) {
   const { theme } = useReedTheme();
 
   return (
@@ -35,12 +37,14 @@ export function AppSplash({ message = 'Opening Reed.' }: AppSplashProps) {
         <ReedText variant="brand">reed</ReedText>
       </View>
 
-      <View style={styles.status}>
-        <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-        <ReedText tone="muted" variant="caption">
-          {message}
-        </ReedText>
-      </View>
+      {showStatus ? (
+        <View style={styles.status}>
+          {showSpinner ? <ActivityIndicator color={String(theme.colors.accentPrimary)} /> : null}
+          <ReedText tone="muted" variant="caption">
+            {message}
+          </ReedText>
+        </View>
+      ) : null}
     </View>
   );
 }

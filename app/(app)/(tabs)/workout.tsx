@@ -5,7 +5,7 @@ import { WorkoutSurface } from '@/components/workout/workout-surface';
 export default function WorkoutRoute() {
   return (
     <WorkoutSurface
-      onExitWorkout={() => router.push(appModeRoutes.chat)}
+      onExitWorkout={() => router.replace(appModeRoutes.chat)}
       showStartBackButton={false}
     />
   );

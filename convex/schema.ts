@@ -34,7 +34,9 @@ export default defineSchema({
     email: v.string(),
     onboardingCompletedAt: v.optional(v.number()),
     updatedAt: v.number(),
-  }).index('by_auth_user_id', ['authUserId']),
+  })
+    .index('by_auth_user_id', ['authUserId'])
+    .index('by_email', ['email']),
   trainingProfiles: defineTable(trainingProfileValidator)
     .index('by_profile_id', ['profileId'])
     .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),

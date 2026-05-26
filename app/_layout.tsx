@@ -104,8 +104,9 @@ function RootApp() {
         <Stack
           screenOptions={{
             animation: Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
-            contentStyle: { backgroundColor: 'transparent' },
+            contentStyle: { backgroundColor: theme.colors.canvas },
             fullScreenGestureEnabled: true,
+            fullScreenGestureShadowEnabled: false,
             gestureEnabled: true,
             headerShown: false,
           }}

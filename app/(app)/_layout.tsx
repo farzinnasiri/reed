@@ -28,7 +28,7 @@ export default function AuthenticatedAppLayout() {
   if (viewer === undefined || viewer === null) {
     return (
       <ScreenBackdrop>
-        <AppSplash message="Finishing your account setup." />
+        <AppSplash showStatus={false} />
       </ScreenBackdrop>
     );
   }
@@ -42,12 +42,17 @@ export default function AuthenticatedAppLayout() {
       <AppShell displayName={viewer.displayName ?? session.user.name ?? 'there'}>
         <Stack
           screenOptions={{
-            animation: 'slide_from_right',
-            animationDuration: Platform.OS === 'web' ? 160 : undefined,
+            animation: Platform.OS === 'web' ? 'none' : 'fade',
             contentStyle: { backgroundColor: theme.colors.canvas },
+            fullScreenGestureEnabled: false,
+            fullScreenGestureShadowEnabled: false,
+            gestureEnabled: false,
             headerShown: false,
           }}
-        />
+        >
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="goals" />
+        </Stack>
       </AppShell>
     </ScreenBackdrop>
   );

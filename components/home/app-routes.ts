@@ -1,10 +1,10 @@
 import type { AppMode } from '@/components/home/types';
 
 export const appModeRoutes = {
-  home: '/(app)/home',
-  workout: '/(app)/workout',
-  chat: '/(app)/reed',
-  user: '/(app)/profile',
+  home: '/(app)/(tabs)/home',
+  workout: '/(app)/(tabs)/workout',
+  chat: '/(app)/(tabs)/reed',
+  user: '/(app)/(tabs)/profile',
 } as const satisfies Record<AppMode, string>;
 
 export function appModeFromRouteSegment(segment: string | undefined): AppMode {

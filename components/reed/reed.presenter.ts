@@ -1,13 +1,6 @@
 import type { ReedTheme } from '@/design/system';
 import type { CoachItem, ReedMessage } from './reed.types';
 
-export const QUICK_ACTIONS = [
-  'How did this week go?',
-  'Next focus',
-  'Check my progress',
-  'What needs attention?',
-] as const;
-
 export const VOICE_WAVEFORM_BARS = [
   { low: 0.52, high: 1.2 },
   { low: 0.84, high: 1.62 },
@@ -36,13 +29,6 @@ export function buildCoachReply(prompt: string, displayName: string) {
   }
 
   return 'Good. Keep the question concrete and I’ll keep the answer useful.';
-}
-
-export function resolveQuickActionPrompt(label: string) {
-  if (label === 'Next focus') return 'What should I focus on next?';
-  if (label === 'Check my progress') return 'Am I improving on my recent training?';
-  if (label === 'What needs attention?') return 'What in my training needs attention?';
-  return label;
 }
 
 export function summarizeCoachItemTitle(text: string) {
