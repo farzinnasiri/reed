@@ -108,7 +108,7 @@ export const styles = StyleSheet.create({
     gap: 4,
   },
   lastSessionList: {
-    gap: 2,
+    gap: 0,
   },
   loadingInline: {
     alignItems: 'center',
@@ -141,19 +141,72 @@ export const styles = StyleSheet.create({
     paddingTop: 8,
   },
   sessionSummaryRow: {
+    alignItems: 'flex-start',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    gap: 4,
+    flexDirection: 'row',
+    gap: 14,
     justifyContent: 'center',
-    minHeight: 56,
-    paddingVertical: 12,
+    minHeight: 104,
+    paddingVertical: 16,
   },
   sessionSummaryCopy: {
-    gap: 4,
+    flex: 1,
+    gap: 7,
+    minWidth: 0,
+    paddingTop: 1,
   },
-  sessionDateRow: {
+  sessionSummaryHeader: {
     alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    minWidth: 0,
+  },
+  sessionSummaryTitle: {
+    flexShrink: 1,
+    fontSize: 22,
+    lineHeight: 26,
+    minWidth: 0,
+  },
+  sessionExercisePreview: {
+    lineHeight: 19,
+  },
+  sessionMetricRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 8,
+  },
+  sessionMetricChip: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 5,
+    minHeight: 28,
+    paddingHorizontal: 9,
+  },
+  sessionDateMark: {
+    alignItems: 'center',
+    borderRadius: reedRadii.lg,
+    borderWidth: 1,
+    height: 62,
+    justifyContent: 'center',
+    width: 58,
+  },
+  sessionDateMarkWeekday: {
+    fontSize: 11,
+    letterSpacing: 0.9,
+    lineHeight: 13,
+  },
+  sessionDateMarkDay: {
+    fontSize: 28,
+    lineHeight: 30,
+  },
+  sessionOpenIcon: {
+    alignItems: 'center',
+    height: 62,
+    justifyContent: 'center',
+    width: 22,
   },
   timelinePage: {
     flex: 1,

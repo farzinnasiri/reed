@@ -42,6 +42,18 @@ type WorkoutSurfaceProps = {
   showStartBackButton?: boolean;
 };
 
+type EndedSessionSummary = {
+  endedAt: number;
+  exerciseCount: number;
+  exercises: Array<{
+    exerciseName: string;
+    lastLoggedSummary: string | null;
+    setCount: number;
+  }>;
+  sessionId: Id<'liveSessions'>;
+  startedAt: number;
+};
+
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
   const session = useQuery(api.liveSessions.getCurrent, {});
@@ -750,33 +762,84 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           ) : endedSessionsPage.summaries.length > 0 ? (
             <>
               <View style={styles.lastSessionList}>
-                {endedSessionsPage.summaries.map((item: any, index: number) => (
-                  <Pressable
-                    accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
-                    key={item.sessionId}
-                    onPress={() => {
-                      setIsEndedInsightsOpen(false);
-                      setSelectedEndedSessionId(item.sessionId);
-                    }}
-                    style={({ pressed }) => [
-                      styles.sessionSummaryRow,
-                      index < endedSessionsPage.summaries.length - 1
-                        ? { borderBottomColor: theme.colors.controlBorder }
-                        : { borderBottomWidth: 0 },
-                      getTapScaleStyle(pressed),
-                    ]}
-                  >
-                    <View style={styles.sessionSummaryCopy}>
-                      <View style={styles.sessionDateRow}>
-                        <ReedText numberOfLines={1} variant="bodyStrong">{formatSessionDate(item.startedAt)}</ReedText>
-                        <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
+                {endedSessionsPage.summaries.map((item: EndedSessionSummary, index: number) => {
+                  const exercisePreview = formatSessionExercisePreview(item);
+                  const totalSets = item.exercises.reduce((total, exercise) => total + exercise.setCount, 0);
+
+                  return (
+                    <Pressable
+                      accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
+                      key={item.sessionId}
+                      onPress={() => {
+                        setIsEndedInsightsOpen(false);
+                        setSelectedEndedSessionId(item.sessionId);
+                      }}
+                      style={({ pressed }) => [
+                        styles.sessionSummaryRow,
+                        index < endedSessionsPage.summaries.length - 1
+                          ? { borderBottomColor: theme.colors.borderSoft }
+                          : { borderBottomWidth: 0 },
+                        getTapScaleStyle(pressed),
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.sessionDateMark,
+                          {
+                            backgroundColor: theme.colors.textPrimary,
+                            borderColor: theme.colors.textPrimary,
+                          },
+                        ]}
+                      >
+                        <ReedText style={[styles.sessionDateMarkWeekday, { color: theme.colors.canvas }]} variant="label">
+                          {formatSessionWeekday(item.startedAt)}
+                        </ReedText>
+                        <ReedText style={[styles.sessionDateMarkDay, { color: theme.colors.canvas }]} variant="section">
+                          {formatSessionDay(item.startedAt)}
+                        </ReedText>
                       </View>
-                      <ReedText numberOfLines={1} tone="muted" variant="caption">
-                        {item.exercises.slice(0, 3).map((exercise: any) => exercise.exerciseName).join(' · ')}{item.exerciseCount > 3 ? ` +${item.exerciseCount - 3}` : ''}
-                      </ReedText>
-                    </View>
-                  </Pressable>
-                ))}
+                      <View style={styles.sessionSummaryCopy}>
+                        <View style={styles.sessionSummaryHeader}>
+                          <ReedText numberOfLines={1} style={styles.sessionSummaryTitle} variant="bodyStrong">
+                            Free session
+                          </ReedText>
+                        </View>
+                        <ReedText numberOfLines={2} style={styles.sessionExercisePreview} tone="muted" variant="caption">
+                          {exercisePreview}
+                        </ReedText>
+                        <View style={styles.sessionMetricRow}>
+                          <View
+                            style={[
+                              styles.sessionMetricChip,
+                              {
+                                backgroundColor: theme.colors.controlFill,
+                                borderColor: theme.colors.controlBorder,
+                              },
+                            ]}
+                          >
+                            <Ionicons color={String(theme.colors.textMuted)} name="time-outline" size={12} />
+                            <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
+                          </View>
+                          <View
+                            style={[
+                              styles.sessionMetricChip,
+                              {
+                                backgroundColor: theme.colors.controlFill,
+                                borderColor: theme.colors.controlBorder,
+                              },
+                            ]}
+                          >
+                            <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={12} />
+                            <ReedText numberOfLines={1} tone="muted" variant="caption">{totalSets} {totalSets === 1 ? 'set' : 'sets'}</ReedText>
+                          </View>
+                        </View>
+                      </View>
+                      <View style={styles.sessionOpenIcon}>
+                        <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={17} />
+                      </View>
+                    </Pressable>
+                  );
+                })}
               </View>
               {(sessionPageCursorStack.length > 0 || endedSessionsPage.nextBeforeStartedAt) ? (
                 <View style={styles.sessionPaginationRow}>
@@ -956,6 +1019,21 @@ function formatSessionDate(timestamp: number) {
     month: 'short',
     weekday: 'short',
   }).format(new Date(timestamp));
+}
+
+function formatSessionWeekday(timestamp: number) {
+  return new Intl.DateTimeFormat('en', { weekday: 'short' }).format(new Date(timestamp));
+}
+
+function formatSessionDay(timestamp: number) {
+  return new Intl.DateTimeFormat('en', { day: 'numeric' }).format(new Date(timestamp));
+}
+
+function formatSessionExercisePreview(session: EndedSessionSummary) {
+  const visibleExercises = session.exercises.slice(0, 2).map(exercise => exercise.exerciseName);
+  const remaining = Math.max(0, session.exerciseCount - visibleExercises.length);
+  if (visibleExercises.length === 0) return 'No exercises logged';
+  return `${visibleExercises.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
 }
 
 function formatSessionDuration(startedAt: number, endedAt: number) {
