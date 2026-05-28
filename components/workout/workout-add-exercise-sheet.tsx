@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Id } from '@/convex/_generated/dataModel';
 import { getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
@@ -31,6 +32,7 @@ export function AddExerciseSheet({
   onToggleFavorite,
 }: AddExerciseSheetProps) {
   const { theme } = useReedTheme();
+  const safeAreaInsets = useSafeAreaInsets();
   const glassControls = getGlassControlTokens(theme);
   const scrim = getGlassScrimTokens(theme);
   const frostedSheetSurfaceStyle = useMemo(() => {
@@ -40,7 +42,13 @@ export function AddExerciseSheet({
       borderColor: pane.borderColor,
     };
   }, [theme]);
-  const { height } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
+  const filterSheetHeight = getFilterSheetHeight({
+    height,
+    safeAreaBottom: safeAreaInsets.bottom,
+    safeAreaTop: safeAreaInsets.top,
+    width,
+  });
   const sheetProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
   const filterSheetProgress = useRef(new Animated.Value(0)).current;
   const {
@@ -397,11 +405,12 @@ export function AddExerciseSheet({
                 { backgroundColor: scrim.backgroundColor, pointerEvents: 'none' },
               ]}
             />
-            <Pressable onPress={closeFilterSheet} style={StyleSheet.absoluteFill} />
+            <Pressable onPress={closeFilterSheet} style={styles.filterSheetBackdropPressable} />
             <Animated.View
               style={[
                 styles.filterSheetPanelFrame,
                 {
+                  height: filterSheetHeight,
                   transform: [{ translateY: filterTranslateY }],
                 },
               ]}
@@ -429,7 +438,13 @@ export function AddExerciseSheet({
                   />
                 </View>
 
-                <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                <ScrollView
+                  contentContainerStyle={styles.filterSheetBody}
+                  keyboardShouldPersistTaps="handled"
+                  nestedScrollEnabled
+                  showsVerticalScrollIndicator={false}
+                  style={styles.filterSheetScroll}
+                >
                   {activeFilterSection === 'muscles' ? (
                     <FilterSection
                       emptyLabel="No muscles found."
@@ -731,6 +746,25 @@ function toggleFilterValue(
   setValues(current =>
     current.includes(value) ? current.filter(existing => existing !== value) : [...current, value],
   );
+}
+
+function getFilterSheetHeight({
+  height,
+  safeAreaBottom,
+  safeAreaTop,
+  width,
+}: {
+  height: number;
+  safeAreaBottom: number;
+  safeAreaTop: number;
+  width: number;
+}) {
+  const availableHeight = Math.max(320, height - safeAreaTop - safeAreaBottom);
+  const isLandscapeOrTablet = width >= height || width >= 720;
+  const heightRatio = height < 700 ? 0.9 : isLandscapeOrTablet ? 0.72 : 0.82;
+  const maxHeight = isLandscapeOrTablet ? 680 : 760;
+
+  return Math.round(Math.min(maxHeight, Math.max(360, availableHeight * heightRatio)));
 }
 
 function buildFilterSummary({

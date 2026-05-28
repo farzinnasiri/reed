@@ -71,7 +71,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-notifications',
       {
-        defaultChannel: 'rest-timer-alerts',
+        color: '#2455e6',
+        defaultChannel: 'rest-timer-alerts-v2',
+        icon: './assets/images/notification-icon.png',
       },
     ],
   ],

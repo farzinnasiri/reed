@@ -12,6 +12,7 @@ import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
+import { ProgressRow, getProgressSlices } from '../goals-home-card';
 
 type MetricKind = 'exerciseMaxLoadKg' | 'exerciseTotalReps' | 'exerciseBestHoldSeconds' | 'exerciseTotalDurationSeconds' | 'cardioDistanceMeters' | 'cardioDurationSeconds' | 'sessionCount';
 type Cadence = 'once' | 'daily' | 'weekly' | 'total';
@@ -90,7 +91,7 @@ function EmptyGoals({ onCreate }: { onCreate: () => void }) {
 function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number] }) {
   const { theme } = useReedTheme();
   const progress = target.progressSummary;
-  const percent = progress.required > 0 ? Math.min(1, progress.current / progress.required) : 0;
+  const progressSlices = getProgressSlices(target);
   return (
     <View style={[styles.goalRow, { borderColor: theme.colors.controlBorder }]}> 
       <View style={styles.goalTopLine}>
@@ -98,9 +99,13 @@ function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onC
         <StatusPill status={target.status} />
       </View>
       <ReedText tone="muted" variant="caption">{target.previewText}</ReedText>
-      <View style={[styles.progressTrack, { backgroundColor: theme.colors.borderSoft }]}><View style={[styles.progressFill, { backgroundColor: theme.colors.accentPrimary, width: `${percent * 100}%` }]} /></View>
+      <View style={styles.goalProgressStack}>
+        {progressSlices.map(slice => (
+          <ProgressRow compact key={slice.label} slice={slice} />
+        ))}
+      </View>
       <View style={styles.goalMetaRow}>
-        <ReedText variant="caption">{progress.currentLabel}</ReedText>
+        <ReedText tone="muted" variant="caption">{target.rule.cadence === 'daily' ? 'Daily target' : target.rule.cadence === 'weekly' ? 'Weekly target' : 'Target'}</ReedText>
         <ReedText tone="muted" variant="caption">Due {formatDate(target.endsAt)}</ReedText>
       </View>
       {progress.totalPeriods ? <ReedText tone="muted" variant="caption">{progress.satisfiedPeriods ?? 0}/{progress.totalPeriods} periods complete</ReedText> : null}
@@ -384,6 +389,7 @@ const styles = StyleSheet.create({
   exerciseResultRow: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between', paddingVertical: 13 },
   goalActions: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
   goalMetaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
+  goalProgressStack: { gap: 8 },
   goalRow: { borderRadius: 18, borderWidth: 1, gap: 8, padding: 14 },
   goalTitle: { flex: 1 },
   goalTopLine: { alignItems: 'center', flexDirection: 'row', gap: 10 },
@@ -397,8 +403,6 @@ const styles = StyleSheet.create({
   pickerResults: { maxHeight: 420 },
   pickerSheet: { alignSelf: 'stretch', borderRadius: 26, maxHeight: '78%' },
   preview: { borderRadius: 18, borderWidth: 1, gap: 4, padding: 14 },
-  progressFill: { borderRadius: 999, height: '100%' },
-  progressTrack: { borderRadius: 999, height: 6, overflow: 'hidden' },
   sheet: { alignSelf: 'stretch', borderRadius: 28, height: '88%' },
   sheetContent: { flex: 1, gap: 14, minHeight: 0, paddingBottom: 16, paddingHorizontal: 20, paddingTop: 8 },
   sheetFooter: { borderTopWidth: 1, paddingTop: 14 },
