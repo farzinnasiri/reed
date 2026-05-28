@@ -994,12 +994,18 @@ export const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     zIndex: 20,
   },
+  filterSheetBackdropPressable: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 0,
+  },
   filterSheetPanelFrame: {
-    maxHeight: '82%',
+    elevation: 21,
+    zIndex: 1,
   },
   filterSheetPanel: {
     borderTopLeftRadius: reedRadii.xl,
     borderTopRightRadius: reedRadii.xl,
+    flex: 1,
   },
   filterSheetPanelContent: {
     flex: 1,
@@ -1015,6 +1021,10 @@ export const styles = StyleSheet.create({
   },
   filterSheetTabs: {
     marginTop: 8,
+  },
+  filterSheetScroll: {
+    flex: 1,
+    minHeight: 0,
   },
   filterSheetHeaderActions: {
     alignItems: 'center',
