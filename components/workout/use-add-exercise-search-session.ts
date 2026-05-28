@@ -6,8 +6,11 @@ import type { AddExerciseSheetData } from './workout-surface.types';
 
 export type AddExerciseFilterSectionKey = 'muscles' | 'equipment';
 
+const SEARCH_QUERY_DEBOUNCE_MS = 180;
+
 export function useAddExerciseSearchSession(isOpen: boolean) {
   const [searchText, setSearchText] = useState('');
+  const [debouncedSearchText, setDebouncedSearchText] = useState('');
   const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<Id<'exerciseCatalog'>[]>([]);
@@ -20,7 +23,7 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
       ? {
           equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
           muscleGroups: selectedMuscleGroups.length > 0 ? selectedMuscleGroups : undefined,
-          query: searchText.trim() || undefined,
+          query: debouncedSearchText || undefined,
         }
       : 'skip',
   );
@@ -53,6 +56,21 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     }
   }, [data]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setDebouncedSearchText('');
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setDebouncedSearchText(searchText.trim());
+    }, SEARCH_QUERY_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [isOpen, searchText]);
+
   function toggleSelectedExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
     setSelectedExerciseIds(current =>
       current.includes(exerciseCatalogId)
@@ -63,6 +81,7 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
 
   function resetSearchSession() {
     setSearchText('');
+    setDebouncedSearchText('');
     setSelectedMuscleGroups([]);
     setSelectedEquipment([]);
     setSelectedExerciseIds([]);

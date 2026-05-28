@@ -13,7 +13,7 @@ import {
   View,
 } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
-import { getTapScaleStyle } from '@/design/motion';
+import { getTapScaleStyle, shouldUseNativeDriver } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 
@@ -95,7 +95,7 @@ export function RankedGoalList<T extends string>({
             toValue: 1.04,
             friction: 6,
             tension: 40,
-            useNativeDriver: true,
+            useNativeDriver: shouldUseNativeDriver,
           }).start();
         },
 
@@ -108,7 +108,7 @@ export function RankedGoalList<T extends string>({
         },
 
         onPanResponderRelease: (_, gesture) => {
-          Animated.spring(scale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }).start();
+          Animated.spring(scale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: shouldUseNativeDriver }).start();
 
           const fromIndex = draggingIndexRef.current ?? 0;
           const rawIndex = fromIndex + gesture.dy / ITEM_STRIDE;
@@ -128,7 +128,7 @@ export function RankedGoalList<T extends string>({
         },
 
         onPanResponderTerminate: () => {
-          Animated.spring(scale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: true }).start();
+          Animated.spring(scale, { toValue: 1, friction: 6, tension: 40, useNativeDriver: shouldUseNativeDriver }).start();
           dragY.setValue(0);
           draggingIndexRef.current = null;
           setDraggingIndex(null);

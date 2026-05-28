@@ -59,6 +59,7 @@ export type AddExerciseSheetData = {
   muscleGroupOptions: string[];
   recents: CatalogItem[];
   results: CatalogItem[];
+  suggested: CatalogItem[];
 };
 
 export type CaptureCard = {

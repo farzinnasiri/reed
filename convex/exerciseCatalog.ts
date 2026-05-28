@@ -80,6 +80,13 @@ export const searchForAddSheet = query({
       ? ([] as ReturnType<typeof serializeCatalogItem>[])
       : await getRecentCatalogItems(ctx, profile._id, exerciseById, favoriteIds);
     const recentIds = new Set(recents.map(item => item._id));
+    const suggested = hasSearchContext || recents.length > 0 || favorites.length > 0
+      ? ([] as ReturnType<typeof serializeCatalogItem>[])
+      : exercises
+          .slice()
+          .sort((left, right) => left.name.localeCompare(right.name))
+          .slice(0, 16)
+          .map(exercise => serializeCatalogItem(exercise, favoriteIds));
     const filtered = exercises
       .map(exercise => ({
         exercise,
@@ -98,8 +105,8 @@ export const searchForAddSheet = query({
           return left.queryMatchRank - right.queryMatchRank;
         }
 
-        const leftPriority = getSearchPriority(left.exercise._id, favoriteIds, recentIds);
-        const rightPriority = getSearchPriority(right.exercise._id, favoriteIds, recentIds);
+        const leftPriority = getSearchPriority(left.exercise._id, recentIds);
+        const rightPriority = getSearchPriority(right.exercise._id, recentIds);
         if (leftPriority !== rightPriority) {
           return leftPriority - rightPriority;
         }
@@ -116,6 +123,7 @@ export const searchForAddSheet = query({
       ),
       recents,
       results: filtered,
+      suggested,
     };
   },
 });
@@ -290,19 +298,44 @@ async function loadSearchContextExercises(
   queryText: string,
   hasSearchContext: boolean,
 ): Promise<SupportedExercise[]> {
+  const supportedExercises = await loadSupportedExercises(ctx);
+
   if (hasSearchContext && queryText.length > 0) {
     const indexedMatches = await ctx.db
       .query('exerciseCatalog')
       .withSearchIndex('search_text', q => q.search('searchText', queryText))
       .take(300);
-    return indexedMatches.map(resolveSupportedExercise).filter(isDefined);
+    return mergeSupportedExercises([
+      ...indexedMatches.map(resolveSupportedExercise).filter(isDefined),
+      ...supportedExercises,
+    ]);
   }
 
+  return supportedExercises;
+}
+
+async function loadSupportedExercises(ctx: QueryCtx): Promise<SupportedExercise[]> {
   const supportedExercises = await ctx.db
     .query('exerciseCatalog')
     .withIndex('by_supported_in_live_session', q => q.eq('isSupportedInLiveSession', true))
     .collect();
   return supportedExercises.map(resolveSupportedExercise).filter(isDefined);
+}
+
+function mergeSupportedExercises(exercises: SupportedExercise[]): SupportedExercise[] {
+  const seen = new Set<Id<'exerciseCatalog'>>();
+  const merged: SupportedExercise[] = [];
+
+  for (const exercise of exercises) {
+    if (seen.has(exercise._id)) {
+      continue;
+    }
+
+    seen.add(exercise._id);
+    merged.push(exercise);
+  }
+
+  return merged;
 }
 
 function isDefined<T>(value: T | null | undefined): value is T {
@@ -361,16 +394,12 @@ function collectFilterOptions(values: string[]) {
 
 function getSearchPriority(
   exerciseId: Id<'exerciseCatalog'>,
-  favoriteIds: Set<Id<'exerciseCatalog'>>,
   recentIds: Set<Id<'exerciseCatalog'>>,
 ) {
   if (recentIds.has(exerciseId)) {
     return 0;
   }
-  if (favoriteIds.has(exerciseId)) {
-    return 1;
-  }
-  return 2;
+  return 1;
 }
 
 function hasQueryMatchRank(item: { exercise: SupportedExercise; queryMatchRank: number | null }): item is {
@@ -381,45 +410,227 @@ function hasQueryMatchRank(item: { exercise: SupportedExercise; queryMatchRank: 
 }
 
 function getQueryMatchRank(exercise: SupportedExercise, queryText: string): number | null {
-  if (!queryText) {
+  const query = createSearchQuery(queryText);
+
+  if (!query) {
     return 0;
   }
 
-  const primaryValues = [exercise.name, ...exercise.aliases]
-    .map(value => value.toLowerCase().trim())
-    .filter(Boolean);
+  const primaryValues = [
+    exercise.name,
+    ...exercise.aliases,
+    exercise.exerciseId,
+    exercise.canonicalFamily,
+  ].filter(Boolean);
   const metadataValues = [
     exercise.exerciseClass,
     ...exercise.mainMuscleGroups,
     ...exercise.secondaryMuscleGroups,
     ...exercise.equipment,
+    ...exercise.movementPatterns,
+    ...exercise.contextTags,
+    ...exercise.skillTags,
     ...(exercise.discoveryTags ?? []),
-  ]
-    .map(value => value.toLowerCase().trim())
-    .filter(Boolean);
-  const fullSearchText = exercise.searchText.toLowerCase();
+    exercise.rawMetricRecipe,
+  ].filter(Boolean);
 
-  if (primaryValues.some(value => value === queryText)) {
+  if (hasSearchMatch(primaryValues, query, 'exact')) {
     return 0;
   }
-  if (primaryValues.some(value => value.startsWith(queryText))) {
+  if (hasSearchMatch(primaryValues, query, 'startsWith')) {
     return 1;
   }
-  if (primaryValues.some(value => value.includes(queryText))) {
+  if (hasSearchMatch(primaryValues, query, 'includes')) {
     return 2;
   }
-  if (metadataValues.some(value => value === queryText)) {
+  if (hasFuzzySearchMatch(primaryValues, query)) {
     return 3;
   }
-  if (metadataValues.some(value => value.startsWith(queryText))) {
+  if (hasSearchMatch(metadataValues, query, 'exact')) {
     return 4;
   }
-  if (metadataValues.some(value => value.includes(queryText))) {
+  if (hasSearchMatch(metadataValues, query, 'startsWith')) {
     return 5;
   }
-  if (fullSearchText.includes(queryText)) {
+  if (hasSearchMatch(metadataValues, query, 'includes')) {
     return 6;
+  }
+  if (hasSearchMatch([exercise.searchText], query, 'includes')) {
+    return 7;
   }
 
   return null;
+}
+
+type SearchQuery = {
+  compact: string;
+  compactSingular: string;
+  normalized: string;
+  tokens: string[];
+};
+
+type SearchMatchMode = 'exact' | 'startsWith' | 'includes';
+
+function createSearchQuery(value: string): SearchQuery | null {
+  const normalized = normalizeSearchValue(value);
+
+  if (!normalized) {
+    return null;
+  }
+
+  const compact = compactSearchValue(normalized);
+  return {
+    compact,
+    compactSingular: singularizeCompactSearchValue(compact),
+    normalized,
+    tokens: normalized.split(' '),
+  };
+}
+
+function hasSearchMatch(values: string[], query: SearchQuery, mode: SearchMatchMode) {
+  return values.some(value => {
+    const normalized = normalizeSearchValue(value);
+
+    if (!normalized) {
+      return false;
+    }
+
+    const compact = compactSearchValue(normalized);
+    const compactSingular = singularizeCompactSearchValue(compact);
+    return matchesSearchValue(normalized, query.normalized, mode)
+      || matchesSearchValue(compact, query.compact, mode)
+      || matchesSearchValue(compact, query.compactSingular, mode)
+      || matchesSearchValue(compactSingular, query.compact, mode)
+      || matchesSearchValue(compactSingular, query.compactSingular, mode);
+  });
+}
+
+function matchesSearchValue(value: string, query: string, mode: SearchMatchMode) {
+  if (!query) {
+    return false;
+  }
+
+  if (mode === 'exact') {
+    return value === query;
+  }
+
+  if (mode === 'startsWith') {
+    return value.startsWith(query);
+  }
+
+  return value.includes(query);
+}
+
+function hasFuzzySearchMatch(values: string[], query: SearchQuery) {
+  return values.some(value => {
+    const normalized = normalizeSearchValue(value);
+
+    if (!normalized) {
+      return false;
+    }
+
+    const compact = compactSearchValue(normalized);
+    const compactSingular = singularizeCompactSearchValue(compact);
+    if (
+      isWithinSearchTypoDistance(query.compact, compact)
+      || isWithinSearchTypoDistance(query.compactSingular, compact)
+      || isWithinSearchTypoDistance(query.compact, compactSingular)
+      || isWithinSearchTypoDistance(query.compactSingular, compactSingular)
+    ) {
+      return true;
+    }
+
+    const valueTokens = normalized.split(' ');
+    return query.tokens.every(queryToken =>
+      valueTokens.some(valueToken => isWithinSearchTypoDistance(queryToken, valueToken)),
+    );
+  });
+}
+
+function isWithinSearchTypoDistance(query: string, value: string) {
+  if (query.length < 3 || value.length < 3) {
+    return query === value;
+  }
+
+  const maxDistance = query.length >= 5 || value.length >= 5 ? 2 : 1;
+  return getBoundedDamerauLevenshteinDistance(query, value, maxDistance) <= maxDistance;
+}
+
+function getBoundedDamerauLevenshteinDistance(left: string, right: string, maxDistance: number) {
+  if (Math.abs(left.length - right.length) > maxDistance) {
+    return maxDistance + 1;
+  }
+
+  const previousPreviousRow = new Array(right.length + 1).fill(0);
+  let previousRow = Array.from({ length: right.length + 1 }, (_, index) => index);
+
+  for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+    const currentRow = new Array(right.length + 1).fill(0);
+    currentRow[0] = leftIndex;
+    let bestInRow = currentRow[0];
+
+    for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+      const substitutionCost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1;
+      currentRow[rightIndex] = Math.min(
+        previousRow[rightIndex] + 1,
+        currentRow[rightIndex - 1] + 1,
+        previousRow[rightIndex - 1] + substitutionCost,
+      );
+
+      if (
+        leftIndex > 1
+        && rightIndex > 1
+        && left[leftIndex - 1] === right[rightIndex - 2]
+        && left[leftIndex - 2] === right[rightIndex - 1]
+      ) {
+        currentRow[rightIndex] = Math.min(currentRow[rightIndex], previousPreviousRow[rightIndex - 2] + 1);
+      }
+
+      bestInRow = Math.min(bestInRow, currentRow[rightIndex]);
+    }
+
+    if (bestInRow > maxDistance) {
+      return maxDistance + 1;
+    }
+
+    previousPreviousRow.splice(0, previousPreviousRow.length, ...previousRow);
+    previousRow = currentRow;
+  }
+
+  return previousRow[right.length];
+}
+
+function normalizeSearchValue(value: string) {
+  return value
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function compactSearchValue(value: string) {
+  return value.replace(/\s+/g, '');
+}
+
+function singularizeCompactSearchValue(value: string) {
+  if (value.endsWith('ss')) {
+    return value;
+  }
+
+  if (value.endsWith('ies') && value.length > 4) {
+    return `${value.slice(0, -3)}y`;
+  }
+
+  if (value.endsWith('es') && value.length > 4) {
+    return value.slice(0, -2);
+  }
+
+  if (value.endsWith('s') && value.length > 3) {
+    return value.slice(0, -1);
+  }
+
+  return value;
 }

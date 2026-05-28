@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
+import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { getGlassScrimTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
@@ -97,6 +98,7 @@ export function WorkoutSessionInsightsSheet({
 
   useEffect(() => {
     if (isOpen) {
+      blurActiveElementOnWeb();
       setIsMounted(true);
       requestAnimationFrame(() => {
         createTiming(openProgress, 1, reedMotion.durations.mode, reedEasing.easeOut, false).start();

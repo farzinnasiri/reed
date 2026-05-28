@@ -370,40 +370,15 @@ export const addExercise = mutation({
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
-    const catalogExercise = await ctx.db.get(args.exerciseCatalogId);
-
-    if (!catalogExercise) {
-      throw new ConvexError('This exercise is not available in the live session flow yet.');
-    }
-
-    const resolvedRecipeKey = resolveCatalogRecipeKey({
-      exerciseClass: catalogExercise.exerciseClass,
-      isCardio: catalogExercise.isCardio,
-      isHold: catalogExercise.isHold,
-      laterality: catalogExercise.laterality,
-      rawMetricRecipe: catalogExercise.rawMetricRecipe,
-      recipeKey: catalogExercise.recipeKey,
-      supportsLiveTracking: catalogExercise.supportsLiveTracking,
-    });
-
-    if (!resolvedRecipeKey) {
-      throw new ConvexError('This exercise is not available in the live session flow yet.');
-    }
-
     const existingEntries = await ctx.db
       .query('liveSessionExercises')
       .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
       .collect();
-    const sessionExerciseId = await ctx.db.insert('liveSessionExercises', {
-      addedAt: Date.now(),
-      defaultSummaryFormat: catalogExercise.defaultSummaryFormat,
-      exerciseCatalogId: catalogExercise._id,
-      exerciseClass: catalogExercise.exerciseClass,
-      exerciseName: catalogExercise.name,
-      modifierCapabilities: catalogExercise.modifierCapabilities,
+    const sessionExerciseId = await insertSessionExercise({
+      ctx,
+      exerciseCatalogId: args.exerciseCatalogId,
       position: existingEntries.length,
       profileId: profile._id,
-      recipeKey: resolvedRecipeKey,
       sessionId: session._id,
     });
 
@@ -414,6 +389,87 @@ export const addExercise = mutation({
     return { sessionExerciseId };
   },
 });
+
+export const addExercises = mutation({
+  args: { exerciseCatalogIds: v.array(v.id('exerciseCatalog')) },
+  handler: async (ctx, args) => {
+    if (args.exerciseCatalogIds.length === 0) {
+      return { sessionExerciseIds: [] as Id<'liveSessionExercises'>[] };
+    }
+
+    const profile = await requireViewerProfile(ctx);
+    const session = await requireActiveSession(ctx, profile._id);
+    const existingEntries = await ctx.db
+      .query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+      .collect();
+    const sessionExerciseIds: Id<'liveSessionExercises'>[] = [];
+
+    for (const [index, exerciseCatalogId] of args.exerciseCatalogIds.entries()) {
+      const sessionExerciseId = await insertSessionExercise({
+        ctx,
+        exerciseCatalogId,
+        position: existingEntries.length + index,
+        profileId: profile._id,
+        sessionId: session._id,
+      });
+      sessionExerciseIds.push(sessionExerciseId);
+    }
+
+    if (!session.activeSessionExerciseId && sessionExerciseIds[0]) {
+      await ctx.db.patch(session._id, { activeSessionExerciseId: sessionExerciseIds[0] });
+    }
+
+    return { sessionExerciseIds };
+  },
+});
+
+async function insertSessionExercise({
+  ctx,
+  exerciseCatalogId,
+  position,
+  profileId,
+  sessionId,
+}: {
+  ctx: MutationCtx;
+  exerciseCatalogId: Id<'exerciseCatalog'>;
+  position: number;
+  profileId: Id<'profiles'>;
+  sessionId: Id<'liveSessions'>;
+}) {
+  const catalogExercise = await ctx.db.get(exerciseCatalogId);
+
+  if (!catalogExercise) {
+    throw new ConvexError('This exercise is not available in the live session flow yet.');
+  }
+
+  const resolvedRecipeKey = resolveCatalogRecipeKey({
+    exerciseClass: catalogExercise.exerciseClass,
+    isCardio: catalogExercise.isCardio,
+    isHold: catalogExercise.isHold,
+    laterality: catalogExercise.laterality,
+    rawMetricRecipe: catalogExercise.rawMetricRecipe,
+    recipeKey: catalogExercise.recipeKey,
+    supportsLiveTracking: catalogExercise.supportsLiveTracking,
+  });
+
+  if (!resolvedRecipeKey) {
+    throw new ConvexError('This exercise is not available in the live session flow yet.');
+  }
+
+  return await ctx.db.insert('liveSessionExercises', {
+    addedAt: Date.now(),
+    defaultSummaryFormat: catalogExercise.defaultSummaryFormat,
+    exerciseCatalogId: catalogExercise._id,
+    exerciseClass: catalogExercise.exerciseClass,
+    exerciseName: catalogExercise.name,
+    modifierCapabilities: catalogExercise.modifierCapabilities,
+    position,
+    profileId,
+    recipeKey: resolvedRecipeKey,
+    sessionId,
+  });
+}
 
 export const selectExercise = mutation({
   args: { sessionExerciseId: v.id('liveSessionExercises') },

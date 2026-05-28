@@ -384,14 +384,7 @@ export function TimelinePage({
                   dragOffsetY={dragOffsetY}
                   isDragging={isDraggingRow}
                 >
-                  <View
-                    style={[
-                      styles.timelineLineItem,
-                      {
-                        opacity: isWorking ? 0.88 : 1,
-                      },
-                    ]}
-                  >
+                  <View style={styles.timelineLineItem}>
                     <View style={styles.timelineRailColumn}>
                       {!isFirst ? (
                         <View
@@ -472,7 +465,7 @@ export function TimelinePage({
                           setConfirmExerciseDeleteId(null);
                           onOpenExercise(item.sessionExerciseId);
                         }}
-                        style={({ pressed }) => [getTapScaleStyle(pressed, isWorking)]}
+                        style={({ pressed }) => [getTapScaleStyle(pressed)]}
                       >
                         <View style={styles.timelineLineHeader}>
                           <View style={styles.timelineLineTitleStack}>
@@ -497,7 +490,7 @@ export function TimelinePage({
                                   [exerciseKey]: !isExpanded,
                                 }));
                               }}
-                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
+                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed)]}
                             >
                               <Ionicons
                                 color={String(theme.colors.textMuted)}
@@ -507,6 +500,7 @@ export function TimelinePage({
                             </Pressable>
                             {isReadOnly ? null : <TimelineDragHandle
                               disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
+                              dimWhenDisabled={Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
                               isDragging={isDraggingRow}
                               onDragEnd={() => {
                                 void handleDragEnd();
@@ -532,7 +526,7 @@ export function TimelinePage({
 
                                 setConfirmExerciseDeleteId(item.sessionExerciseId);
                               }}
-                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed, isWorking)]}
+                              style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed)]}
                             >
                               <Ionicons
                                 color={String(
@@ -581,8 +575,9 @@ export function TimelinePage({
 
                               return (
                                 <TimelineSetRow
-                                  canDelete={!isWorking && !isReadOnly}
+                                  canDelete={!isReadOnly}
                                   canOpen={!isReadOnly}
+                                  deleteLocked={isWorking}
                                   highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
                                   key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
                                   onDelete={() => onDeleteSet(setEntry.setLogId)}
@@ -622,7 +617,7 @@ export function TimelinePage({
               onPress={onToggleFinishSessionConfirm}
               style={({ pressed }) => [
                 styles.timelineBottomPrimaryPressable,
-                getTapScaleStyle(pressed, isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)),
+                getTapScaleStyle(pressed, displayTimeline.length === 0 || Boolean(draggingExerciseId)),
               ]}
             >
               <View
@@ -650,7 +645,7 @@ export function TimelinePage({
                 {
                   backgroundColor: theme.colors.controlActiveFill,
                   borderColor: theme.colors.controlActiveBorder,
-                  ...getTapScaleStyle(pressed, isWorking),
+                  ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
                 },
               ]}
             >
@@ -852,12 +847,14 @@ function AnimatedTimelineRow({
 
 function TimelineDragHandle({
   disabled,
+  dimWhenDisabled,
   isDragging,
   onDragEnd,
   onDragMove,
   onDragStart,
 }: {
   disabled: boolean;
+  dimWhenDisabled: boolean;
   isDragging: boolean;
   onDragEnd: () => void;
   onDragMove: (deltaY: number) => void;
@@ -939,7 +936,7 @@ function TimelineDragHandle({
       style={[
         styles.timelineActionButton,
         {
-          opacity: disabled ? reedMotion.opacity.disabled : 1,
+          opacity: disabled && dimWhenDisabled ? reedMotion.opacity.disabled : 1,
           transform: [{ scale: isDragging ? reedMotion.scale.activeTab : 1 }],
         },
       ]}
@@ -998,6 +995,7 @@ function moveTimelineItem<T>(items: T[], fromIndex: number, toIndex: number) {
 
 function TimelineSetRow({
   canDelete,
+  deleteLocked,
   highlightOnChange,
   canOpen,
   onDelete,
@@ -1008,6 +1006,7 @@ function TimelineSetRow({
 }: {
   canDelete: boolean;
   canOpen: boolean;
+  deleteLocked: boolean;
   highlightOnChange: boolean;
   onDelete: () => void;
   onOpen: () => void;
@@ -1076,7 +1075,7 @@ function TimelineSetRow({
         </Pressable>
         <Pressable
           accessibilityLabel={isConfirmingDelete ? 'Confirm delete set' : 'Delete set'}
-          disabled={!canDelete}
+          disabled={!canDelete || deleteLocked}
           onPress={() => {
             if (isConfirmingDelete) {
               setIsConfirmingDelete(false);

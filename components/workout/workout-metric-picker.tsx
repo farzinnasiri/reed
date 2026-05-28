@@ -12,7 +12,7 @@ import {
   roundMetricValue,
 } from '@/domains/workout/metric-formatting';
 import { ReedText } from '@/components/ui/reed-text';
-import { getTapScaleStyle } from '@/design/motion';
+import { getTapScaleStyle, shouldUseNativeDriver } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { useRunningTicker } from './use-running-ticker';
@@ -161,8 +161,9 @@ export function WorkoutMetricPicker({
     dragOffsetY.stopAnimation();
     dragOffsetY.setValue(0);
     if (isEditingDuration) {
-      commitDurationEdit();
-      return;
+      setIsEditingDuration(false);
+      setDurationMinutesDraft('');
+      setDurationSecondsDraft('');
     }
 
     if (isDurationRunning) {
@@ -170,8 +171,11 @@ export function WorkoutMetricPicker({
       return;
     }
 
-    runningBaseValueRef.current = currentValueRef.current;
+    runningBaseValueRef.current = 0;
     runningStartedAtRef.current = Date.now();
+    if (currentValueRef.current !== 0) {
+      onChangeRef.current(normalizeMetricInput(0, minValue, maxValue));
+    }
     setIsDurationRunning(true);
   }
 
@@ -298,7 +302,7 @@ export function WorkoutMetricPicker({
     Animated.timing(dragOffsetY, {
       duration: 120,
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: shouldUseNativeDriver,
     }).start(() => {
       onInteractionEnd?.();
     });

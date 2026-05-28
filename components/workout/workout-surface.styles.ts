@@ -880,6 +880,11 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
   },
+  bulkAddHeaderSlot: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 112,
+  },
   bulkAddHeaderButton: {
     alignItems: 'center',
     borderRadius: reedRadii.pill,

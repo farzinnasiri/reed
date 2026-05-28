@@ -66,6 +66,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   );
   const startSession = useMutation(api.liveSessions.start);
   const addExercise = useMutation(api.liveSessions.addExercise);
+  const addExercises = useMutation(api.liveSessions.addExercises);
   const reorderExercises = useMutation(api.liveSessions.reorderExercises);
   const removeExercise = useMutation(api.liveSessions.removeExercise);
   const selectExercise = useMutation(api.liveSessions.selectExercise);
@@ -90,6 +91,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [restRemaining, setRestRemaining] = useState(0);
   const [restRunning, setRestRunning] = useState(false);
   const [isPickerInteracting, setIsPickerInteracting] = useState(false);
+  const [isTimelineMutationPending, setIsTimelineMutationPending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [page, setPage] = useState<WorkoutPage>('timeline');
   const [elapsedNow, setElapsedNow] = useState(() => Date.now());
@@ -101,6 +103,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [statusStripHeight, setStatusStripHeight] = useState(60);
   const previousRestRemainingRef = useRef<number | null>(null);
   const currentRestRemainingRef = useRef(restRemaining);
+  const timelineMutationPendingRef = useRef(false);
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
   const restRuntime =
@@ -337,6 +340,26 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
   }
 
+  async function runTimelineMutation<T>(action: () => Promise<T>) {
+    if (timelineMutationPendingRef.current) {
+      return null;
+    }
+
+    timelineMutationPendingRef.current = true;
+    setIsTimelineMutationPending(true);
+    setErrorMessage(null);
+
+    try {
+      return await action();
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+      return null;
+    } finally {
+      timelineMutationPendingRef.current = false;
+      setIsTimelineMutationPending(false);
+    }
+  }
+
   async function handleStartSession() {
     await runMutation(async () => {
       await startSession({});
@@ -344,7 +367,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleSelectExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
-    await runMutation(async () => {
+    await runTimelineMutation(async () => {
       await selectExercise({ sessionExerciseId });
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
@@ -354,7 +377,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleOpenSet(sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) {
-    await runMutation(async () => {
+    await runTimelineMutation(async () => {
       await selectExercise({ sessionExerciseId });
       setIsConfirmingFinishSession(false);
       setEditingSet({
@@ -371,10 +394,10 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleAddExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
-    await runMutation(async () => {
+    setIsConfirmingFinishSession(false);
+    closeAddSheet();
+    await runTimelineMutation(async () => {
       await addExercise({ exerciseCatalogId });
-      setIsConfirmingFinishSession(false);
-      closeAddSheet();
     });
   }
 
@@ -383,23 +406,21 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return;
     }
 
-    await runMutation(async () => {
-      for (const exerciseCatalogId of exerciseCatalogIds) {
-        await addExercise({ exerciseCatalogId });
-      }
-      setIsConfirmingFinishSession(false);
-      closeAddSheet();
+    setIsConfirmingFinishSession(false);
+    closeAddSheet();
+    await runTimelineMutation(async () => {
+      await addExercises({ exerciseCatalogIds });
     });
   }
 
   async function handleRemoveExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
-    await runMutation(async () => {
+    await runTimelineMutation(async () => {
       await removeExercise({ sessionExerciseId });
     });
   }
 
   async function handleReorderTimeline(orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) {
-    const result = await runMutation(async () => {
+    const result = await runTimelineMutation(async () => {
       await reorderExercises({ orderedSessionExerciseIds });
       return true;
     });
@@ -408,9 +429,13 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleToggleFavorite(exerciseCatalogId: Id<'exerciseCatalog'>) {
-    await runMutation(async () => {
+    setErrorMessage(null);
+
+    try {
       await toggleFavorite({ exerciseCatalogId });
-    });
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    }
   }
 
   async function handleCaptureSwipeRight() {
@@ -809,7 +834,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         elapsedLabel={elapsedLabel}
         errorMessage={errorMessage}
         isConfirmingFinishSession={isConfirmingFinishSession}
-        isWorking={isWorking}
+        isWorking={isTimelineMutationPending}
         onAddExercise={() => {
           setIsConfirmingFinishSession(false);
           setIsAddSheetOpen(true);

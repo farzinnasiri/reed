@@ -17,7 +17,7 @@ import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/compo
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation } from '@/design/motion';
+import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation, shouldUseNativeDriver } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii, workoutSemanticPalette } from '@/design/system';
@@ -483,7 +483,7 @@ function AccordionDetailReveal({ children }: { children: ReactNode }) {
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    createTiming(progress, 1, reedMotion.durations.mode, undefined, true).start();
+    createTiming(progress, 1, reedMotion.durations.mode, undefined, shouldUseNativeDriver).start();
   }, [progress]);
 
   return (

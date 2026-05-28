@@ -120,7 +120,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   },
   hold: {
     fields: [
-      { defaultValue: 30, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 5, unit: 's' },
+      { defaultValue: 30, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 1, unit: 's' },
       { defaultValue: 8, key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
     ],
     formatSummary: metrics => `${formatDuration(metrics.duration)} · RPE ${formatRpe(metrics.rpe)}`,
@@ -130,7 +130,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   },
   weighted_hold: {
     fields: [
-      { defaultValue: 30, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 5, unit: 's' },
+      { defaultValue: 30, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 1, unit: 's' },
       { defaultValue: 0, key: 'load', label: 'Load', min: 0, pickerMax: 200, pickerMin: 0, step: 2.5, unit: 'kg' },
       { defaultValue: 8, key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
     ],
@@ -142,7 +142,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   },
   mobility_duration_intensity: {
     fields: [
-      { defaultValue: 45, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 5, unit: 's' },
+      { defaultValue: 45, key: 'duration', kind: 'duration', label: 'Duration', max: 1800, min: 0, pickerMax: 1800, pickerMin: 0, step: 1, unit: 's' },
       { defaultValue: 6, key: 'intensity', label: 'Intensity', max: 10, min: 1, pickerMax: 10, pickerMin: 1, step: 0.5 },
     ],
     formatSummary: metrics => `${formatDuration(metrics.duration)} · Intensity ${formatRpe(metrics.intensity)}`,
@@ -207,7 +207,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
         min: 0,
         pickerMax: 1800,
         pickerMin: 0,
-        step: 5,
+        step: 1,
         unit: 's',
       },
       {
@@ -220,7 +220,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
         min: 0,
         pickerMax: 1800,
         pickerMin: 0,
-        step: 5,
+        step: 1,
         unit: 's',
       },
       { defaultValue: 8, group: 'shared', key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
@@ -243,7 +243,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
         min: 0,
         pickerMax: 1800,
         pickerMin: 0,
-        step: 5,
+        step: 1,
         unit: 's',
       },
       {
@@ -256,7 +256,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
         min: 0,
         pickerMax: 1800,
         pickerMin: 0,
-        step: 5,
+        step: 1,
         unit: 's',
       },
       {
@@ -292,7 +292,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   },
   cardio_manual_duration_rpe: {
     fields: [
-      { defaultValue: 600, key: 'duration', kind: 'duration', label: 'Duration', min: 0, max: 10800, pickerMin: 0, pickerMax: 10800, step: 5, unit: 's' },
+      { defaultValue: 600, key: 'duration', kind: 'duration', label: 'Duration', min: 0, max: 10800, pickerMin: 0, pickerMax: 10800, step: 1, unit: 's' },
       { defaultValue: 7, key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
     ],
     formatSummary: metrics => `${formatDuration(metrics.duration)} · RPE ${formatRpe(metrics.rpe)}`,
@@ -303,7 +303,7 @@ const recipeRegistry: Record<RecipeKey, RecipeDefinition> = {
   cardio_manual_distance_time_rpe: {
     fields: [
       { defaultValue: 1, key: 'distance', label: 'Distance', min: 0, max: 1000, pickerMin: 0, pickerMax: 1000, step: 0.1, unit: 'km' },
-      { defaultValue: 600, key: 'time', kind: 'duration', label: 'Time', min: 0, max: 10800, pickerMin: 0, pickerMax: 10800, step: 5, unit: 's' },
+      { defaultValue: 600, key: 'time', kind: 'duration', label: 'Time', min: 0, max: 10800, pickerMin: 0, pickerMax: 10800, step: 1, unit: 's' },
       { defaultValue: 7, key: 'rpe', label: 'RPE', max: 10, min: 5, pickerMax: 10, pickerMin: 5, step: 0.5 },
     ],
     formatSummary: metrics =>

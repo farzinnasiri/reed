@@ -4,6 +4,7 @@ import { Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView,
 import type { Id } from '@/convex/_generated/dataModel';
 import { getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
+import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
@@ -68,6 +69,7 @@ export function AddExerciseSheet({
   const [isSheetMounted, setIsSheetMounted] = useState(isOpen);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [isFilterSheetMounted, setIsFilterSheetMounted] = useState(false);
+  const [favoriteOverrides, setFavoriteOverrides] = useState<Partial<Record<Id<'exerciseCatalog'>, boolean>>>({});
   const filteredMuscleOptions = useMemo(
     () => filterOptions(effectiveData?.muscleGroupOptions ?? [], muscleSearchText),
     [effectiveData?.muscleGroupOptions, muscleSearchText],
@@ -78,6 +80,7 @@ export function AddExerciseSheet({
   );
   useEffect(() => {
     if (isOpen) {
+      blurActiveElementOnWeb();
       setIsSheetMounted(true);
       requestAnimationFrame(() => {
         createTiming(sheetProgress, 1, reedMotion.durations.mode, reedEasing.easeOut).start();
@@ -92,6 +95,7 @@ export function AddExerciseSheet({
       }
 
       setIsSheetMounted(false);
+      setFavoriteOverrides({});
       resetSearchSession();
     });
   }, [isOpen, sheetProgress]);
@@ -118,6 +122,21 @@ export function AddExerciseSheet({
     }
 
     onAddBulk(selectedExerciseIds);
+  }
+
+  function handleToggleFavorite(exerciseCatalogId: Id<'exerciseCatalog'>, nextIsFavorite: boolean) {
+    setFavoriteOverrides(current => ({
+      ...current,
+      [exerciseCatalogId]: nextIsFavorite,
+    }));
+    onToggleFavorite(exerciseCatalogId);
+  }
+
+  function applyFavoriteOverrides(items: CatalogItem[]) {
+    return items.map(item => {
+      const override = favoriteOverrides[item._id];
+      return override == null ? item : { ...item, isFavorite: override };
+    });
   }
 
   if (!isSheetMounted) {
@@ -169,7 +188,15 @@ export function AddExerciseSheet({
             <View style={styles.sheetHeader}>
               <ReedText variant="section">Add exercise</ReedText>
               <View style={styles.sheetHeaderActions}>
-                {selectedCount > 0 ? (
+                <View
+                  pointerEvents={selectedCount > 0 ? 'auto' : 'none'}
+                  style={[
+                    styles.bulkAddHeaderSlot,
+                    {
+                      opacity: selectedCount > 0 ? 1 : 0,
+                    },
+                  ]}
+                >
                   <Pressable
                     onPress={handleAddBulk}
                     style={({ pressed }) => [
@@ -184,7 +211,7 @@ export function AddExerciseSheet({
                       {isWorking ? 'Adding…' : `Add ${selectedCount}`}
                     </ReedText>
                   </Pressable>
-                ) : null}
+                </View>
 
                 <Pressable onPress={onClose} style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}>
                   <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
@@ -202,10 +229,9 @@ export function AddExerciseSheet({
               >
                 {hasSearchContext ? (
                   <CatalogSection
-                    isWorking={isWorking}
-                    items={effectiveData?.results ?? []}
+                    items={applyFavoriteOverrides(effectiveData?.results ?? [])}
                     onAddSingle={onAddSingle}
-                    onToggleFavorite={onToggleFavorite}
+                    onToggleFavorite={handleToggleFavorite}
                     onToggleSelected={toggleSelectedExercise}
                     selectedExerciseIds={selectedExerciseIdsSet}
                     title="Results"
@@ -213,22 +239,28 @@ export function AddExerciseSheet({
                 ) : (
                   <>
                     <CatalogSection
-                      isWorking={isWorking}
-                      items={effectiveData?.recents ?? []}
+                      items={applyFavoriteOverrides(effectiveData?.recents ?? [])}
                       onAddSingle={onAddSingle}
-                      onToggleFavorite={onToggleFavorite}
+                      onToggleFavorite={handleToggleFavorite}
                       onToggleSelected={toggleSelectedExercise}
                       selectedExerciseIds={selectedExerciseIdsSet}
                       title="Recents"
                     />
                     <CatalogSection
-                      isWorking={isWorking}
-                      items={effectiveData?.favorites ?? []}
+                      items={applyFavoriteOverrides(effectiveData?.favorites ?? [])}
                       onAddSingle={onAddSingle}
-                      onToggleFavorite={onToggleFavorite}
+                      onToggleFavorite={handleToggleFavorite}
                       onToggleSelected={toggleSelectedExercise}
                       selectedExerciseIds={selectedExerciseIdsSet}
                       title="Favorites"
+                    />
+                    <CatalogSection
+                      items={applyFavoriteOverrides(effectiveData?.suggested ?? [])}
+                      onAddSingle={onAddSingle}
+                      onToggleFavorite={handleToggleFavorite}
+                      onToggleSelected={toggleSelectedExercise}
+                      selectedExerciseIds={selectedExerciseIdsSet}
+                      title="Exercises"
                     />
                   </>
                 )}
@@ -242,6 +274,7 @@ export function AddExerciseSheet({
                   <Pressable
                     disabled={activeFilterCount === 0}
                     onPress={() => {
+                      blurActiveElementOnWeb();
                       setSelectedMuscleGroups([]);
                       setSelectedEquipment([]);
                     }}
@@ -287,7 +320,10 @@ export function AddExerciseSheet({
                   />
 
                   <Pressable
-                    onPress={() => setIsFilterSheetOpen(true)}
+                    onPress={() => {
+                      blurActiveElementOnWeb();
+                      setIsFilterSheetOpen(true);
+                    }}
                     style={({ pressed }) => [
                       styles.searchFilterButton,
                       getTapScaleStyle(pressed),
@@ -323,7 +359,13 @@ export function AddExerciseSheet({
                   { backgroundColor: scrim.backgroundColor, pointerEvents: 'none' },
                 ]}
               />
-              <Pressable onPress={() => setIsFilterSheetOpen(false)} style={StyleSheet.absoluteFill} />
+              <Pressable
+                onPress={() => {
+                  blurActiveElementOnWeb();
+                  setIsFilterSheetOpen(false);
+                }}
+                style={StyleSheet.absoluteFill}
+              />
               <Animated.View
                 style={[
                   styles.filterSheetPanelFrame,
@@ -339,7 +381,10 @@ export function AddExerciseSheet({
                   <View style={styles.filterSheetHeader}>
                     <ReedText variant="section">Filters</ReedText>
                     <Pressable
-                      onPress={() => setIsFilterSheetOpen(false)}
+                      onPress={() => {
+                        blurActiveElementOnWeb();
+                        setIsFilterSheetOpen(false);
+                      }}
                       style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
                     >
                       <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
@@ -403,6 +448,7 @@ export function AddExerciseSheet({
                     <View style={styles.filterSheetFooterActions}>
                       <Pressable
                         onPress={() => {
+                          blurActiveElementOnWeb();
                           setSelectedMuscleGroups([]);
                           setSelectedEquipment([]);
                           setMuscleSearchText('');
@@ -421,7 +467,10 @@ export function AddExerciseSheet({
                       </Pressable>
 
                       <Pressable
-                        onPress={() => setIsFilterSheetOpen(false)}
+                        onPress={() => {
+                          blurActiveElementOnWeb();
+                          setIsFilterSheetOpen(false);
+                        }}
                         style={({ pressed }) => [
                           styles.filterFooterPrimaryButton,
                           {
@@ -447,7 +496,6 @@ export function AddExerciseSheet({
 }
 
 function CatalogSection({
-  isWorking,
   items,
   onAddSingle,
   onToggleSelected,
@@ -455,11 +503,10 @@ function CatalogSection({
   selectedExerciseIds,
   title,
 }: {
-  isWorking: boolean;
   items: CatalogItem[];
   onAddSingle: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
   onToggleSelected: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
-  onToggleFavorite: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
+  onToggleFavorite: (exerciseCatalogId: Id<'exerciseCatalog'>, nextIsFavorite: boolean) => void;
   selectedExerciseIds: Set<Id<'exerciseCatalog'>>;
   title: string;
 }) {
@@ -490,9 +537,8 @@ function CatalogSection({
               ]}
             >
               <Pressable
-                disabled={isWorking}
                 onPress={() => onAddSingle(item._id)}
-                style={({ pressed }) => [styles.catalogRowPressable, getTapScaleStyle(pressed, isWorking)]}
+                style={({ pressed }) => [styles.catalogRowPressable, getTapScaleStyle(pressed)]}
               >
                 <View style={styles.catalogRowCopy}>
                   <ReedText numberOfLines={1} variant="bodyStrong">
@@ -505,9 +551,8 @@ function CatalogSection({
               </Pressable>
 
               <Pressable
-                disabled={isWorking}
                 onPress={() => onToggleSelected(item._id)}
-                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed, isWorking)]}
+                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed)]}
               >
                 <Ionicons
                   color={String(isSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
@@ -517,9 +562,8 @@ function CatalogSection({
               </Pressable>
 
               <Pressable
-                disabled={isWorking}
-                onPress={() => onToggleFavorite(item._id)}
-                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed, isWorking)]}
+                onPress={() => onToggleFavorite(item._id, !item.isFavorite)}
+                style={({ pressed }) => [styles.catalogActionButton, getTapScaleStyle(pressed)]}
               >
                 <Ionicons
                   color={String(item.isFavorite ? theme.colors.accentPrimary : theme.colors.textMuted)}
