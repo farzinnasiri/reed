@@ -14,7 +14,7 @@ import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { CreateGoalSheet } from './profile/goals-surface';
-import { ProgressGradient, getProgressRatio } from './goals-home-card';
+import { ProgressRow, getProgressRatio, getProgressSlices } from './goals-home-card';
 
 type TrainingTarget = NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number];
 type StatusFilter = 'active' | 'completed' | 'missed';
@@ -101,7 +101,7 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
   const archive = useMutation(api.trainingTargets.archive);
   const recompute = useMutation(api.trainingTargets.recompute);
   const [isOpen, setIsOpen] = useState(false);
-  const ratio = getProgressRatio(target);
+  const progressSlices = getProgressSlices(target);
 
   function toggle() {
     runReedLayoutAnimation();
@@ -110,20 +110,26 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
 
   return (
     <GlassSurface style={[styles.card, styles.goalCard, target.status === 'archived' && styles.archivedGoalCard]}>
-      <View style={[styles.statusRail, { backgroundColor: getStatusColor(target.status, theme) }]} />
       <Pressable onPress={toggle} style={({ pressed }) => [styles.goalHeader, getTapScaleStyle(pressed)]}>
         <View style={styles.goalHeaderCopy}>
           <View style={styles.goalTitleRow}>
             <ReedText numberOfLines={1} variant="bodyStrong" style={styles.goalTitle}>{target.title}</ReedText>
+            <View style={[styles.statusPill, { borderColor: getStatusColor(target.status, theme) }]}>
+              <ReedText tone={target.status === 'missed' ? 'danger' : 'muted'} variant="caption">{statusLabel(target.status)}</ReedText>
+            </View>
           </View>
           <ReedText numberOfLines={2} tone="muted" variant="caption">{target.previewText}</ReedText>
         </View>
         <Ionicons color={String(theme.colors.textMuted)} name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} />
       </Pressable>
 
-      <ProgressGradient ratio={ratio} />
+      <View style={styles.goalProgressStack}>
+        {progressSlices.map(slice => (
+          <ProgressRow key={slice.label} slice={slice} />
+        ))}
+      </View>
       <View style={styles.metaRow}>
-        <ReedText variant="caption">{target.progressSummary.currentLabel}</ReedText>
+        <ReedText tone="muted" variant="caption">{target.rule.cadence === 'daily' ? 'Daily target' : target.rule.cadence === 'weekly' ? 'Weekly target' : 'Target'}</ReedText>
         <ReedText tone="muted" variant="caption">Due {formatDate(target.endsAt)}</ReedText>
       </View>
 
@@ -206,6 +212,11 @@ function getStatusColor(status: TrainingTarget['status'], theme: ReturnType<type
   return theme.colors.textMuted;
 }
 
+function statusLabel(status: TrainingTarget['status']) {
+  if (status === 'completed') return 'Achieved';
+  return status[0].toUpperCase() + status.slice(1);
+}
+
 const styles = StyleSheet.create({
   actionRow: { alignItems: 'center', alignSelf: 'flex-end', flexDirection: 'row', gap: 16, paddingTop: 2 },
   backRow: { alignItems: 'center', flexDirection: 'row', gap: 4 },
@@ -217,12 +228,13 @@ const styles = StyleSheet.create({
   goalHeader: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   goalHeaderCopy: { flex: 1, gap: 4, minWidth: 0 },
   goalCard: { overflow: 'hidden' },
+  goalProgressStack: { gap: 10 },
   goalTitle: { flex: 1 },
   goalTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   leadBlock: { gap: 3 },
   loadingRow: { alignItems: 'center', flexDirection: 'row', gap: 10, minHeight: 72 },
   metaRow: { flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
   root: { flex: 1 },
-  statusRail: { bottom: 18, borderRadius: reedRadii.pill, left: 0, position: 'absolute', top: 18, width: 4 },
+  statusPill: { borderRadius: reedRadii.pill, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
   iconAction: { alignItems: 'center', justifyContent: 'center', padding: 4 },
 });

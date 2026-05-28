@@ -176,6 +176,8 @@ export async function trainingGoalsContext(ctx: QueryCtx, args: {
       progress: {
         current: target.progressSummary.current,
         currentLabel: target.progressSummary.currentLabel,
+        currentPeriod: target.progressSummary.currentPeriod ?? null,
+        overall: target.progressSummary.overall ?? null,
         required: target.progressSummary.required,
         requiredLabel: target.progressSummary.requiredLabel,
         satisfiedPeriods: target.progressSummary.satisfiedPeriods ?? null,
@@ -216,8 +218,12 @@ function formatTrainingGoalsForContext(args: {
     notes: string | null;
     preview: string;
     progress: {
+      current: number;
       currentLabel: string;
+      currentPeriod: { current: number; label: string; required: number; valueLabel: string } | null;
       lastEvaluatedAt: number | null;
+      overall: { current: number; label: string; required: number; valueLabel: string } | null;
+      required: number;
       requiredLabel: string;
       satisfiedPeriods: number | null;
       totalPeriods: number | null;
@@ -246,13 +252,20 @@ function formatTrainingGoalsForContext(args: {
     const periodSentence = goal.progress.totalPeriods
       ? `Period progress is ${goal.progress.satisfiedPeriods ?? 0} of ${goal.progress.totalPeriods} required periods.`
       : null;
+    const currentPeriodSentence = goal.progress.currentPeriod
+      ? `Current ${goal.progress.currentPeriod.label.toLowerCase()}: ${goal.progress.currentPeriod.valueLabel}.`
+      : null;
+    const overallSentence = goal.progress.overall
+      ? `Overall: ${goal.progress.overall.valueLabel}.`
+      : `Progress: ${goal.progress.currentLabel} toward ${goal.progress.requiredLabel}.`;
     const exerciseSentence = goal.exercise ? `Exercise: ${goal.exercise.name}.` : null;
     const notesSentence = goal.notes ? `User note: ${goal.notes}` : null;
 
     return [
       `${index + 1}. ${goal.preview}`,
       statusSentence,
-      `Progress: ${goal.progress.currentLabel} toward ${goal.progress.requiredLabel}.`,
+      currentPeriodSentence,
+      overallSentence,
       periodSentence,
       exerciseSentence,
       notesSentence,

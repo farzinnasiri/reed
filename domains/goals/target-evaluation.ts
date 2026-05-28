@@ -40,10 +40,19 @@ export type TargetEvidenceLog = {
 export type TargetProgressSummary = {
   current: number;
   currentLabel: string;
+  currentPeriod?: TargetProgressSlice;
+  overall?: TargetProgressSlice;
   required: number;
   requiredLabel: string;
   satisfiedPeriods?: number;
   totalPeriods?: number;
+};
+
+export type TargetProgressSlice = {
+  current: number;
+  label: string;
+  required: number;
+  valueLabel: string;
 };
 
 export type TargetVerifiedSnapshot = {
@@ -59,7 +68,7 @@ export type TargetEvaluationResult = {
 };
 
 export function emptyTargetProgress(rule: TargetRule): TargetProgressSummary {
-  return progress(rule.threshold, 0, `0 ${rule.thresholdUnit}`, `${formatNumber(rule.threshold)} ${rule.thresholdUnit}`);
+  return progress(rule.threshold, 0, progressLabel(0, rule.threshold, rule.thresholdUnit, goalScopeLabel(rule.cadence)), `${formatNumber(rule.threshold)} ${rule.thresholdUnit}`, goalScopeLabel(rule.cadence));
 }
 
 export function isEligibleTargetEvidence(log: TargetEvidenceLog) {
@@ -81,7 +90,7 @@ export function evaluateTargetProgress(subject: TargetEvaluationSubject, evidenc
   const completed = current >= rule.threshold;
   return {
     completed,
-    progressSummary: progress(rule.threshold, current, unitLabel(rule.thresholdUnit, current), unitLabel(rule.thresholdUnit, rule.threshold)),
+    progressSummary: progress(rule.threshold, current, progressLabel(current, rule.threshold, rule.thresholdUnit, 'total'), unitLabel(rule.thresholdUnit, rule.threshold), 'total'),
     verifiedSnapshot: completed ? snapshot(now, logs, `${formatNumber(current)} / ${formatNumber(rule.threshold)} ${rule.thresholdUnit}`) : undefined,
   };
 }
@@ -108,7 +117,19 @@ function evaluatePeriodQuota(subject: TargetEvaluationSubject, logs: TargetEvide
     completed,
     progressSummary: {
       current: currentPeriodValue,
-      currentLabel: `${formatNumber(currentPeriodValue)} ${rule.thresholdUnit} this ${rule.cadence === 'daily' ? 'day' : 'week'}`,
+      currentLabel: progressLabel(currentPeriodValue, rule.threshold, rule.thresholdUnit, rule.cadence === 'daily' ? 'today' : 'this week'),
+      currentPeriod: {
+        current: currentPeriodValue,
+        label: rule.cadence === 'daily' ? 'Today' : 'This week',
+        required: rule.threshold,
+        valueLabel: progressLabel(currentPeriodValue, rule.threshold, rule.thresholdUnit, rule.cadence === 'daily' ? 'today' : 'this week'),
+      },
+      overall: {
+        current: satisfied,
+        label: 'Goal',
+        required: requiredPeriods,
+        valueLabel: `${formatNumber(satisfied)} / ${formatNumber(requiredPeriods)} ${rule.cadence === 'daily' ? 'days hit' : 'weeks hit'}`,
+      },
       required: rule.threshold,
       requiredLabel: `${formatNumber(rule.threshold)} ${rule.thresholdUnit}`,
       satisfiedPeriods: satisfied,
@@ -157,8 +178,19 @@ function buildPeriods(startsAt: number, endsAt: number, cadence: 'daily' | 'week
   }));
 }
 
-function progress(required: number, current: number, currentLabel: string, requiredLabel: string): TargetProgressSummary {
-  return { current, currentLabel, required, requiredLabel };
+function progress(required: number, current: number, currentLabel: string, requiredLabel: string, label: string): TargetProgressSummary {
+  return {
+    current,
+    currentLabel,
+    overall: {
+      current,
+      label,
+      required,
+      valueLabel: currentLabel,
+    },
+    required,
+    requiredLabel,
+  };
 }
 
 function snapshot(evaluatedAt: number, logs: TargetEvidenceLog[], summary: string): TargetVerifiedSnapshot {
@@ -171,4 +203,14 @@ function formatNumber(value: number) {
 
 function unitLabel(unit: string, value: number) {
   return `${formatNumber(value)} ${unit}`;
+}
+
+function progressLabel(current: number, required: number, unit: string, scope: string) {
+  return `${formatNumber(current)} / ${formatNumber(required)} ${unit} ${scope}`;
+}
+
+function goalScopeLabel(cadence: TargetRule['cadence']) {
+  if (cadence === 'daily') return 'today';
+  if (cadence === 'weekly') return 'this week';
+  return 'total';
 }

@@ -17,6 +17,12 @@ type GoalsHomeCardProps = {
 };
 
 type TrainingTarget = NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number];
+type GoalProgressSlice = {
+  current: number;
+  label: string;
+  required: number;
+  valueLabel: string;
+};
 
 export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
   const { theme } = useReedTheme();
@@ -126,14 +132,29 @@ function GoalSummary({ label, value }: { label: string; value: number }) {
 }
 
 function HomeGoalRow({ target }: { target: TrainingTarget }) {
-  const ratio = getProgressRatio(target);
+  const slices = getProgressSlices(target);
   return (
     <View style={styles.goalPreviewRow}>
       <View style={styles.goalPreviewCopy}>
         <ReedText numberOfLines={1} variant="bodyStrong">{target.title}</ReedText>
-        <ReedText numberOfLines={1} tone="muted" variant="caption">{target.progressSummary.currentLabel}</ReedText>
       </View>
-      <ProgressGradient ratio={ratio} />
+      <View style={styles.progressStack}>
+        {slices.map(slice => (
+          <ProgressRow compact key={slice.label} slice={slice} />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+export function ProgressRow({ compact = false, slice }: { compact?: boolean; slice: GoalProgressSlice }) {
+  return (
+    <View style={compact ? styles.progressRowCompact : styles.progressRow}>
+      <View style={styles.progressLabelRow}>
+        <ReedText tone="muted" variant="caption">{slice.label}</ReedText>
+        <ReedText numberOfLines={1} variant="caption">{slice.valueLabel}</ReedText>
+      </View>
+      <ProgressGradient ratio={slice.required > 0 ? slice.current / slice.required : 0} />
     </View>
   );
 }
@@ -190,11 +211,39 @@ function hexToRgb(hex: string) {
 }
 
 export function getProgressRatio(target: TrainingTarget) {
+  const overall = getProgressSlices(target).at(-1);
+  return overall && overall.required > 0 ? overall.current / overall.required : 0;
+}
+
+export function getProgressSlices(target: TrainingTarget): GoalProgressSlice[] {
   const progress = target.progressSummary;
-  if (progress.totalPeriods && progress.totalPeriods > 0) {
-    return (progress.satisfiedPeriods ?? 0) / progress.totalPeriods;
+  const periodUnit = target.rule.cadence === 'daily' ? 'days hit' : target.rule.cadence === 'weekly' ? 'weeks hit' : 'periods complete';
+  const overall = progress.overall ?? {
+    current: progress.totalPeriods ? progress.satisfiedPeriods ?? 0 : progress.current,
+    label: progress.totalPeriods ? 'Goal' : 'Total',
+    required: progress.totalPeriods ?? progress.required,
+    valueLabel: progress.totalPeriods
+      ? `${progress.satisfiedPeriods ?? 0} / ${progress.totalPeriods} ${periodUnit}`
+      : progress.currentLabel,
+  };
+
+  if (progress.currentPeriod) {
+    return [progress.currentPeriod, overall];
   }
-  return progress.required > 0 ? progress.current / progress.required : 0;
+
+  if (progress.totalPeriods) {
+    return [
+      {
+        current: progress.current,
+        label: target.rule.cadence === 'daily' ? 'Today' : 'This week',
+        required: progress.required,
+        valueLabel: `${progress.current} / ${progress.required} ${target.rule.thresholdUnit} ${target.rule.cadence === 'daily' ? 'today' : 'this week'}`,
+      },
+      overall,
+    ];
+  }
+
+  return [overall];
 }
 
 function summarizeTargets(targets: TrainingTarget[]) {
@@ -224,6 +273,10 @@ const styles = StyleSheet.create({
   openFullList: { alignItems: 'center', alignSelf: 'flex-start', flexDirection: 'row', gap: 5, paddingVertical: 4 },
   previewStack: { gap: 12 },
   progressFill: { borderRadius: reedRadii.pill, height: '100%' },
+  progressLabelRow: { alignItems: 'center', flexDirection: 'row', gap: 12, justifyContent: 'space-between' },
+  progressRow: { gap: 6 },
+  progressRowCompact: { gap: 4 },
+  progressStack: { gap: 8 },
   progressTrack: { borderRadius: reedRadii.pill, height: 8, overflow: 'hidden' },
   summaryItem: { alignItems: 'center', flex: 1, gap: 2 },
   summaryStrip: { flexDirection: 'row', paddingVertical: 4 },

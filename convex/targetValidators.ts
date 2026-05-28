@@ -43,6 +43,18 @@ export const targetRuleValidator = v.object({
 export const targetProgressSummaryValidator = v.object({
   current: v.number(),
   currentLabel: v.string(),
+  currentPeriod: v.optional(v.object({
+    current: v.number(),
+    label: v.string(),
+    required: v.number(),
+    valueLabel: v.string(),
+  })),
+  overall: v.optional(v.object({
+    current: v.number(),
+    label: v.string(),
+    required: v.number(),
+    valueLabel: v.string(),
+  })),
   required: v.number(),
   requiredLabel: v.string(),
   satisfiedPeriods: v.optional(v.number()),
