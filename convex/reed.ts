@@ -33,6 +33,24 @@ Preserve: user goals and constraints, coaching decisions, open questions, cautio
 Discard: greetings, filler, exact phrasing, transient small talk, and implementation details.
 Do not invent facts. If information is uncertain, mark it as uncertain.
 Keep the summary compact and useful for future coaching continuity. Maximum 220 words.`;
+const CONTEXT_PRIMER_NONCE_SUFFIX = ':context-primer';
+const CONTEXT_PRIMER_MESSAGES = [
+  'Let me take a look at your recent training first.',
+  'I’ll check your workouts before I answer that.',
+  'Let me pull your training context into this.',
+  'I’m going to look at the recent sessions for signal.',
+  'Give me a moment to check the training log.',
+  'I’ll scan the recent work and then make this specific.',
+  'Let me check what you’ve actually logged.',
+  'I’m looking at your workout history now.',
+  'Let me ground this in your recent sessions.',
+  'I’ll review the training data before calling it.',
+  'Let me look at the work you’ve put in first.',
+  'I’m checking the recent pattern, not guessing.',
+  'Let me read the log and separate signal from noise.',
+  'I’ll pull the relevant workout context now.',
+  'Let me check your recent training before I coach this.',
+] as const;
 
 const composerSourceValidator = v.union(v.literal('quick-action'), v.literal('typed'), v.literal('voice'));
 const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly'));
@@ -410,6 +428,20 @@ export const sendMessage = mutation({
       completedAt: now,
       clientNonce: args.clientNonce,
     });
+    if (route === 'training_tools') {
+      await ctx.db.insert('reedMessages', {
+        threadId: thread._id,
+        profileId: profile._id,
+        role: 'assistant',
+        content: pickContextPrimerMessage(args.clientNonce ?? `${now}:${content}`),
+        source: 'system',
+        status: 'sent',
+        createdAt: now + 1,
+        completedAt: now + 1,
+        clientNonce: args.clientNonce ? getContextPrimerNonce(args.clientNonce) : undefined,
+      });
+    }
+
     const assistantMessageId = await ctx.db.insert('reedMessages', {
       threadId: thread._id,
       profileId: profile._id,
@@ -417,7 +449,7 @@ export const sendMessage = mutation({
       content: '',
       source: 'system',
       status: 'pending',
-      createdAt: now + 1,
+      createdAt: route === 'training_tools' ? now + 2 : now + 1,
     });
     await ctx.db.patch(thread._id, { updatedAt: now, lastMessageAt: now });
 
@@ -728,6 +760,18 @@ function routeForMessage(content: string): ReedRoute {
     return 'training_tools';
   }
   return 'coach_direct';
+}
+
+function getContextPrimerNonce(clientNonce: string) {
+  return `${clientNonce}${CONTEXT_PRIMER_NONCE_SUFFIX}`;
+}
+
+function pickContextPrimerMessage(seed: string) {
+  let hash = 0;
+  for (let index = 0; index < seed.length; index += 1) {
+    hash = Math.imul(31, hash) + seed.charCodeAt(index) | 0;
+  }
+  return CONTEXT_PRIMER_MESSAGES[(hash >>> 0) % CONTEXT_PRIMER_MESSAGES.length] ?? CONTEXT_PRIMER_MESSAGES[0];
 }
 
 function simpleHash(value: string) {

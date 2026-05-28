@@ -229,3 +229,16 @@ Near-term note:
 3. Rework the signed-in IA so it matches the actual product center of gravity.
 4. Validate the active-card voice logging MVP scope and correction model.
 5. Define the PR rulebook and shadow-autofill logic for session logging.
+
+---
+
+legendary quotes from reed -> use mordern wisdome qoutes and online qoutes -> weave them into reed personlity (motivational)
+
+imrpove reeds personality -> to be your pall, friendu, buddy etc (maybe inspiration from open claw?)
+
+gamification based on completing / finishing closed loops (e.g. )
+coins or achievements for goal finishes? -> a momentum score? 
+an animaiton or something for when a goal is completed
+
+
+coach notes should have lables -> feedback, notes, goal ?

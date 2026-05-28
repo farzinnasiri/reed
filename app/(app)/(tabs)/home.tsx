@@ -6,7 +6,7 @@ import { appModeRoutes } from '@/components/home/app-routes';
 import { getFirstName, pickHomeGreeting } from '@/components/home/home-greetings';
 
 export default function HomeRoute() {
-  const { displayName, hasActiveWorkoutSession } = useAppShell();
+  const { displayName, dockReservedSpace, hasActiveWorkoutSession } = useAppShell();
   const [currentDayKey, setCurrentDayKey] = useState(() => new Date().toDateString());
   const homeHeadline = useMemo(
     () => pickHomeGreeting(getFirstName(displayName)),
@@ -25,6 +25,7 @@ export default function HomeRoute() {
     <HomeSurface
       hasActiveSession={hasActiveWorkoutSession}
       homeHeadline={homeHeadline}
+      dockReservedSpace={dockReservedSpace}
       onOpenGoals={() => router.push('/(app)/goals')}
       onOpenWorkout={() => router.replace(appModeRoutes.workout)}
     />

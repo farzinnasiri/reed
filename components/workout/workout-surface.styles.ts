@@ -1,5 +1,6 @@
 import { StyleSheet } from 'react-native';
 import { reedRadii } from '@/design/system';
+import { SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 
 export const styles = StyleSheet.create({
   root: {
@@ -158,7 +159,7 @@ export const styles = StyleSheet.create({
     flex: 1,
     gap: 16,
     paddingBottom: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
     paddingTop: 2,
   },
   navButton: {
@@ -296,7 +297,7 @@ export const styles = StyleSheet.create({
     borderRadius: reedRadii.sm,
   },
   timelineSetFlash: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     borderRadius: reedRadii.sm,
   },
   timelineSetRowContainer: {
@@ -767,18 +768,18 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   timelineFinishModalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   timelineFinishModalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   timelineFinishModalBackdropBlur: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   timelineFinishModalBackdropTint: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   timelineFinishModalCard: {
     borderRadius: reedRadii.xl,
@@ -930,7 +931,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   filterSheetOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     justifyContent: 'flex-end',
   },
   filterSheetPanelFrame: {

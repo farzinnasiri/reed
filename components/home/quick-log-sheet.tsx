@@ -536,7 +536,7 @@ const styles = StyleSheet.create({
     elevation: 1000,
   },
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sheetFrame: {
     height: '78%',

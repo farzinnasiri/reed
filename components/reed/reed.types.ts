@@ -27,6 +27,7 @@ export type CoachItem = {
 export type ReedMessage = {
   createdAt: number;
   id: string;
+  isContextPrimer?: boolean;
   role: 'assistant' | 'user';
   source: ComposerSource;
   status: MessageStatus;

@@ -122,9 +122,10 @@ function MessageRow({
   const { theme } = useReedTheme();
   const isAssistant = message.role === 'assistant';
   const isPendingAssistant = isAssistant && message.status === 'pending';
-  const showActionBar = isAssistant && message.status === 'sent' && (message.text?.trim().length ?? 0) > 0;
+  const showActionBar = isAssistant && !message.isContextPrimer && message.status === 'sent' && (message.text?.trim().length ?? 0) > 0;
   const messageText = message.text ?? '';
   const bubbleCornerStyle = isAssistant ? styles.messageBubbleLeft : styles.messageBubbleRight;
+  const messageTextColor = String(isAssistant ? theme.colors.textPrimary : theme.colors.accentPrimaryText);
   const [copiedFeedbackMessageId, setCopiedFeedbackMessageId] = useState<string | null>(null);
   const isCopiedFeedbackVisible = copiedFeedbackMessageId === message.id;
 
@@ -164,7 +165,7 @@ function MessageRow({
           ]}
         >
           <ReedText
-            style={{ color: isAssistant ? undefined : theme.colors.accentPrimaryText }}
+            style={{ color: messageTextColor }}
             variant="body"
           >
             {messageText}

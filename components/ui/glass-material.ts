@@ -4,6 +4,8 @@ import type { ReedTheme } from '@/design/system';
 export type GlassTone = 'default' | 'danger';
 export const TAB_DOCK_BASE_BOTTOM_OFFSET = 20;
 export const TAB_DOCK_HORIZONTAL_MARGIN = 20;
+// Dock-level screens use the same outer gutter so glass cards line up with the floating tab pill.
+export const SCREEN_CONTENT_HORIZONTAL_MARGIN = TAB_DOCK_HORIZONTAL_MARGIN;
 export const TAB_PILL_MIN_HEIGHT = 64;
 
 type GlassPaneTokens = {
@@ -75,6 +77,21 @@ export function getGlassControlTokens(theme: ReedTheme): GlassControlTokens {
   };
 }
 
+export function getGlassTabPillTokens(theme: ReedTheme): GlassPaneTokens {
+  const pane = getGlassPaneTokens(theme);
+
+  if (theme.mode === 'dark') {
+    return pane;
+  }
+
+  return {
+    ...pane,
+    backgroundColor: String(theme.colors.pillFill),
+    borderColor: String(theme.colors.controlBorder),
+    fallbackBackgroundColor: String(theme.colors.pillFill),
+  };
+}
+
 export function getGlassScrimTokens(theme: ReedTheme): GlassScrimTokens {
   return {
     backgroundColor: String(theme.colors.overlayScrim),
@@ -95,7 +112,7 @@ export function getBackdropDiffusionTokens(theme: ReedTheme): BackdropDiffusionT
   return {
     cool: ['rgba(142, 211, 255, 0.58)', 'rgba(128, 196, 250, 0.32)', 'rgba(176, 208, 238, 0.02)'],
     coolOpacity: 0.9,
-    neutral: ['rgba(236, 245, 255, 0.28)', 'rgba(224, 238, 252, 0.14)', 'rgba(255, 255, 255, 0)'],
+    neutral: ['rgba(245, 246, 248, 0.34)', 'rgba(240, 241, 244, 0.18)', 'rgba(255, 255, 255, 0)'],
     warm: ['rgba(255, 176, 205, 0.54)', 'rgba(246, 182, 213, 0.3)', 'rgba(236, 204, 228, 0.1)'],
   };
 }

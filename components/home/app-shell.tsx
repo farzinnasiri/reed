@@ -163,11 +163,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   shellContentLayer: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   shellScreenCanvas: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: 'hidden',
   },
   bottomDockFloating: {

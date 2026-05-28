@@ -13,7 +13,7 @@ import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -310,7 +310,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
         styles.content,
         {
           paddingBottom: 132,
-          paddingHorizontal: theme.spacing.md,
+          paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
           paddingTop: theme.spacing.xl,
         },
       ]}
@@ -2395,7 +2395,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   sheetOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   sectionStack: {
     gap: 8,

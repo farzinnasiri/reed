@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { authClient } from '@/lib/auth-client';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
@@ -187,7 +187,7 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
       contentContainerStyle={[
         styles.content,
         {
-          paddingHorizontal: theme.spacing.lg,
+          paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
           paddingTop: theme.spacing.xl,
           paddingBottom: 132,
         },

@@ -66,10 +66,10 @@ export function buildCurrentLiveSessionState(args: {
     };
   });
 
-  const activeSessionExercise =
-    (requestedActiveSessionExerciseId
-      ? sessionExercises.find(entry => entry._id === requestedActiveSessionExerciseId) ?? null
-      : null) ?? sessionExercises[0] ?? null;
+  const requestedSessionExercise = requestedActiveSessionExerciseId
+    ? sessionExercises.find(entry => entry._id === requestedActiveSessionExerciseId) ?? null
+    : null;
+  const activeSessionExercise = requestedSessionExercise ?? sessionExercises[0] ?? null;
 
   if (!activeSessionExercise) {
     return {

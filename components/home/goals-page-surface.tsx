@@ -8,6 +8,8 @@ import { ReedText } from '@/components/ui/reed-text';
 import { ReedButton } from '@/components/ui/reed-button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { ScreenHeader } from '@/components/ui/screen-header';
+import { blurActiveElementOnWeb } from '@/components/ui/focus';
+import { SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
@@ -26,14 +28,29 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
   const [isCreating, setIsCreating] = useState(false);
   const visibleTargets = useMemo(() => sortTargets((targets ?? []).filter(target => target.status === statusFilter), sortOrder), [sortOrder, statusFilter, targets]);
 
+  function openCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(true);
+  }
+
+  function closeCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(false);
+  }
+
+  function goBack() {
+    blurActiveElementOnWeb();
+    onBack();
+  }
+
   return (
     <ScrollView
-      contentContainerStyle={[styles.content, { paddingBottom: 132, paddingHorizontal: theme.spacing.md, paddingTop: theme.spacing.xl }]}
+      contentContainerStyle={[styles.content, { paddingBottom: 132, paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN, paddingTop: theme.spacing.xl }]}
       showsVerticalScrollIndicator={false}
       style={[styles.root, { backgroundColor: theme.colors.canvas }]}
     >
-      <ScreenHeader variant="identity" action={{ accessibilityLabel: 'Create goal', iconName: 'add', onPress: () => setIsCreating(true) }}>
-        <Pressable onPress={onBack} style={({ pressed }) => [styles.backRow, getTapScaleStyle(pressed)]}>
+      <ScreenHeader variant="identity" action={{ accessibilityLabel: 'Create goal', iconName: 'add', onPress: openCreateGoal }}>
+        <Pressable onPress={goBack} style={({ pressed }) => [styles.backRow, getTapScaleStyle(pressed)]}>
           <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={20} />
           <ReedText variant="title">Goals</ReedText>
         </Pressable>
@@ -68,12 +85,12 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
       {targets === undefined ? (
         <View style={styles.loadingRow}><ActivityIndicator color={String(theme.colors.accentPrimary)} /><ReedText tone="muted">Loading goals.</ReedText></View>
       ) : visibleTargets.length === 0 ? (
-        <GlassSurface style={styles.card}><ReedText variant="bodyStrong">No goals here.</ReedText><ReedText tone="muted" variant="caption">Try another filter or create a new measurable goal.</ReedText><ReedButton label="New goal" onPress={() => setIsCreating(true)} /></GlassSurface>
+        <GlassSurface style={styles.card}><ReedText variant="bodyStrong">No goals here.</ReedText><ReedText tone="muted" variant="caption">Try another filter or create a new measurable goal.</ReedText><ReedButton label="New goal" onPress={openCreateGoal} /></GlassSurface>
       ) : (
         visibleTargets.map(target => <GoalDetailCard key={target._id} target={target} />)
       )}
 
-      <CreateGoalSheet visible={isCreating} onClose={() => setIsCreating(false)} />
+      <CreateGoalSheet visible={isCreating} onClose={closeCreateGoal} />
     </ScrollView>
   );
 }

@@ -2,14 +2,14 @@
 name: Reed
 description: A minimalist fitness OS. Adaptive instrument panel, not a tab container. Less is more, always elegant, every element intentional.
 colors:
-  primary: "#0f172a"
-  canvas: "#f7f7f4"
+  primary: "#171717"
+  canvas: "#ffffff"
   canvas-secondary: "#ffffff"
   canvas-dark: "#040404"
   canvas-secondary-dark: "#0a0a0a"
-  text-primary: "#0f172a"
-  text-secondary: "#334155"
-  text-muted: "#64748b"
+  text-primary: "#171717"
+  text-secondary: "#404040"
+  text-muted: "#6f6f6f"
   text-primary-dark: "#f8fafc"
   text-secondary-dark: "#d4d4d8"
   text-muted-dark: "#a1a1aa"
@@ -141,11 +141,11 @@ Reed is a fitness OS, not a fitness app. The core design provocation: the UI is 
 The palette is a **dual-mode system** (light + dark). Both modes share the same named tokens suffixed with `-dark` for dark variants. Never use raw colour values in components — always reference a theme token from `design/system.ts`.
 
 ### Light Mode
-- **Canvas (#f7f7f4):** Warm off-white base surface. Slightly warmer than pure white to reduce harshness.
-- **Canvas Secondary (#ffffff):** Pure white for elevated surfaces only.
-- **Text Primary (#0f172a):** Deep ink. Used for all main text and headings.
-- **Text Secondary (#334155):** Subordinate copy, metadata.
-- **Text Muted (#64748b):** Placeholders, disabled labels, de-emphasised metadata.
+- **Canvas (#ffffff):** Clean white base surface.
+- **Canvas Secondary (#ffffff):** White for elevated surfaces only.
+- **Text Primary (#171717):** Neutral deep ink. Used for all main text and headings.
+- **Text Secondary (#404040):** Subordinate copy, metadata.
+- **Text Muted (#6f6f6f):** Placeholders, disabled labels, de-emphasised metadata. This must stay neutral gray, not slate-blue or brown.
 - **Accent Primary (#2455e6):** The only vivid interaction colour. Primary actions, focus states, active tabs.
 - **Accent Secondary (#f43f5e):** Rose-red for secondary signals, PR badges, accent highlights.
 - **Danger (#b91c1c):** Destructive actions and error states.
@@ -170,13 +170,13 @@ These values live in `components/ui/glass-material.ts` and must never be hardcod
 | `glass-fill` | `rgba(255,255,255, 0.62)` | `rgba(24,24,27, 0.68)` |
 | `glass-highlight` | `rgba(255,255,255, 0.7)` | `rgba(255,255,255, 0.05)` |
 | `glass-fallback` | `rgba(255,255,255, 0.76)` | `rgba(24,24,27, 0.9)` |
-| `control-fill` | `rgba(241,245,249, 0.94)` | `rgba(24,24,27, 0.82)` |
-| `control-border` | `rgba(148,163,184, 0.3)` | `rgba(255,255,255, 0.09)` |
-| `control-active-fill` | `rgba(255,255,255, 0.98)` | `#27272a` |
-| `input-fill` | `rgba(248,250,252, 0.9)` | `rgba(11,14,20, 0.72)` |
-| `input-border` | `rgba(148,163,184, 0.4)` | `rgba(255,255,255, 0.12)` |
-| `border-soft` | `rgba(148,163,184, 0.22)` | `rgba(255,255,255, 0.09)` |
-| `border-strong` | `rgba(100,116,139, 0.22)` | `rgba(255,255,255, 0.16)` |
+| `control-fill` | `#f0f1f4` | `rgba(24,24,27, 0.82)` |
+| `control-border` | `#dfe2e8` | `rgba(255,255,255, 0.09)` |
+| `control-active-fill` | `#ffffff` | `#27272a` |
+| `input-fill` | `#f5f6f8` | `rgba(11,14,20, 0.72)` |
+| `input-border` | `#d8dbe2` | `rgba(255,255,255, 0.12)` |
+| `border-soft` | `#e1e3e8` | `rgba(255,255,255, 0.09)` |
+| `border-strong` | `#d2d5dc` | `rgba(255,255,255, 0.16)` |
 | `success-fill` | `rgba(34,197,94, 0.2)` | `rgba(22,163,74, 0.28)` |
 | `danger-fill` | `rgba(254,226,226, 0.84)` | `rgba(69,10,10, 0.68)` |
 | `danger-border` | `rgba(248,113,113, 0.24)` | `rgba(248,113,113, 0.18)` |
@@ -207,6 +207,7 @@ The spacing scale: `4 → 8 → 12 → 16 → 20 → 28 → 36 → 48px`. Nearly
 - Most common: `md (16px)` for internal padding, `lg (20px)` for structural gaps.
 - Minimum tap target: `44px` height. Standard interactive row: `54px`.
 - Tab bar / floating controls dock `20px` above safe-area bottom with `20px` horizontal margin.
+- Dock-level screen gutters use `SCREEN_CONTENT_HORIZONTAL_MARGIN` from `components/ui/glass-material.ts`. It intentionally equals `TAB_DOCK_HORIZONTAL_MARGIN` so full-width cards line up with the floating tab pill and can pass behind it smoothly. Do not use `theme.spacing.md`, `theme.spacing.lg`, or literal `16/20` values for signed-in screen outer padding.
 
 **Key principles:**
 - Do not wrap every control or row in a card. Containers are earned — add them only when they carry clear UX meaning.
@@ -271,7 +272,7 @@ Typed `Text` wrapper with `variant` and `tone` props. Never use raw `Text` + inl
 Shell: `rounded.lg`, `padding: 4px`. Animated thumb slides via `Animated.timing` at `standard (180ms)`. Active label: `text-primary`. Inactive: `text-muted`. Heights: compact `40px`, default `44px`, stacked (icon+label) `58px`.
 
 ### Tab Bar Pill
-Floats `20px` above safe-area, `20px` horizontal margin. Min height: `64px`. All glass tokens come from `glass-material.ts`.
+Floats `20px` above safe-area with `TAB_DOCK_HORIZONTAL_MARGIN`. Dock-level screen cards use `SCREEN_CONTENT_HORIZONTAL_MARGIN`, which aliases that same value. Min height: `64px`. Use `getGlassTabPillTokens` rather than generic pane glass, because light-mode navigation needs a stronger material floor over white cards. All glass and dock-alignment tokens come from `glass-material.ts`.
 
 ## Motion
 

@@ -529,7 +529,7 @@ const styles = StyleSheet.create({
     minHeight: 30,
   },
   successMark: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -550,7 +550,7 @@ const styles = StyleSheet.create({
     width: FIRST_EXPERIENCE_REED_MARK_SIZE,
   },
   successGlyph: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: 'center',
     justifyContent: 'center',
   },

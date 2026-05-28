@@ -8,6 +8,7 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
+import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
@@ -97,7 +98,7 @@ function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onC
         <StatusPill status={target.status} />
       </View>
       <ReedText tone="muted" variant="caption">{target.previewText}</ReedText>
-      <View style={styles.progressTrack}><View style={[styles.progressFill, { backgroundColor: theme.colors.accentPrimary, width: `${percent * 100}%` }]} /></View>
+      <View style={[styles.progressTrack, { backgroundColor: theme.colors.borderSoft }]}><View style={[styles.progressFill, { backgroundColor: theme.colors.accentPrimary, width: `${percent * 100}%` }]} /></View>
       <View style={styles.goalMetaRow}>
         <ReedText variant="caption">{progress.currentLabel}</ReedText>
         <ReedText tone="muted" variant="caption">Due {formatDate(target.endsAt)}</ReedText>
@@ -165,11 +166,32 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
       },
       title: preview,
     });
+    closeSheet();
+  }
+
+  function closeSheet() {
+    blurActiveElementOnWeb();
     onClose();
   }
 
+  function openExercisePicker() {
+    blurActiveElementOnWeb();
+    setIsExercisePickerOpen(true);
+  }
+
+  function closeExercisePicker() {
+    blurActiveElementOnWeb();
+    setIsExercisePickerOpen(false);
+  }
+
+  function selectExercise(id: Id<'exerciseCatalog'>) {
+    blurActiveElementOnWeb();
+    setExerciseId(id);
+    setIsExercisePickerOpen(false);
+  }
+
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={closeSheet}>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.modalBackdrop}
@@ -180,7 +202,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
           </View>
           <View style={styles.sheetHeader}>
             <View><ReedText variant="title">New goal</ReedText><ReedText tone="muted" variant="caption">Structured, measurable, time-bound.</ReedText></View>
-            <Pressable accessibilityLabel="Close goal creator" onPress={onClose}><Ionicons color={String(theme.colors.textPrimary)} name="close" size={24} /></Pressable>
+            <Pressable accessibilityLabel="Close goal creator" onPress={closeSheet}><Ionicons color={String(theme.colors.textPrimary)} name="close" size={24} /></Pressable>
           </View>
           <ScrollView
             automaticallyAdjustKeyboardInsets
@@ -196,7 +218,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
               <>
                 <ReedText variant="bodyStrong">Exercise</ReedText>
                 <Pressable
-                  onPress={() => setIsExercisePickerOpen(true)}
+                  onPress={openExercisePicker}
                   style={({ pressed }) => [
                     styles.exercisePickerButton,
                     { backgroundColor: controls.shellBackgroundColor, borderColor: controls.shellBorderColor },
@@ -235,12 +257,9 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
           </View>
           <ExercisePickerModal
             exercises={exercises}
-            onClose={() => setIsExercisePickerOpen(false)}
+            onClose={closeExercisePicker}
             onSearchChange={setExerciseSearchText}
-            onSelect={id => {
-              setExerciseId(id);
-              setIsExercisePickerOpen(false);
-            }}
+            onSelect={selectExercise}
             searchText={exerciseSearchText}
             selectedExerciseId={exerciseId}
             visible={isExercisePickerOpen}
@@ -370,16 +389,16 @@ const styles = StyleSheet.create({
   goalTopLine: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   headerRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
   loadingRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  modalBackdrop: { backgroundColor: 'rgba(15, 23, 42, 0.28)', flex: 1, justifyContent: 'flex-end', padding: 12 },
+  modalBackdrop: { backgroundColor: 'rgba(23, 21, 18, 0.28)', flex: 1, justifyContent: 'flex-end', padding: 12 },
   optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   notesInput: { minHeight: 104, paddingTop: 14 },
-  pickerBackdrop: { backgroundColor: 'rgba(15, 23, 42, 0.38)', flex: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 48 },
+  pickerBackdrop: { backgroundColor: 'rgba(23, 21, 18, 0.38)', flex: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 48 },
   pickerContent: { gap: 14, padding: 18 },
   pickerResults: { maxHeight: 420 },
   pickerSheet: { alignSelf: 'stretch', borderRadius: 26, maxHeight: '78%' },
   preview: { borderRadius: 18, borderWidth: 1, gap: 4, padding: 14 },
   progressFill: { borderRadius: 999, height: '100%' },
-  progressTrack: { backgroundColor: 'rgba(100, 116, 139, 0.18)', borderRadius: 999, height: 6, overflow: 'hidden' },
+  progressTrack: { borderRadius: 999, height: 6, overflow: 'hidden' },
   sheet: { alignSelf: 'stretch', borderRadius: 28, height: '88%' },
   sheetContent: { flex: 1, gap: 14, minHeight: 0, paddingBottom: 16, paddingHorizontal: 20, paddingTop: 8 },
   sheetFooter: { borderTopWidth: 1, paddingTop: 14 },

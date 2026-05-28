@@ -6,7 +6,7 @@ import {
   TAB_PILL_MIN_HEIGHT,
   canUseGlassBlur,
   getGlassControlTokens,
-  getGlassPaneTokens,
+  getGlassTabPillTokens,
 } from '@/components/ui/glass-material';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
@@ -30,7 +30,7 @@ const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillProps<T>) {
   const { reducedTransparency, theme } = useReedTheme();
-  const pane = getGlassPaneTokens(theme);
+  const pane = getGlassTabPillTokens(theme);
   const control = getGlassControlTokens(theme);
   const canUseBlur = canUseGlassBlur() && !reducedTransparency;
   const [shellWidth, setShellWidth] = useState(0);

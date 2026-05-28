@@ -10,7 +10,7 @@ import {
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
@@ -24,6 +24,7 @@ import { GoalsHomeCard } from './goals-home-card';
 import { QuickLogSheet } from './quick-log-sheet';
 
 type HomeSurfaceProps = {
+  dockReservedSpace: number;
   hasActiveSession: boolean;
   homeHeadline: string;
   onOpenGoals: () => void;
@@ -44,13 +45,15 @@ type WeeklyBreakdownStats = {
 };
 
 export function HomeSurface({
+  dockReservedSpace,
   hasActiveSession,
   homeHeadline,
   onOpenGoals,
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
-  const { isCompact } = useBreakpoint();
+  const { isCompact, width } = useBreakpoint();
+  const useCompactHeadline = isCompact || width < 430;
   const startSession = useMutation(api.liveSessions.start);
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
   const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
@@ -153,8 +156,8 @@ export function HomeSurface({
       contentContainerStyle={[
         styles.content,
         {
-          paddingBottom: theme.spacing.xxxl + theme.spacing.sm,
-          paddingHorizontal: theme.spacing.lg,
+          paddingBottom: dockReservedSpace + theme.spacing.xl,
+          paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
           paddingTop: theme.spacing.xl,
         },
       ]}
@@ -162,7 +165,7 @@ export function HomeSurface({
       style={styles.root}
     >
       <View style={styles.header}>
-        <ReedText style={styles.headerHeadline} variant="title">
+        <ReedText style={[styles.headerHeadline, useCompactHeadline && styles.headerHeadlineCompact]} variant="title">
           {homeHeadline}
         </ReedText>
       </View>
@@ -262,21 +265,17 @@ export function HomeSurface({
                 </View>
               ) : (
                 <View style={styles.breakdownSection}>
-                  <View style={styles.breakdownControlsRow}>
-                    <View style={styles.breakdownControlFrame}>
-                      <SegmentedControl<WeeklyBreakdownMetric>
-                        compact
-                        onChange={setMetricMode}
-                        options={[
-                          { label: 'Sets', value: 'sets' },
-                          { label: 'Reps', value: 'reps' },
-                          { label: 'Load', value: 'volume' },
-                        ]}
-                        value={metricMode}
-                        variant="ghost"
-                      />
-                    </View>
-                  </View>
+                  <SegmentedControl<WeeklyBreakdownMetric>
+                    compact
+                    onChange={setMetricMode}
+                    options={[
+                      { label: 'Sets', value: 'sets' },
+                      { label: 'Reps', value: 'reps' },
+                      { label: 'Load', value: 'volume' },
+                    ]}
+                    value={metricMode}
+                    variant="pill"
+                  />
 
                   <View style={[styles.breakdownOverview, isCompact && styles.breakdownOverviewCompact]}>
                     <WeeklyDonutChart
@@ -682,7 +681,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerHeadline: {
-    lineHeight: 31,
+    fontSize: 23,
+    lineHeight: 29,
+  },
+  headerHeadlineCompact: {
+    fontSize: 21,
+    lineHeight: 27,
   },
   card: {
     borderRadius: reedRadii.xl,
@@ -764,14 +768,6 @@ const styles = StyleSheet.create({
   breakdownSection: {
     gap: 24,
     paddingTop: 14,
-  },
-  breakdownControlsRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-  },
-  breakdownControlFrame: {
-    flex: 1,
   },
   breakdownShapeSection: {
     gap: 10,

@@ -7,7 +7,7 @@ const selectedEnvFile = process.env.REED_ENV_FILE ?? '.env.local';
 const resolvedEnvFile = resolve(selectedEnvFile);
 
 if (existsSync(resolvedEnvFile)) {
-  loadEnv({ path: resolvedEnvFile, override: true });
+  loadEnv({ path: resolvedEnvFile, override: true, quiet: true });
 }
 
 const appName = 'reed';
@@ -24,12 +24,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   icon: './assets/images/icon.png',
   scheme,
   userInterfaceStyle: 'automatic',
-  newArchEnabled: true,
-  splash: {
-    image: './assets/images/logo-mark-dark.png',
-    resizeMode: 'contain',
-    backgroundColor: '#f7f7f4',
-  },
   ios: {
     supportsTablet: true,
     bundleIdentifier: androidPackage,
@@ -40,7 +34,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#000000',
     },
-    edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
   },
   web: {
@@ -50,6 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
+    'expo-font',
     [
       'expo-splash-screen',
       {
@@ -64,6 +58,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       },
     ],
     'expo-asset',
+    'expo-secure-store',
+    'expo-status-bar',
     'expo-web-browser',
     [
       'expo-audio',

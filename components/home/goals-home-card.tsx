@@ -6,6 +6,7 @@ import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
+import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
@@ -29,12 +30,27 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
     setIsExpanded(current => !current);
   }
 
+  function openCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(true);
+  }
+
+  function closeCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(false);
+  }
+
+  function openGoals() {
+    blurActiveElementOnWeb();
+    onOpenGoals();
+  }
+
   return (
     <GlassSurface style={styles.card}>
       <View style={styles.headerRow}>
         <Pressable
           accessibilityLabel="Open goals"
-          onPress={onOpenGoals}
+          onPress={openGoals}
           style={({ pressed }) => [styles.headerPressable, getTapScaleStyle(pressed)]}
         >
           <View style={styles.headerCopy}>
@@ -45,7 +61,7 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
         <View style={styles.headerActions}>
           <Pressable
             accessibilityLabel="Add goal"
-            onPress={() => setIsCreating(true)}
+            onPress={openCreateGoal}
             style={({ pressed }) => [styles.iconButton, getTapScaleStyle(pressed)]}
           >
             <Ionicons color={String(theme.colors.accentPrimary)} name="add" size={20} />
@@ -74,7 +90,7 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
           </View>
 
           {summary.activeTargets.length === 0 ? (
-            <Pressable onPress={() => setIsCreating(true)} style={({ pressed }) => [styles.emptyState, { borderColor: theme.colors.controlBorder }, getTapScaleStyle(pressed)]}>
+            <Pressable onPress={openCreateGoal} style={({ pressed }) => [styles.emptyState, { borderColor: theme.colors.controlBorder }, getTapScaleStyle(pressed)]}>
               <ReedText variant="bodyStrong">Set one concrete target</ReedText>
               <ReedText tone="muted" variant="caption">A deadline, a metric, and Reed tracks the rest.</ReedText>
             </Pressable>
@@ -87,7 +103,7 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
           )}
 
           {isExpanded ? (
-            <Pressable onPress={onOpenGoals} style={({ pressed }) => [styles.openFullList, getTapScaleStyle(pressed)]}>
+            <Pressable onPress={openGoals} style={({ pressed }) => [styles.openFullList, getTapScaleStyle(pressed)]}>
               <ReedText style={{ color: theme.colors.accentPrimary }} variant="caption">Open full goals list</ReedText>
               <Ionicons color={String(theme.colors.accentPrimary)} name="arrow-forward" size={14} />
             </Pressable>
@@ -95,7 +111,7 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
         </>
       )}
 
-      <CreateGoalSheet visible={isCreating} onClose={() => setIsCreating(false)} />
+      <CreateGoalSheet visible={isCreating} onClose={closeCreateGoal} />
     </GlassSurface>
   );
 }
