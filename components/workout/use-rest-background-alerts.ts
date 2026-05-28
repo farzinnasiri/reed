@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
-import {
-  cancelRestTimerBackgroundAlertsAsync,
-  ensureRestTimerAlertPermissionsAsync,
-  scheduleRestTimerBackgroundAlertAsync,
-} from '@/lib/rest-timer-alerts';
+import { useEffect, useMemo, useRef } from 'react';
+import { restCompleteAlert } from '@/domains/alerts/alert-definitions';
+import { ensureRestTimerAlertPermissionsAsync } from '@/lib/rest-timer-alerts';
+import { useScheduledAlert } from '@/lib/use-scheduled-alert';
 import type { RestCard } from './workout-surface.types';
 
 type UseRestBackgroundAlertsParams = {
@@ -20,20 +17,34 @@ export function useRestBackgroundAlerts({
   restCard,
   restRemaining,
 }: UseRestBackgroundAlertsParams) {
-  const [appState, setAppState] = useState(AppState.currentState);
   const hasCheckedPermissionRef = useRef(false);
-  const previousAppStateRef = useRef(AppState.currentState);
-  const previousRestAlertKeyRef = useRef<string | null>(null);
+  const isRestRunning = cardMode === 'rest' && Boolean(restCard?.isRunning);
+  const alertKey =
+    isRestRunning && restCard
+      ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${restCard.durationSeconds}:${restCard.isRunning ? 'running' : 'idle'}`
+      : null;
+  const payload = useMemo(
+    () =>
+      restCard
+        ? {
+            exerciseName: restCard.exerciseName,
+            nextSetNumber: restCard.nextSetNumber,
+          }
+        : null,
+    [restCard?.exerciseName, restCard?.nextSetNumber],
+  );
+
+  useScheduledAlert({
+    alertKey,
+    definition: restCompleteAlert,
+    enabled: isRestRunning && restRemaining > 0,
+    fireInSeconds: restRemaining,
+    onPermissionDenied,
+    payload,
+  });
 
   useEffect(() => {
-    const subscription = AppState.addEventListener('change', setAppState);
-    return () => {
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (cardMode !== 'rest' || !restCard?.isRunning || hasCheckedPermissionRef.current) {
+    if (!isRestRunning || hasCheckedPermissionRef.current) {
       return;
     }
 
@@ -43,60 +54,5 @@ export function useRestBackgroundAlerts({
         onPermissionDenied();
       }
     });
-  }, [cardMode, onPermissionDenied, restCard?.isRunning]);
-
-  useEffect(() => {
-    const nextRestAlert =
-      cardMode === 'rest' && restCard?.isRunning && restRemaining > 0
-        ? {
-            exerciseName: restCard.exerciseName,
-            key: `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${restCard.isRunning ? 'running' : 'idle'}`,
-            nextSetNumber: restCard.nextSetNumber,
-            secondsUntilFinish: restRemaining,
-          }
-        : null;
-
-    const previousAppState = previousAppStateRef.current;
-    const wasActive = previousAppState === 'active';
-    const isActive = appState === 'active';
-    const restAlertKeyChanged = nextRestAlert?.key !== previousRestAlertKeyRef.current;
-
-    if (isActive) {
-      if (!wasActive || previousRestAlertKeyRef.current !== null) {
-        void cancelRestTimerBackgroundAlertsAsync();
-      }
-    } else if (!nextRestAlert) {
-      if (previousRestAlertKeyRef.current !== null) {
-        void cancelRestTimerBackgroundAlertsAsync();
-      }
-    } else if (wasActive || restAlertKeyChanged) {
-      void scheduleRestTimerBackgroundAlertAsync({
-        exerciseName: nextRestAlert.exerciseName,
-        nextSetNumber: nextRestAlert.nextSetNumber,
-        secondsUntilFinish: nextRestAlert.secondsUntilFinish,
-      }).then(status => {
-        if (status === 'permission_denied') {
-          onPermissionDenied();
-        }
-      });
-    }
-
-    previousAppStateRef.current = appState;
-    previousRestAlertKeyRef.current = nextRestAlert?.key ?? null;
-  }, [
-    appState,
-    cardMode,
-    onPermissionDenied,
-    restCard?.exerciseName,
-    restCard?.isRunning,
-    restCard?.nextSetNumber,
-    restCard?.sessionExerciseId,
-    restRemaining,
-  ]);
-
-  useEffect(() => {
-    return () => {
-      void cancelRestTimerBackgroundAlertsAsync();
-    };
-  }, []);
+  }, [isRestRunning, onPermissionDenied]);
 }
