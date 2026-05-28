@@ -15,7 +15,6 @@ import { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
 import { authClient } from '@/lib/auth-client';
-import { AppSplash } from '@/components/ui/app-splash';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
@@ -38,12 +37,6 @@ export default function RootLayout() {
     Outfit_900Black,
   });
 
-  useEffect(() => {
-    if (fontsLoaded || fontLoadError) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [fontLoadError, fontsLoaded]);
-
   if (!fontsLoaded && !fontLoadError) {
     return null;
   }
@@ -59,8 +52,15 @@ export default function RootLayout() {
 
 function RootApp() {
   const { theme } = useReedTheme();
+  const hasBootBlockingConfigError = !convex || missingPublicEnv.length > 0;
 
-  if (!convex || missingPublicEnv.length > 0) {
+  useEffect(() => {
+    if (hasBootBlockingConfigError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [hasBootBlockingConfigError]);
+
+  if (hasBootBlockingConfigError) {
     return (
       <>
         <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
@@ -100,9 +100,15 @@ function RootApp() {
     );
   }
 
+  if (!convex) {
+    return null;
+  }
+
+  const convexClient = convex;
+
   return (
-    <ConvexProvider client={convex}>
-      <ConvexBetterAuthProvider client={convex} authClient={authClient}>
+    <ConvexProvider client={convexClient}>
+      <ConvexBetterAuthProvider client={convexClient} authClient={authClient}>
         <RootNavigator />
       </ConvexBetterAuthProvider>
     </ConvexProvider>
@@ -114,14 +120,18 @@ function RootNavigator() {
   const { data: session, isPending } = authClient.useSession();
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
   const isAppReady = Boolean(session && viewer?.onboardingCompletedAt);
+  const isRoutingPending = isPending || Boolean(session && viewer === undefined);
 
-  if (isPending || (session && viewer === undefined)) {
+  useEffect(() => {
+    if (!isRoutingPending) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [isRoutingPending]);
+
+  if (isRoutingPending) {
     return (
       <>
         <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
-        <ScreenBackdrop>
-          <AppSplash />
-        </ScreenBackdrop>
       </>
     );
   }

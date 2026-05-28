@@ -2,7 +2,6 @@ import { Stack } from 'expo-router';
 import { Platform } from 'react-native';
 import { useQuery } from 'convex/react';
 import { AppShell } from '@/components/home/app-shell';
-import { AppSplash } from '@/components/ui/app-splash';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { api } from '@/convex/_generated/api';
 import { useReedTheme } from '@/design/provider';
@@ -14,35 +13,19 @@ export default function AuthenticatedAppLayout() {
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
 
   if (isAuthPending) {
-    return (
-      <ScreenBackdrop>
-        <AppSplash />
-      </ScreenBackdrop>
-    );
+    return null;
   }
 
   if (!session) {
-    return (
-      <ScreenBackdrop>
-        <AppSplash />
-      </ScreenBackdrop>
-    );
+    return null;
   }
 
   if (viewer === undefined || viewer === null) {
-    return (
-      <ScreenBackdrop>
-        <AppSplash />
-      </ScreenBackdrop>
-    );
+    return null;
   }
 
   if (!viewer.onboardingCompletedAt) {
-    return (
-      <ScreenBackdrop>
-        <AppSplash />
-      </ScreenBackdrop>
-    );
+    return null;
   }
 
   return (

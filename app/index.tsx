@@ -6,7 +6,6 @@ import { useMutation, useQuery } from 'convex/react';
 import { authClient } from '@/lib/auth-client';
 import { api } from '@/convex/_generated/api';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
-import { AppSplash } from '@/components/ui/app-splash';
 import { AuthEntry } from '@/components/home/auth-entry';
 import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
 import { LoveLetter } from '@/components/onboarding/love-letter';
@@ -154,11 +153,11 @@ export default function HomeScreen() {
   return (
     <ScreenBackdrop>
       {isPending ? (
-        <AppSplash />
+        null
       ) : session && viewer === undefined ? (
-        <AppSplash />
+        null
       ) : session && viewer === null ? (
-        <AppSplash />
+        null
       ) : session && welcomeName ? (
         <LoveLetter
           displayName={welcomeName}
