@@ -937,7 +937,9 @@ export const styles = StyleSheet.create({
   },
   filterSheetOverlay: {
     ...StyleSheet.absoluteFill,
+    elevation: 20,
     justifyContent: 'flex-end',
+    zIndex: 20,
   },
   filterSheetPanelFrame: {
     maxHeight: '82%',

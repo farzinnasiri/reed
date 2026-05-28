@@ -48,7 +48,6 @@ export function AddExerciseSheet({
     activeFilterSection,
     effectiveData,
     equipmentSearchText,
-    filterSectionOptions,
     hasSearchContext,
     muscleSearchText,
     resetSearchSession,
@@ -69,7 +68,23 @@ export function AddExerciseSheet({
   const [isSheetMounted, setIsSheetMounted] = useState(isOpen);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [isFilterSheetMounted, setIsFilterSheetMounted] = useState(false);
+  const [draftMuscleGroups, setDraftMuscleGroups] = useState<string[]>([]);
+  const [draftEquipment, setDraftEquipment] = useState<string[]>([]);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Partial<Record<Id<'exerciseCatalog'>, boolean>>>({});
+  const draftFilterCount = draftMuscleGroups.length + draftEquipment.length;
+  const draftFilterSectionOptions = useMemo(
+    () => [
+      {
+        label: draftMuscleGroups.length > 0 ? `Muscles (${draftMuscleGroups.length})` : 'Muscles',
+        value: 'muscles' as const,
+      },
+      {
+        label: draftEquipment.length > 0 ? `Equipment (${draftEquipment.length})` : 'Equipment',
+        value: 'equipment' as const,
+      },
+    ],
+    [draftEquipment.length, draftMuscleGroups.length],
+  );
   const filteredMuscleOptions = useMemo(
     () => filterOptions(effectiveData?.muscleGroupOptions ?? [], muscleSearchText),
     [effectiveData?.muscleGroupOptions, muscleSearchText],
@@ -96,6 +111,8 @@ export function AddExerciseSheet({
 
       setIsSheetMounted(false);
       setFavoriteOverrides({});
+      setDraftMuscleGroups([]);
+      setDraftEquipment([]);
       resetSearchSession();
     });
   }, [isOpen, sheetProgress]);
@@ -137,6 +154,27 @@ export function AddExerciseSheet({
       const override = favoriteOverrides[item._id];
       return override == null ? item : { ...item, isFavorite: override };
     });
+  }
+
+  function openFilterSheet() {
+    blurActiveElementOnWeb();
+    setDraftMuscleGroups(selectedMuscleGroups);
+    setDraftEquipment(selectedEquipment);
+    setMuscleSearchText('');
+    setEquipmentSearchText('');
+    setIsFilterSheetOpen(true);
+  }
+
+  function closeFilterSheet() {
+    blurActiveElementOnWeb();
+    setIsFilterSheetOpen(false);
+  }
+
+  function applyFilters() {
+    blurActiveElementOnWeb();
+    setSelectedMuscleGroups(draftMuscleGroups);
+    setSelectedEquipment(draftEquipment);
+    setIsFilterSheetOpen(false);
   }
 
   if (!isSheetMounted) {
@@ -277,6 +315,8 @@ export function AddExerciseSheet({
                       blurActiveElementOnWeb();
                       setSelectedMuscleGroups([]);
                       setSelectedEquipment([]);
+                      setDraftMuscleGroups([]);
+                      setDraftEquipment([]);
                     }}
                     style={({ pressed }) => [styles.filterSummaryClear, getTapScaleStyle(pressed, activeFilterCount === 0)]}
                   >
@@ -320,10 +360,7 @@ export function AddExerciseSheet({
                   />
 
                   <Pressable
-                    onPress={() => {
-                      blurActiveElementOnWeb();
-                      setIsFilterSheetOpen(true);
-                    }}
+                    onPress={openFilterSheet}
                     style={({ pressed }) => [
                       styles.searchFilterButton,
                       getTapScaleStyle(pressed),
@@ -350,146 +387,135 @@ export function AddExerciseSheet({
               </View>
             </View>
           </GlassSurface>
+        </Animated.View>
 
-          {isFilterSheetMounted ? (
-            <Animated.View style={[styles.filterSheetOverlay, { opacity: filterOverlayOpacity }]}>
-              <View
-                style={[
-                  StyleSheet.absoluteFill,
-                  { backgroundColor: scrim.backgroundColor, pointerEvents: 'none' },
-                ]}
-              />
-              <Pressable
-                onPress={() => {
-                  blurActiveElementOnWeb();
-                  setIsFilterSheetOpen(false);
-                }}
-                style={StyleSheet.absoluteFill}
-              />
-              <Animated.View
-                style={[
-                  styles.filterSheetPanelFrame,
-                  {
-                    transform: [{ translateY: filterTranslateY }],
-                  },
-                ]}
+        {isFilterSheetMounted ? (
+          <Animated.View style={[styles.filterSheetOverlay, { opacity: filterOverlayOpacity }]}>
+            <View
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: scrim.backgroundColor, pointerEvents: 'none' },
+              ]}
+            />
+            <Pressable onPress={closeFilterSheet} style={StyleSheet.absoluteFill} />
+            <Animated.View
+              style={[
+                styles.filterSheetPanelFrame,
+                {
+                  transform: [{ translateY: filterTranslateY }],
+                },
+              ]}
+            >
+              <GlassSurface
+                contentStyle={styles.filterSheetPanelContent}
+                style={[styles.filterSheetPanel, frostedSheetSurfaceStyle]}
               >
-                <GlassSurface
-                  contentStyle={styles.filterSheetPanelContent}
-                  style={[styles.filterSheetPanel, frostedSheetSurfaceStyle]}
+                <View style={styles.filterSheetHeader}>
+                  <ReedText variant="section">Filters</ReedText>
+                  <Pressable
+                    onPress={closeFilterSheet}
+                    style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
+                  >
+                    <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.filterSheetTabs}>
+                  <SegmentedControl<AddExerciseFilterSectionKey>
+                    compact
+                    onChange={setActiveFilterSection}
+                    options={draftFilterSectionOptions}
+                    value={activeFilterSection}
+                  />
+                </View>
+
+                <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  {activeFilterSection === 'muscles' ? (
+                    <FilterSection
+                      emptyLabel="No muscles found."
+                      onClear={() => setDraftMuscleGroups([])}
+                      onSearchChange={setMuscleSearchText}
+                      onToggle={value => toggleFilterValue(value, setDraftMuscleGroups)}
+                      options={filteredMuscleOptions}
+                      searchText={muscleSearchText}
+                      selectedCount={draftMuscleGroups.length}
+                      subtitle="Pick one or more muscle groups."
+                      title="Muscles"
+                      valueIsSelected={value => draftMuscleGroups.includes(value)}
+                    />
+                  ) : null}
+
+                  {activeFilterSection === 'equipment' ? (
+                    <FilterSection
+                      emptyLabel="No equipment found."
+                      onClear={() => setDraftEquipment([])}
+                      onSearchChange={setEquipmentSearchText}
+                      onToggle={value => toggleFilterValue(value, setDraftEquipment)}
+                      options={filteredEquipmentOptions}
+                      searchText={equipmentSearchText}
+                      selectedCount={draftEquipment.length}
+                      subtitle="Pick one or more equipment options."
+                      title="Equipment"
+                      valueIsSelected={value => draftEquipment.includes(value)}
+                    />
+                  ) : null}
+
+                </ScrollView>
+
+                <View
+                  style={[
+                    styles.filterSheetFooter,
+                    {
+                      borderTopColor: glassControls.shellBorderColor,
+                    },
+                  ]}
                 >
-                  <View style={styles.filterSheetHeader}>
-                    <ReedText variant="section">Filters</ReedText>
+                  <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
+                    {buildFilterSummary({ selectedEquipment: draftEquipment, selectedMuscleGroups: draftMuscleGroups })}
+                  </ReedText>
+
+                  <View style={styles.filterSheetFooterActions}>
                     <Pressable
+                      disabled={draftFilterCount === 0}
                       onPress={() => {
                         blurActiveElementOnWeb();
-                        setIsFilterSheetOpen(false);
+                        setDraftMuscleGroups([]);
+                        setDraftEquipment([]);
+                        setMuscleSearchText('');
+                        setEquipmentSearchText('');
                       }}
-                      style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
+                      style={({ pressed }) => [
+                        styles.filterFooterSecondaryButton,
+                        {
+                          backgroundColor: glassControls.shellBackgroundColor,
+                          borderColor: glassControls.shellBorderColor,
+                          ...getTapScaleStyle(pressed, draftFilterCount === 0),
+                        },
+                      ]}
                     >
-                      <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
+                      <ReedText tone={draftFilterCount === 0 ? 'muted' : 'default'} variant="caption">Reset</ReedText>
+                    </Pressable>
+
+                    <Pressable
+                      onPress={applyFilters}
+                      style={({ pressed }) => [
+                        styles.filterFooterPrimaryButton,
+                        {
+                          backgroundColor: theme.colors.accentPrimary,
+                          ...getTapScaleStyle(pressed),
+                        },
+                      ]}
+                    >
+                      <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
+                        Apply
+                      </ReedText>
                     </Pressable>
                   </View>
-
-                  <View style={styles.filterSheetTabs}>
-                    <SegmentedControl<AddExerciseFilterSectionKey>
-                      compact
-                      onChange={setActiveFilterSection}
-                      options={filterSectionOptions}
-                      value={activeFilterSection}
-                    />
-                  </View>
-
-                  <ScrollView contentContainerStyle={styles.filterSheetBody} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-                    {activeFilterSection === 'muscles' ? (
-                      <FilterSection
-                        emptyLabel="No muscles found."
-                        onClear={() => setSelectedMuscleGroups([])}
-                        onSearchChange={setMuscleSearchText}
-                        onToggle={value => toggleFilterValue(value, setSelectedMuscleGroups)}
-                        options={filteredMuscleOptions}
-                        searchText={muscleSearchText}
-                        selectedCount={selectedMuscleGroups.length}
-                        subtitle="Pick one or more muscle groups."
-                        title="Muscles"
-                        valueIsSelected={value => selectedMuscleGroups.includes(value)}
-                      />
-                    ) : null}
-
-                    {activeFilterSection === 'equipment' ? (
-                      <FilterSection
-                        emptyLabel="No equipment found."
-                        onClear={() => setSelectedEquipment([])}
-                        onSearchChange={setEquipmentSearchText}
-                        onToggle={value => toggleFilterValue(value, setSelectedEquipment)}
-                        options={filteredEquipmentOptions}
-                        searchText={equipmentSearchText}
-                        selectedCount={selectedEquipment.length}
-                        subtitle="Pick one or more equipment options."
-                        title="Equipment"
-                        valueIsSelected={value => selectedEquipment.includes(value)}
-                      />
-                    ) : null}
-
-                  </ScrollView>
-
-                  <View
-                    style={[
-                      styles.filterSheetFooter,
-                      {
-                        borderTopColor: glassControls.shellBorderColor,
-                      },
-                    ]}
-                  >
-                    <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
-                      {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
-                    </ReedText>
-
-                    <View style={styles.filterSheetFooterActions}>
-                      <Pressable
-                        onPress={() => {
-                          blurActiveElementOnWeb();
-                          setSelectedMuscleGroups([]);
-                          setSelectedEquipment([]);
-                          setMuscleSearchText('');
-                          setEquipmentSearchText('');
-                        }}
-                        style={({ pressed }) => [
-                          styles.filterFooterSecondaryButton,
-                          {
-                            backgroundColor: glassControls.shellBackgroundColor,
-                            borderColor: glassControls.shellBorderColor,
-                            ...getTapScaleStyle(pressed),
-                          },
-                        ]}
-                      >
-                        <ReedText variant="caption">Reset</ReedText>
-                      </Pressable>
-
-                      <Pressable
-                        onPress={() => {
-                          blurActiveElementOnWeb();
-                          setIsFilterSheetOpen(false);
-                        }}
-                        style={({ pressed }) => [
-                          styles.filterFooterPrimaryButton,
-                          {
-                            backgroundColor: theme.colors.accentPrimary,
-                            ...getTapScaleStyle(pressed),
-                          },
-                        ]}
-                      >
-                        <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">
-                          Apply
-                        </ReedText>
-                      </Pressable>
-                    </View>
-                  </View>
-                </GlassSurface>
-              </Animated.View>
+                </View>
+              </GlassSurface>
             </Animated.View>
-          ) : null}
-        </Animated.View>
+          </Animated.View>
+        ) : null}
       </KeyboardAvoidingView>
     </Modal>
   );

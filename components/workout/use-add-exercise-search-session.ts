@@ -36,20 +36,6 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     searchText.trim().length > 0 || selectedMuscleGroups.length > 0 || selectedEquipment.length > 0;
   const activeFilterCount = selectedMuscleGroups.length + selectedEquipment.length;
   const selectedCount = selectedExerciseIds.length;
-  const filterSectionOptions = useMemo(
-    () => [
-      {
-        label: selectedMuscleGroups.length > 0 ? `Muscles (${selectedMuscleGroups.length})` : 'Muscles',
-        value: 'muscles' as const,
-      },
-      {
-        label: selectedEquipment.length > 0 ? `Equipment (${selectedEquipment.length})` : 'Equipment',
-        value: 'equipment' as const,
-      },
-    ],
-    [selectedEquipment.length, selectedMuscleGroups.length],
-  );
-
   useEffect(() => {
     if (data) {
       setStableData(current => (current === data ? current : data));
@@ -95,7 +81,6 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     activeFilterSection,
     effectiveData,
     equipmentSearchText,
-    filterSectionOptions,
     hasSearchContext,
     muscleSearchText,
     searchText,
