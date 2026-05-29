@@ -136,10 +136,20 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const restRuntime =
     ((session as { restRuntime?: RestCard | null } | null | undefined)?.restRuntime ?? null) as RestCard | null;
   const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
-  const quickLogDayGroups = useMemo(
-    () => groupQuickLogsByLocalDay((quickLogActivity ?? []) as QuickLogActivity[]),
-    [quickLogActivity],
-  );
+  const quickLogDayGroups = useMemo(() => {
+    const groups = new Map<string, QuickLogActivity[]>();
+
+    for (const logEntry of (quickLogActivity ?? []) as QuickLogActivity[]) {
+      const dayKey = getLocalDayKey(logEntry.loggedAt);
+      groups.set(dayKey, [...(groups.get(dayKey) ?? []), logEntry]);
+    }
+
+    return Array.from(groups.entries()).map(([dayKey, dayLogs]) => ({
+      dayKey,
+      latestLoggedAt: dayLogs[0]?.loggedAt ?? 0,
+      logs: dayLogs,
+    }));
+  }, [quickLogActivity]);
   currentRestRemainingRef.current = restRemaining;
   const activeSetEditor = useMemo(() => {
     if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
@@ -1140,21 +1150,6 @@ function formatSessionExercisePreview(session: EndedSessionSummary) {
   const remaining = Math.max(0, session.exerciseCount - visibleExercises.length);
   if (visibleExercises.length === 0) return 'No exercises logged';
   return `${visibleExercises.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
-}
-
-function groupQuickLogsByLocalDay(logs: QuickLogActivity[]): QuickLogDayGroup[] {
-  const groups = new Map<string, QuickLogActivity[]>();
-
-  for (const logEntry of logs) {
-    const dayKey = getLocalDayKey(logEntry.loggedAt);
-    groups.set(dayKey, [...(groups.get(dayKey) ?? []), logEntry]);
-  }
-
-  return Array.from(groups.entries()).map(([dayKey, dayLogs]) => ({
-    dayKey,
-    latestLoggedAt: dayLogs[0]?.loggedAt ?? 0,
-    logs: dayLogs,
-  }));
 }
 
 function getLocalDayKey(timestamp: number) {
