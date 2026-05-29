@@ -1080,6 +1080,38 @@ export const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 10,
   },
+  filterTreeGroup: {
+    gap: 6,
+  },
+  filterTreeParentToggle: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    minHeight: 30,
+  },
+  filterTreeCount: {
+    paddingHorizontal: 4,
+  },
+  filterTreeDisclosure: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 34,
+    width: 34,
+  },
+  filterTreeChildren: {
+    gap: 6,
+    paddingLeft: 14,
+  },
+  filterTreeChildRow: {
+    alignItems: 'center',
+    borderRadius: reedRadii.sm,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 40,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
   filterSheetFooter: {
     borderTopWidth: 1,
     gap: 10,

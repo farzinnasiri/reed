@@ -1,11 +1,15 @@
 import { v } from 'convex/values';
 
 export const bodyTypeValidator = v.union(
-  v.literal('skinny'),
-  v.literal('skinny_fat'),
-  v.literal('bulky'),
+  v.literal('very_lean'),
+  v.literal('lean'),
+  v.literal('average_lean'),
+  v.literal('soft_middle'),
+  v.literal('average'),
   v.literal('high_fat'),
-  v.literal('athletic'),
+  v.literal('larger_high_fat'),
+  v.literal('muscular_solid'),
+  v.literal('athletic_muscular'),
 );
 
 export const genderIdentityValidator = v.union(
@@ -306,7 +310,17 @@ export type CompleteOnboardingPayload = {
   profilingConsent: true;
   rankedGoals: string[];
   startingPoint: {
-    bodyType: 'skinny' | 'skinny_fat' | 'bulky' | 'high_fat' | 'athletic' | null;
+    bodyType:
+      | 'very_lean'
+      | 'lean'
+      | 'average_lean'
+      | 'soft_middle'
+      | 'average'
+      | 'high_fat'
+      | 'larger_high_fat'
+      | 'muscular_solid'
+      | 'athletic_muscular'
+      | null;
   };
   lifestyle: {
     dailyMovement: 'mostly_sitting' | 'on_feet' | 'walks_a_lot' | 'physical_job' | 'restless' | null;

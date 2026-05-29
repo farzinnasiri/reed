@@ -12,7 +12,7 @@ import { blurActiveElementOnWeb } from '@/components/ui/focus';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
-import { ProgressRow, getProgressSlices } from '../goals-home-card';
+import { ProgressRow, getProgressSlices, type TrainingTarget } from '../target-progress';
 
 type MetricKind = 'exerciseMaxLoadKg' | 'exerciseTotalReps' | 'exerciseBestHoldSeconds' | 'exerciseTotalDurationSeconds' | 'cardioDistanceMeters' | 'cardioDurationSeconds' | 'sessionCount';
 type Cadence = 'once' | 'daily' | 'weekly' | 'total';
@@ -41,6 +41,16 @@ export function GoalsSurface() {
   const active = targets?.filter(target => target.status === 'active') ?? [];
   const finished = targets?.filter(target => target.status !== 'active') ?? [];
 
+  function openCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(true);
+  }
+
+  function closeCreateGoal() {
+    blurActiveElementOnWeb();
+    setIsCreating(false);
+  }
+
   return (
     <View style={styles.stack}>
       <View style={styles.headerRow}>
@@ -48,13 +58,13 @@ export function GoalsSurface() {
           <ReedText variant="bodyStrong">Concrete goals</ReedText>
           <ReedText tone="muted" variant="caption">Measured from your logs.</ReedText>
         </View>
-        <ReedButton label="New goal" onPress={() => setIsCreating(true)} />
+        <ReedButton label="New goal" onPress={openCreateGoal} />
       </View>
 
       {targets === undefined ? (
         <View style={styles.loadingRow}><ActivityIndicator /><ReedText tone="muted">Loading goals.</ReedText></View>
       ) : targets.length === 0 ? (
-        <EmptyGoals onCreate={() => setIsCreating(true)} />
+        <EmptyGoals onCreate={openCreateGoal} />
       ) : (
         <View style={styles.stack}>
           {active.map(target => (
@@ -72,7 +82,7 @@ export function GoalsSurface() {
         </View>
       )}
 
-      <CreateGoalSheet visible={isCreating} onClose={() => setIsCreating(false)} />
+      <CreateGoalSheet visible={isCreating} onClose={closeCreateGoal} />
     </View>
   );
 }
@@ -88,7 +98,7 @@ function EmptyGoals({ onCreate }: { onCreate: () => void }) {
   );
 }
 
-function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number] }) {
+function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: TrainingTarget }) {
   const { theme } = useReedTheme();
   const progress = target.progressSummary;
   const progressSlices = getProgressSlices(target);

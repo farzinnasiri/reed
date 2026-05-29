@@ -15,7 +15,17 @@ export type CatalogItem = {
   isFavorite: boolean;
   mainMuscleGroups: string[];
   name: string;
+  primaryFocusAreaLabels: string[];
+  primaryFocusAreas: string[];
+  primaryTargetAreaLabels: string[];
+  primaryTargetAreas: string[];
   recipeKey: RecipeKey;
+};
+
+export type FilterOption = {
+  label: string;
+  parentFocusAreas?: string[];
+  value: string;
 };
 
 export type MetricValues = Record<string, number>;
@@ -55,11 +65,13 @@ export type EditingSet = {
 
 export type AddExerciseSheetData = {
   equipmentOptions: string[];
+  focusAreaOptions: FilterOption[];
   favorites: CatalogItem[];
-  muscleGroupOptions: string[];
+  muscleGroupOptions: FilterOption[];
   recents: CatalogItem[];
   results: CatalogItem[];
   suggested: CatalogItem[];
+  targetAreaOptions: FilterOption[];
 };
 
 export type CaptureCard = {

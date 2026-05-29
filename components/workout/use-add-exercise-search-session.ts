@@ -11,7 +11,8 @@ const SEARCH_QUERY_DEBOUNCE_MS = 180;
 export function useAddExerciseSearchSession(isOpen: boolean) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearchText, setDebouncedSearchText] = useState('');
-  const [selectedMuscleGroups, setSelectedMuscleGroups] = useState<string[]>([]);
+  const [selectedFocusAreas, setSelectedFocusAreas] = useState<string[]>([]);
+  const [selectedTargetAreas, setSelectedTargetAreas] = useState<string[]>([]);
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>([]);
   const [selectedExerciseIds, setSelectedExerciseIds] = useState<Id<'exerciseCatalog'>[]>([]);
   const [muscleSearchText, setMuscleSearchText] = useState('');
@@ -22,7 +23,8 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     isOpen
       ? {
           equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
-          muscleGroups: selectedMuscleGroups.length > 0 ? selectedMuscleGroups : undefined,
+          focusAreas: selectedFocusAreas.length > 0 ? selectedFocusAreas : undefined,
+          targetAreas: selectedTargetAreas.length > 0 ? selectedTargetAreas : undefined,
           query: debouncedSearchText || undefined,
         }
       : 'skip',
@@ -33,8 +35,8 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
   const effectiveData = data ?? stableData;
   const selectedExerciseIdsSet = useMemo(() => new Set(selectedExerciseIds), [selectedExerciseIds]);
   const hasSearchContext =
-    searchText.trim().length > 0 || selectedMuscleGroups.length > 0 || selectedEquipment.length > 0;
-  const activeFilterCount = selectedMuscleGroups.length + selectedEquipment.length;
+    searchText.trim().length > 0 || selectedFocusAreas.length > 0 || selectedTargetAreas.length > 0 || selectedEquipment.length > 0;
+  const activeFilterCount = selectedFocusAreas.length + selectedTargetAreas.length + selectedEquipment.length;
   const selectedCount = selectedExerciseIds.length;
   useEffect(() => {
     if (data) {
@@ -68,7 +70,8 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
   function resetSearchSession() {
     setSearchText('');
     setDebouncedSearchText('');
-    setSelectedMuscleGroups([]);
+    setSelectedFocusAreas([]);
+    setSelectedTargetAreas([]);
     setSelectedEquipment([]);
     setSelectedExerciseIds([]);
     setMuscleSearchText('');
@@ -88,7 +91,8 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     selectedEquipment,
     selectedExerciseIds,
     selectedExerciseIdsSet,
-    selectedMuscleGroups,
+    selectedFocusAreas,
+    selectedTargetAreas,
     resetSearchSession,
     setActiveFilterSection,
     setEquipmentSearchText,
@@ -96,7 +100,8 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     setSearchText,
     setSelectedEquipment,
     setSelectedExerciseIds,
-    setSelectedMuscleGroups,
+    setSelectedFocusAreas,
+    setSelectedTargetAreas,
     toggleSelectedExercise,
   };
 }

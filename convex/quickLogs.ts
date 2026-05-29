@@ -4,6 +4,7 @@ import type { Doc } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
 import { buildQuickLogMetrics } from '../domains/workout/quick-log-intake';
+import { resolveExerciseFocusAreas } from '../domains/workout/exercise-focus';
 import { insertQuickLogActivity } from './workout/setLogging';
 
 type PresetSeed = {
@@ -162,13 +163,24 @@ async function upsertExercise(ctx: MutationCtx, exercise: PresetSeed['exercise']
     .query('exerciseCatalog')
     .withIndex('by_exercise_id', q => q.eq('exerciseId', exercise.exerciseId))
     .unique();
+  const contextTags = exercise.contextTags ?? ['quick-log'];
+  const equipment = exercise.equipment ?? ['none'];
+  const primaryModality = exercise.isCardio ? 'cardio' : exercise.isHold ? 'hold' : 'strength';
+  const focusAreas = resolveExerciseFocusAreas({
+    ...exercise,
+    contextTags,
+    equipment,
+    primaryModality,
+    secondaryMuscleGroups: [],
+    skillTags: [],
+  });
   const patch = {
     aliases: [exercise.name],
     ...(exercise.bodyweightLoadFactor === undefined ? {} : { bodyweightLoadFactor: exercise.bodyweightLoadFactor }),
     canonicalFamily: exercise.canonicalFamily,
-    contextTags: exercise.contextTags ?? ['quick-log'],
+    contextTags,
     discoveryTags: ['quick-log'],
-    equipment: exercise.equipment ?? ['none'],
+    equipment,
     exerciseClass: exercise.exerciseClass,
     exerciseId: exercise.exerciseId,
     isCardio: exercise.isCardio,
@@ -181,11 +193,15 @@ async function upsertExercise(ctx: MutationCtx, exercise: PresetSeed['exercise']
     movementPatterns: exercise.movementPatterns,
     name: exercise.name,
     notes: 'Quick log preset exercise.',
-    primaryModality: exercise.isCardio ? 'cardio' : exercise.isHold ? 'hold' : 'strength',
+    primaryFocusAreas: focusAreas.primaryFocusAreas,
+    primaryTargetAreas: focusAreas.primaryTargetAreas,
+    primaryModality,
     rawMetricRecipe: exercise.rawMetricRecipe,
     recipeKey: exercise.recipeKey,
     searchText: `${exercise.name} ${exercise.canonicalFamily} quick log`,
     secondaryMuscleGroups: [],
+    secondaryFocusAreas: focusAreas.secondaryFocusAreas,
+    secondaryTargetAreas: focusAreas.secondaryTargetAreas,
     skillTags: [],
     supportsLiveTracking: false,
     updatedAt: Date.now(),

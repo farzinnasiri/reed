@@ -82,11 +82,15 @@ function buildBudgetSummary(draft: OnboardingDraft): string {
 }
 
 const BODY_TYPE_PROSE_LABELS: Record<NonNullable<OnboardingDraft['bodyType']>, string> = {
-  athletic: 'athletic',
-  bulky: 'bulky',
+  athletic_muscular: 'athletic muscular',
+  average: 'average',
+  average_lean: 'average lean',
   high_fat: 'higher body fat',
-  skinny: 'skinny',
-  skinny_fat: 'skinny-fat',
+  larger_high_fat: 'larger higher-body-fat',
+  lean: 'lean',
+  muscular_solid: 'muscular solid',
+  soft_middle: 'soft middle',
+  very_lean: 'very lean',
 };
 
 const GENDER_PROSE_LABELS: Record<NonNullable<OnboardingDraft['genderIdentity']>, string> = {

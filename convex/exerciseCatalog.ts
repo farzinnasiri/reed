@@ -5,6 +5,18 @@ import type { QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
 import { resolveBodyweightLoadFactor } from '../domains/workout/bodyweight-load-factors';
 import {
+  type ExerciseFocusArea,
+  type ExerciseTargetArea,
+  exerciseFocusAreaLabels,
+  exerciseFocusAreas,
+  exerciseTargetAreaLabels,
+  exerciseTargetAreaParents,
+  exerciseTargetAreas,
+  normalizeExerciseFocusAreas,
+  normalizeExerciseTargetAreas,
+  resolveExerciseFocusAreas,
+} from '../domains/workout/exercise-focus';
+import {
   normalizeExerciseModifierCapabilities,
   resolveExerciseModifierCapabilities,
 } from '../domains/workout/modifier-capabilities';
@@ -39,6 +51,10 @@ const importRowValidator = v.object({
   recipeKey: v.optional(recipeKeyOrNullValidator),
   searchText: v.string(),
   secondaryMuscleGroups: v.array(v.string()),
+  primaryFocusAreas: v.optional(v.array(v.string())),
+  secondaryFocusAreas: v.optional(v.array(v.string())),
+  primaryTargetAreas: v.optional(v.array(v.string())),
+  secondaryTargetAreas: v.optional(v.array(v.string())),
   skillTags: v.array(v.string()),
   supportsLiveTracking: v.boolean(),
   usesBodyweight: v.boolean(),
@@ -51,16 +67,19 @@ type SupportedExercise = Doc<'exerciseCatalog'> & {
 export const searchForAddSheet = query({
   args: {
     equipment: optionalMultiFilterValidator,
+    focusAreas: optionalMultiFilterValidator,
     muscleGroups: optionalMultiFilterValidator,
+    targetAreas: optionalMultiFilterValidator,
     query: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const queryText = args.query?.trim().toLowerCase() ?? '';
-    const selectedMuscleGroups = normalizeMultiFilters(args.muscleGroups);
+    const selectedFocusAreas = normalizeExerciseFocusAreas(args.focusAreas ?? args.muscleGroups);
+    const selectedTargetAreas = normalizeExerciseTargetAreas(args.targetAreas);
     const selectedEquipment = normalizeMultiFilters(args.equipment);
     const hasSearchContext =
-      queryText.length > 0 || selectedMuscleGroups.length > 0 || selectedEquipment.length > 0;
+      queryText.length > 0 || selectedFocusAreas.length > 0 || selectedTargetAreas.length > 0 || selectedEquipment.length > 0;
     const exercises: SupportedExercise[] = await loadSearchContextExercises(ctx, queryText, hasSearchContext);
     const favoriteDocs = await ctx.db
       .query('exerciseFavorites')
@@ -93,12 +112,7 @@ export const searchForAddSheet = query({
         queryMatchRank: getQueryMatchRank(exercise, queryText),
       }))
       .filter(hasQueryMatchRank)
-      .filter(item =>
-        matchesAnyArrayFilter(
-          [...item.exercise.mainMuscleGroups, ...item.exercise.secondaryMuscleGroups],
-          selectedMuscleGroups,
-        ),
-      )
+      .filter(item => matchesBodyAreaFilter(resolveStoredFocusAreas(item.exercise), selectedFocusAreas, selectedTargetAreas))
       .filter(item => matchesAnyArrayFilter(item.exercise.equipment, selectedEquipment))
       .sort((left, right) => {
         if (left.queryMatchRank !== right.queryMatchRank) {
@@ -117,13 +131,13 @@ export const searchForAddSheet = query({
 
     return {
       equipmentOptions: collectFilterOptions(exercises.flatMap(exercise => exercise.equipment)),
+      focusAreaOptions: collectFocusAreaOptions(exercises),
       favorites,
-      muscleGroupOptions: collectFilterOptions(
-        exercises.flatMap(exercise => [...exercise.mainMuscleGroups, ...exercise.secondaryMuscleGroups]),
-      ),
+      muscleGroupOptions: collectFocusAreaOptions(exercises),
       recents,
       results: filtered,
       suggested,
+      targetAreaOptions: collectTargetAreaOptions(exercises),
     };
   },
 });
@@ -216,8 +230,13 @@ export const importCatalogBatch = internalMutation({
         name: row.name,
         recipeKey: resolvedRecipeKey,
       });
+      const focusAreas = resolveRowFocusAreas(row);
       const patch = {
         ...row,
+        primaryFocusAreas: focusAreas.primaryFocusAreas,
+        primaryTargetAreas: focusAreas.primaryTargetAreas,
+        secondaryFocusAreas: focusAreas.secondaryFocusAreas,
+        secondaryTargetAreas: focusAreas.secondaryTargetAreas,
         ...(resolvedBodyweightLoadFactor === null ? {} : { bodyweightLoadFactor: resolvedBodyweightLoadFactor }),
         modifierCapabilities,
         recipeKey: resolvedRecipeKey,
@@ -235,6 +254,85 @@ export const importCatalogBatch = internalMutation({
     }
 
     return { created, updated };
+  },
+});
+
+export const backfillFocusAreas = internalMutation({
+  args: { dryRun: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    const exercises = await ctx.db.query('exerciseCatalog').collect();
+    const changes: Array<{
+      exerciseId: string;
+      name: string;
+      nextPrimaryFocusAreas: string[];
+      nextPrimaryTargetAreas: string[];
+      nextSecondaryFocusAreas: string[];
+      nextSecondaryTargetAreas: string[];
+      previousPrimaryFocusAreas: string[] | null;
+      previousPrimaryTargetAreas: string[] | null;
+      previousSecondaryFocusAreas: string[] | null;
+      previousSecondaryTargetAreas: string[] | null;
+    }> = [];
+
+    for (const exercise of exercises) {
+      const next = resolveStoredFocusAreas(exercise);
+      const previousPrimaryFocusAreas = exercise.primaryFocusAreas ?? null;
+      const previousPrimaryTargetAreas = exercise.primaryTargetAreas ?? null;
+      const previousSecondaryFocusAreas = exercise.secondaryFocusAreas ?? null;
+      const previousSecondaryTargetAreas = exercise.secondaryTargetAreas ?? null;
+      if (
+        arraysEqual(previousPrimaryFocusAreas ?? [], next.primaryFocusAreas)
+        && arraysEqual(previousPrimaryTargetAreas ?? [], next.primaryTargetAreas)
+        && arraysEqual(previousSecondaryFocusAreas ?? [], next.secondaryFocusAreas)
+        && arraysEqual(previousSecondaryTargetAreas ?? [], next.secondaryTargetAreas)
+      ) {
+        continue;
+      }
+
+      changes.push({
+        exerciseId: exercise.exerciseId,
+        name: exercise.name,
+        nextPrimaryFocusAreas: next.primaryFocusAreas,
+        nextPrimaryTargetAreas: next.primaryTargetAreas,
+        nextSecondaryFocusAreas: next.secondaryFocusAreas,
+        nextSecondaryTargetAreas: next.secondaryTargetAreas,
+        previousPrimaryFocusAreas,
+        previousPrimaryTargetAreas,
+        previousSecondaryFocusAreas,
+        previousSecondaryTargetAreas,
+      });
+
+      if (!args.dryRun) {
+        await ctx.db.patch(exercise._id, {
+          primaryFocusAreas: next.primaryFocusAreas,
+          primaryTargetAreas: next.primaryTargetAreas,
+          secondaryFocusAreas: next.secondaryFocusAreas,
+          secondaryTargetAreas: next.secondaryTargetAreas,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
+    const sourceExercises = args.dryRun
+      ? exercises.map(exercise => ({ ...exercise, ...resolveStoredFocusAreas(exercise) }))
+      : await ctx.db.query('exerciseCatalog').collect();
+    const counts = exerciseFocusAreas.map(area => ({
+      area,
+      count: sourceExercises.filter(exercise => resolveStoredFocusAreas(exercise).primaryFocusAreas.includes(area)).length,
+    }));
+    const targetCounts = exerciseTargetAreas.map(area => ({
+      area,
+      count: sourceExercises.filter(exercise => resolveStoredFocusAreas(exercise).primaryTargetAreas.includes(area)).length,
+    }));
+
+    return {
+      changed: changes.length,
+      counts,
+      dryRun: args.dryRun ?? false,
+      sampleChanges: changes.slice(0, 40),
+      scanned: exercises.length,
+      targetCounts,
+    };
   },
 });
 
@@ -343,6 +441,8 @@ function isDefined<T>(value: T | null | undefined): value is T {
 }
 
 function serializeCatalogItem(exercise: SupportedExercise, favoriteIds: Set<Id<'exerciseCatalog'>>) {
+  const focusAreas = resolveStoredFocusAreas(exercise);
+
   return {
     _id: exercise._id,
     discoveryTags: exercise.discoveryTags ?? [],
@@ -361,8 +461,44 @@ function serializeCatalogItem(exercise: SupportedExercise, favoriteIds: Set<Id<'
         }),
     ),
     name: exercise.name,
+    primaryFocusAreaLabels: focusAreas.primaryFocusAreas.map(area => exerciseFocusAreaLabels[area]),
+    primaryFocusAreas: focusAreas.primaryFocusAreas,
+    primaryTargetAreaLabels: focusAreas.primaryTargetAreas.map(area => exerciseTargetAreaLabels[area]),
+    primaryTargetAreas: focusAreas.primaryTargetAreas,
     recipeKey: exercise.recipeKey,
   };
+}
+
+function resolveStoredFocusAreas(exercise: Doc<'exerciseCatalog'>) {
+  const primaryFocusAreas = normalizeExerciseFocusAreas(exercise.primaryFocusAreas);
+  const secondaryFocusAreas = normalizeExerciseFocusAreas(exercise.secondaryFocusAreas);
+  const primaryTargetAreas = normalizeExerciseTargetAreas(exercise.primaryTargetAreas);
+  const secondaryTargetAreas = normalizeExerciseTargetAreas(exercise.secondaryTargetAreas);
+
+  if (primaryFocusAreas.length > 0 && exercise.primaryTargetAreas !== undefined) {
+    return { primaryFocusAreas, primaryTargetAreas, secondaryFocusAreas, secondaryTargetAreas };
+  }
+
+  const derived = resolveExerciseFocusAreas(exercise);
+  return {
+    primaryFocusAreas: primaryFocusAreas.length > 0 ? primaryFocusAreas : derived.primaryFocusAreas,
+    primaryTargetAreas: exercise.primaryTargetAreas === undefined ? derived.primaryTargetAreas : primaryTargetAreas,
+    secondaryFocusAreas: exercise.secondaryFocusAreas === undefined ? derived.secondaryFocusAreas : secondaryFocusAreas,
+    secondaryTargetAreas: exercise.secondaryTargetAreas === undefined ? derived.secondaryTargetAreas : secondaryTargetAreas,
+  };
+}
+
+function resolveRowFocusAreas(row: typeof importRowValidator.type) {
+  const primaryFocusAreas = normalizeExerciseFocusAreas(row.primaryFocusAreas);
+  const secondaryFocusAreas = normalizeExerciseFocusAreas(row.secondaryFocusAreas);
+  const primaryTargetAreas = normalizeExerciseTargetAreas(row.primaryTargetAreas);
+  const secondaryTargetAreas = normalizeExerciseTargetAreas(row.secondaryTargetAreas);
+
+  if (primaryFocusAreas.length > 0) {
+    return { primaryFocusAreas, primaryTargetAreas, secondaryFocusAreas, secondaryTargetAreas };
+  }
+
+  return resolveExerciseFocusAreas(row);
 }
 
 function matchesAnyArrayFilter(values: string[], filters: string[]) {
@@ -372,6 +508,19 @@ function matchesAnyArrayFilter(values: string[], filters: string[]) {
 
   const normalizedValues = new Set(values.map(value => value.toLowerCase()));
   return filters.some(filter => normalizedValues.has(filter));
+}
+
+function matchesBodyAreaFilter(
+  areas: ReturnType<typeof resolveStoredFocusAreas>,
+  selectedFocusAreas: string[],
+  selectedTargetAreas: string[],
+) {
+  if (selectedFocusAreas.length === 0 && selectedTargetAreas.length === 0) {
+    return true;
+  }
+
+  return matchesAnyArrayFilter(areas.primaryFocusAreas, selectedFocusAreas)
+    || matchesAnyArrayFilter(areas.primaryTargetAreas, selectedTargetAreas);
 }
 
 function normalizeMultiFilters(values: string[] | null | undefined) {
@@ -390,6 +539,31 @@ function normalizeMultiFilters(values: string[] | null | undefined) {
 
 function collectFilterOptions(values: string[]) {
   return Array.from(new Set(values)).sort((left, right) => left.localeCompare(right));
+}
+
+function collectFocusAreaOptions(exercises: SupportedExercise[]) {
+  const availableAreas = new Set(exercises.flatMap(exercise => resolveStoredFocusAreas(exercise).primaryFocusAreas));
+  return exerciseFocusAreas
+    .filter(area => availableAreas.has(area))
+    .map(area => ({
+      label: exerciseFocusAreaLabels[area],
+      value: area,
+    }));
+}
+
+function collectTargetAreaOptions(exercises: SupportedExercise[]) {
+  const availableAreas = new Set(exercises.flatMap(exercise => resolveStoredFocusAreas(exercise).primaryTargetAreas));
+  return exerciseTargetAreas
+    .filter(area => availableAreas.has(area))
+    .map(area => ({
+      label: exerciseTargetAreaLabels[area],
+      parentFocusAreas: exerciseTargetAreaParents[area],
+      value: area,
+    }));
+}
+
+function arraysEqual(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function getSearchPriority(
@@ -416,14 +590,28 @@ function getQueryMatchRank(exercise: SupportedExercise, queryText: string): numb
     return 0;
   }
 
+  const targetAreaQuery = getTargetAreaQuery(query);
+  if (targetAreaQuery) {
+    return resolveStoredFocusAreas(exercise).primaryTargetAreas.includes(targetAreaQuery) ? 2 : null;
+  }
+  const focusAreaQuery = getFocusAreaQuery(query);
+  if (focusAreaQuery) {
+    return resolveStoredFocusAreas(exercise).primaryFocusAreas.includes(focusAreaQuery) ? 2 : null;
+  }
+
   const primaryValues = [
     exercise.name,
     ...exercise.aliases,
     exercise.exerciseId,
     exercise.canonicalFamily,
   ].filter(Boolean);
+  const focusAreas = resolveStoredFocusAreas(exercise);
   const metadataValues = [
     exercise.exerciseClass,
+    ...focusAreas.primaryFocusAreas,
+    ...focusAreas.primaryFocusAreas.map(area => exerciseFocusAreaLabels[area]),
+    ...focusAreas.primaryTargetAreas,
+    ...focusAreas.primaryTargetAreas.map(area => exerciseTargetAreaLabels[area]),
     ...exercise.mainMuscleGroups,
     ...exercise.secondaryMuscleGroups,
     ...exercise.equipment,
@@ -458,6 +646,49 @@ function getQueryMatchRank(exercise: SupportedExercise, queryText: string): numb
   if (hasSearchMatch([exercise.searchText], query, 'includes')) {
     return 7;
   }
+
+  return null;
+}
+
+function getFocusAreaQuery(query: SearchQuery): ExerciseFocusArea | null {
+  const normalized = query.normalized;
+
+  if (['ab', 'abs', 'core', 'abdominal', 'abdominals', 'abs core'].includes(normalized)) return 'abs-core';
+  if (['arm', 'arms'].includes(normalized)) return 'arms';
+  if (['back'].includes(normalized)) return 'back';
+  if (['cardio', 'conditioning'].includes(normalized)) return 'cardio';
+  if (['chest'].includes(normalized)) return 'chest';
+  if (['full body', 'fullbody', 'full-body'].includes(normalized)) return 'full-body';
+  if (['grip'].includes(normalized)) return 'grip';
+  if (['leg', 'legs', 'lower body', 'lower-body'].includes(normalized)) return 'legs';
+  if (['mobility'].includes(normalized)) return 'mobility';
+  if (['shoulder', 'shoulders'].includes(normalized)) return 'shoulders';
+
+  return null;
+}
+
+function getTargetAreaQuery(query: SearchQuery): ExerciseTargetArea | null {
+  const normalized = query.normalized;
+
+  if (['ab', 'abs', 'abdominal', 'abdominals'].includes(normalized)) return 'abs';
+  if (['adductor', 'adductors', 'inner thigh', 'inner thighs'].includes(normalized)) return 'adductors';
+  if (['bicep', 'biceps'].includes(normalized)) return 'biceps';
+  if (['calf', 'calves'].includes(normalized)) return 'calves';
+  if (['pec', 'pecs'].includes(normalized)) return 'chest';
+  if (['core stability', 'stability'].includes(normalized)) return 'core-stability';
+  if (['forearm', 'forearms', 'wrist', 'wrists'].includes(normalized)) return 'forearms-wrists';
+  if (['front delt', 'front delts', 'front shoulder'].includes(normalized)) return 'front-delts';
+  if (['hamstring', 'hamstrings'].includes(normalized)) return 'hamstrings';
+  if (['lat', 'lats'].includes(normalized)) return 'lats';
+  if (['lower back', 'spinal erectors', 'erectors'].includes(normalized)) return 'lower-back';
+  if (['neck'].includes(normalized)) return 'neck';
+  if (['oblique', 'obliques'].includes(normalized)) return 'obliques';
+  if (['quad', 'quads', 'quadriceps'].includes(normalized)) return 'quads';
+  if (['rear delt', 'rear delts', 'rear shoulder'].includes(normalized)) return 'rear-delts';
+  if (['side delt', 'side delts', 'lateral delt', 'lateral delts'].includes(normalized)) return 'side-delts';
+  if (['trap', 'traps', 'trapezius'].includes(normalized)) return 'traps';
+  if (['tricep', 'triceps'].includes(normalized)) return 'triceps';
+  if (['upper back', 'mid back'].includes(normalized)) return 'upper-back';
 
   return null;
 }

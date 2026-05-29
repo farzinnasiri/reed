@@ -14,9 +14,8 @@ import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { CreateGoalSheet } from './profile/goals-surface';
-import { ProgressRow, getProgressRatio, getProgressSlices } from './goals-home-card';
+import { ProgressRow, getProgressRatio, getProgressSlices, type TrainingTarget } from './target-progress';
 
-type TrainingTarget = NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number];
 type StatusFilter = 'active' | 'completed' | 'missed';
 type SortOrder = 'due' | 'most' | 'newest';
 

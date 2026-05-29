@@ -4,7 +4,7 @@ ENV_FILE := .env.$(ENV)
 CONVEX_TARGET := $(if $(filter prod production,$(ENV)),prod,dev)
 EAS_ENV := $(if $(filter prod production,$(ENV)),production,development)
 
-.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push catalog-import env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
+.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
 
 help:
 	@echo "make install           # npm install"
@@ -19,7 +19,6 @@ help:
 	@echo "make android-dev-client # development client APK using .env.dev values"
 	@echo "make android-arm-dev   # arm64 APK build using .env.dev values"
 	@echo "make android-arm-prod  # arm64 APK build using .env.prod values"
-	@echo "make catalog-import ENV=dev|prod"
 	@echo "make env-show ENV=dev|prod"
 
 env-check:
@@ -92,6 +91,3 @@ android-arm-prod:
 	@$(MAKE) eas-env-sync ENV=prod
 	@set -a; source ".env.prod"; set +a; \
 	REED_ENV_FILE=".env.prod" npx eas-cli build -p android -e arm64Prod
-
-catalog-import:
-	npm run catalog:import -- --deployment "$(CONVEX_TARGET)"

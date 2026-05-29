@@ -39,7 +39,16 @@ export const BASE_ONBOARDING_STEPS: readonly OnboardingBaseStep[] = [
   'review',
 ] as const;
 
-export type BodyType = 'skinny' | 'skinny_fat' | 'bulky' | 'high_fat' | 'athletic';
+export type BodyType =
+  | 'very_lean'
+  | 'lean'
+  | 'average_lean'
+  | 'soft_middle'
+  | 'average'
+  | 'high_fat'
+  | 'larger_high_fat'
+  | 'muscular_solid'
+  | 'athletic_muscular';
 export type GenderIdentity = 'male' | 'female' | 'nonbinary' | 'prefer_not_to_say';
 export type DailyMovement = 'mostly_sitting' | 'on_feet' | 'walks_a_lot' | 'physical_job' | 'restless';
 export type IdleMovement = 'mostly_still' | 'fidget_sometimes' | 'always_moving';

@@ -891,11 +891,15 @@ function buildProfileContextAnchors(trainingProfile: Doc<'trainingProfiles'>) {
 
 function formatBodyType(value: string) {
   const labels: Record<string, string> = {
-    athletic: 'athletic build',
-    bulky: 'bigger build',
+    athletic_muscular: 'athletic muscular starting point',
+    average: 'average starting point',
+    average_lean: 'average lean starting point',
     high_fat: 'higher body fat',
-    skinny: 'lean build',
-    skinny_fat: 'lean-with-belly-fat',
+    larger_high_fat: 'larger higher-body-fat starting point',
+    lean: 'lean starting point',
+    muscular_solid: 'muscular solid starting point',
+    soft_middle: 'soft-middle starting point',
+    very_lean: 'very lean starting point',
   };
   return labels[value] ?? value.replace(/_/g, ' ');
 }

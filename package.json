@@ -11,8 +11,7 @@
     "doctor": "npx expo-doctor",
     "convex:dev": "convex dev",
     "convex:codegen": "convex codegen",
-    "convex:deploy": "convex deploy",
-    "catalog:import": "tsx scripts/import-exercise-catalog.ts"
+    "convex:deploy": "convex deploy"
   },
   "dependencies": {
     "@better-auth/expo": "^1.6.11",

@@ -11,7 +11,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-surface.styles';
-import type { CatalogItem } from './workout-surface.types';
+import type { CatalogItem, FilterOption } from './workout-surface.types';
 import { useAddExerciseSearchSession, type AddExerciseFilterSectionKey } from './use-add-exercise-search-session';
 
 type AddExerciseSheetProps = {
@@ -64,26 +64,32 @@ export function AddExerciseSheet({
     selectedEquipment,
     selectedExerciseIds,
     selectedExerciseIdsSet,
-    selectedMuscleGroups,
+    selectedFocusAreas,
+    selectedTargetAreas,
     setActiveFilterSection,
     setEquipmentSearchText,
     setMuscleSearchText,
     setSearchText,
     setSelectedEquipment,
-    setSelectedMuscleGroups,
+    setSelectedFocusAreas,
+    setSelectedTargetAreas,
     toggleSelectedExercise,
   } = useAddExerciseSearchSession(isOpen);
   const [isSheetMounted, setIsSheetMounted] = useState(isOpen);
   const [isFilterSheetOpen, setIsFilterSheetOpen] = useState(false);
   const [isFilterSheetMounted, setIsFilterSheetMounted] = useState(false);
-  const [draftMuscleGroups, setDraftMuscleGroups] = useState<string[]>([]);
+  const [draftFocusAreas, setDraftFocusAreas] = useState<string[]>([]);
+  const [draftTargetAreas, setDraftTargetAreas] = useState<string[]>([]);
   const [draftEquipment, setDraftEquipment] = useState<string[]>([]);
+  const [expandedBodyAreas, setExpandedBodyAreas] = useState<string[]>([]);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Partial<Record<Id<'exerciseCatalog'>, boolean>>>({});
-  const draftFilterCount = draftMuscleGroups.length + draftEquipment.length;
+  const draftFilterCount = draftFocusAreas.length + draftTargetAreas.length + draftEquipment.length;
   const draftFilterSectionOptions = useMemo(
     () => [
       {
-        label: draftMuscleGroups.length > 0 ? `Muscles (${draftMuscleGroups.length})` : 'Muscles',
+        label: draftFocusAreas.length + draftTargetAreas.length > 0
+          ? `Body (${draftFocusAreas.length + draftTargetAreas.length})`
+          : 'Body',
         value: 'muscles' as const,
       },
       {
@@ -91,15 +97,15 @@ export function AddExerciseSheet({
         value: 'equipment' as const,
       },
     ],
-    [draftEquipment.length, draftMuscleGroups.length],
+    [draftEquipment.length, draftFocusAreas.length, draftTargetAreas.length],
   );
-  const filteredMuscleOptions = useMemo(
-    () => filterOptions(effectiveData?.muscleGroupOptions ?? [], muscleSearchText),
-    [effectiveData?.muscleGroupOptions, muscleSearchText],
+  const equipmentOptions = useMemo(
+    () => (effectiveData?.equipmentOptions ?? []).map(value => ({ label: value, value })),
+    [effectiveData?.equipmentOptions],
   );
   const filteredEquipmentOptions = useMemo(
-    () => filterOptions(effectiveData?.equipmentOptions ?? [], equipmentSearchText),
-    [effectiveData?.equipmentOptions, equipmentSearchText],
+    () => filterOptions(equipmentOptions, equipmentSearchText),
+    [equipmentOptions, equipmentSearchText],
   );
   useEffect(() => {
     if (isOpen) {
@@ -119,8 +125,10 @@ export function AddExerciseSheet({
 
       setIsSheetMounted(false);
       setFavoriteOverrides({});
-      setDraftMuscleGroups([]);
+      setDraftFocusAreas([]);
+      setDraftTargetAreas([]);
       setDraftEquipment([]);
+      setExpandedBodyAreas([]);
       resetSearchSession();
     });
   }, [isOpen, sheetProgress]);
@@ -166,8 +174,10 @@ export function AddExerciseSheet({
 
   function openFilterSheet() {
     blurActiveElementOnWeb();
-    setDraftMuscleGroups(selectedMuscleGroups);
+    setDraftFocusAreas(selectedFocusAreas);
+    setDraftTargetAreas(selectedTargetAreas);
     setDraftEquipment(selectedEquipment);
+    setExpandedBodyAreas(getExpandedBodyAreas(selectedFocusAreas, selectedTargetAreas, effectiveData?.targetAreaOptions ?? []));
     setMuscleSearchText('');
     setEquipmentSearchText('');
     setIsFilterSheetOpen(true);
@@ -180,7 +190,8 @@ export function AddExerciseSheet({
 
   function applyFilters() {
     blurActiveElementOnWeb();
-    setSelectedMuscleGroups(draftMuscleGroups);
+    setSelectedFocusAreas(draftFocusAreas);
+    setSelectedTargetAreas(draftTargetAreas);
     setSelectedEquipment(draftEquipment);
     setIsFilterSheetOpen(false);
   }
@@ -235,11 +246,11 @@ export function AddExerciseSheet({
               <ReedText variant="section">Add exercise</ReedText>
               <View style={styles.sheetHeaderActions}>
                 <View
-                  pointerEvents={selectedCount > 0 ? 'auto' : 'none'}
                   style={[
                     styles.bulkAddHeaderSlot,
                     {
                       opacity: selectedCount > 0 ? 1 : 0,
+                      pointerEvents: selectedCount > 0 ? 'auto' : 'none',
                     },
                   ]}
                 >
@@ -315,16 +326,25 @@ export function AddExerciseSheet({
               <View style={styles.sheetBottomDock}>
                 <View style={styles.filterSummaryRow}>
                   <ReedText numberOfLines={1} style={styles.filterSummaryLine} tone="muted" variant="caption">
-                    {buildFilterSummary({ selectedEquipment, selectedMuscleGroups })}
+                    {buildFilterSummary({
+                      focusOptions: effectiveData?.focusAreaOptions ?? [],
+                      selectedEquipment,
+                      selectedFocusAreas,
+                      selectedTargetAreas,
+                      targetOptions: effectiveData?.targetAreaOptions ?? [],
+                    })}
                   </ReedText>
                   <Pressable
                     disabled={activeFilterCount === 0}
                     onPress={() => {
                       blurActiveElementOnWeb();
-                      setSelectedMuscleGroups([]);
+                      setSelectedFocusAreas([]);
+                      setSelectedTargetAreas([]);
                       setSelectedEquipment([]);
-                      setDraftMuscleGroups([]);
+                      setDraftFocusAreas([]);
+                      setDraftTargetAreas([]);
                       setDraftEquipment([]);
+                      setExpandedBodyAreas([]);
                     }}
                     style={({ pressed }) => [styles.filterSummaryClear, getTapScaleStyle(pressed, activeFilterCount === 0)]}
                   >
@@ -446,17 +466,21 @@ export function AddExerciseSheet({
                   style={styles.filterSheetScroll}
                 >
                   {activeFilterSection === 'muscles' ? (
-                    <FilterSection
-                      emptyLabel="No muscles found."
-                      onClear={() => setDraftMuscleGroups([])}
+                    <BodyAreaTreeSection
+                      focusOptions={effectiveData?.focusAreaOptions ?? effectiveData?.muscleGroupOptions ?? []}
+                      onClear={() => {
+                        setDraftFocusAreas([]);
+                        setDraftTargetAreas([]);
+                      }}
+                      onToggleExpanded={value => toggleFilterValue(value, setExpandedBodyAreas)}
+                      onToggleFocus={value => toggleDraftFocusArea(value, setDraftFocusAreas, setDraftTargetAreas, effectiveData?.targetAreaOptions ?? [])}
+                      onToggleTarget={value => toggleDraftTargetArea(value, setDraftFocusAreas, setDraftTargetAreas, effectiveData?.targetAreaOptions ?? [])}
                       onSearchChange={setMuscleSearchText}
-                      onToggle={value => toggleFilterValue(value, setDraftMuscleGroups)}
-                      options={filteredMuscleOptions}
+                      expandedFocusAreas={expandedBodyAreas}
                       searchText={muscleSearchText}
-                      selectedCount={draftMuscleGroups.length}
-                      subtitle="Pick one or more muscle groups."
-                      title="Muscles"
-                      valueIsSelected={value => draftMuscleGroups.includes(value)}
+                      selectedFocusAreas={draftFocusAreas}
+                      selectedTargetAreas={draftTargetAreas}
+                      targetOptions={effectiveData?.targetAreaOptions ?? []}
                     />
                   ) : null}
 
@@ -486,7 +510,13 @@ export function AddExerciseSheet({
                   ]}
                 >
                   <ReedText numberOfLines={2} style={styles.filterSheetFooterSummary} tone="muted" variant="caption">
-                    {buildFilterSummary({ selectedEquipment: draftEquipment, selectedMuscleGroups: draftMuscleGroups })}
+                    {buildFilterSummary({
+                      focusOptions: effectiveData?.focusAreaOptions ?? [],
+                      selectedEquipment: draftEquipment,
+                      selectedFocusAreas: draftFocusAreas,
+                      selectedTargetAreas: draftTargetAreas,
+                      targetOptions: effectiveData?.targetAreaOptions ?? [],
+                    })}
                   </ReedText>
 
                   <View style={styles.filterSheetFooterActions}>
@@ -494,8 +524,10 @@ export function AddExerciseSheet({
                       disabled={draftFilterCount === 0}
                       onPress={() => {
                         blurActiveElementOnWeb();
-                        setDraftMuscleGroups([]);
+                        setDraftFocusAreas([]);
+                        setDraftTargetAreas([]);
                         setDraftEquipment([]);
+                        setExpandedBodyAreas([]);
                         setMuscleSearchText('');
                         setEquipmentSearchText('');
                       }}
@@ -586,7 +618,7 @@ function CatalogSection({
                     {item.name}
                   </ReedText>
                   <ReedText numberOfLines={1} tone="muted" variant="caption">
-                    {[item.exerciseClass, item.mainMuscleGroups[0], item.equipment[0]].filter(Boolean).join(' · ')}
+                    {[item.exerciseClass, item.primaryTargetAreaLabels[0] ?? item.primaryFocusAreaLabels[0] ?? item.mainMuscleGroups[0], item.equipment[0]].filter(Boolean).join(' · ')}
                   </ReedText>
                 </View>
               </Pressable>
@@ -636,7 +668,7 @@ function FilterSection({
   onClear: () => void;
   onSearchChange: (value: string) => void;
   onToggle: (value: string) => void;
-  options: string[];
+  options: FilterOption[];
   searchText: string;
   selectedCount: number;
   subtitle: string;
@@ -698,12 +730,12 @@ function FilterSection({
           </ReedText>
         ) : (
           options.map(option => {
-            const isSelected = valueIsSelected(option);
+            const isSelected = valueIsSelected(option.value);
 
             return (
               <Pressable
-                key={option}
-                onPress={() => onToggle(option)}
+                key={option.value}
+                onPress={() => onToggle(option.value)}
                 style={({ pressed }) => [
                   styles.filterOptionRow,
                   {
@@ -714,7 +746,7 @@ function FilterSection({
                 ]}
               >
                 <ReedText numberOfLines={1} style={styles.filterOptionLabel} variant="body">
-                  {option}
+                  {option.label}
                 </ReedText>
                 <Ionicons
                   color={String(isSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
@@ -730,13 +762,184 @@ function FilterSection({
   );
 }
 
-function filterOptions(options: string[], query: string) {
+function BodyAreaTreeSection({
+  expandedFocusAreas,
+  focusOptions,
+  onClear,
+  onSearchChange,
+  onToggleExpanded,
+  onToggleFocus,
+  onToggleTarget,
+  searchText,
+  selectedFocusAreas,
+  selectedTargetAreas,
+  targetOptions,
+}: {
+  expandedFocusAreas: string[];
+  focusOptions: FilterOption[];
+  onClear: () => void;
+  onSearchChange: (value: string) => void;
+  onToggleExpanded: (value: string) => void;
+  onToggleFocus: (value: string) => void;
+  onToggleTarget: (value: string) => void;
+  searchText: string;
+  selectedFocusAreas: string[];
+  selectedTargetAreas: string[];
+  targetOptions: FilterOption[];
+}) {
+  const { theme } = useReedTheme();
+  const glassControls = getGlassControlTokens(theme);
+  const selectedCount = selectedFocusAreas.length + selectedTargetAreas.length;
+  const visibleRows = buildBodyAreaTreeRows(focusOptions, targetOptions, searchText);
+  const queryText = searchText.trim();
+
+  return (
+    <View style={styles.filterSectionBlock}>
+      <View style={styles.filterSectionHeaderRow}>
+        <View style={styles.filterSectionHeaderCopy}>
+          <ReedText variant="bodyStrong">Body area</ReedText>
+          <ReedText tone="muted" variant="caption">
+            Pick a broad area or open it for a narrower choice.
+          </ReedText>
+        </View>
+        <Pressable
+          disabled={selectedCount === 0}
+          onPress={onClear}
+          style={({ pressed }) => [getTapScaleStyle(pressed, selectedCount === 0)]}
+        >
+          <ReedText tone={selectedCount === 0 ? 'muted' : 'default'} variant="caption">
+            Clear
+          </ReedText>
+        </Pressable>
+      </View>
+
+      <View
+        style={[
+          styles.filterSearchShell,
+          {
+            backgroundColor: glassControls.shellBackgroundColor,
+            borderColor: glassControls.shellBorderColor,
+          },
+        ]}
+      >
+        <Ionicons color={String(theme.colors.textMuted)} name="search" size={14} />
+        <TextInput
+          onChangeText={onSearchChange}
+          placeholder="Find body area"
+          placeholderTextColor={String(theme.colors.textMuted)}
+          style={[
+            styles.filterSearchInput,
+            {
+              color: theme.colors.textPrimary,
+              fontFamily: theme.typography.body.fontFamily,
+            },
+          ]}
+          value={searchText}
+        />
+      </View>
+
+      <View style={styles.filterOptionsList}>
+        {visibleRows.length === 0 ? (
+          <ReedText tone="muted" variant="caption">
+            No body areas found.
+          </ReedText>
+        ) : (
+          visibleRows.map(row => {
+            const isParentSelected = selectedFocusAreas.includes(row.focus.value);
+            const isExpanded = queryText.length > 0 || expandedFocusAreas.includes(row.focus.value);
+            const selectedChildCount = row.visibleChildren.filter(child => selectedTargetAreas.includes(child.value)).length;
+            const childOptions = isExpanded ? row.visibleChildren : [];
+
+            return (
+              <View key={row.focus.value} style={styles.filterTreeGroup}>
+                <View
+                  style={[
+                    styles.filterOptionRow,
+                    {
+                      backgroundColor: isParentSelected ? glassControls.activeBackgroundColor : glassControls.shellBackgroundColor,
+                      borderColor: isParentSelected ? glassControls.activeBorderColor : glassControls.shellBorderColor,
+                    },
+                  ]}
+                >
+                  <Pressable
+                    onPress={() => onToggleFocus(row.focus.value)}
+                    style={({ pressed }) => [styles.filterTreeParentToggle, getTapScaleStyle(pressed)]}
+                  >
+                    <ReedText numberOfLines={1} style={styles.filterOptionLabel} variant="body">
+                      {row.focus.label}
+                    </ReedText>
+                    {selectedChildCount > 0 && !isParentSelected ? (
+                      <ReedText style={styles.filterTreeCount} tone="muted" variant="caption">
+                        {selectedChildCount}
+                      </ReedText>
+                    ) : null}
+                  </Pressable>
+                  {row.hasChildren ? (
+                    <Pressable
+                      onPress={() => onToggleExpanded(row.focus.value)}
+                      style={({ pressed }) => [styles.filterTreeDisclosure, getTapScaleStyle(pressed)]}
+                    >
+                      <Ionicons
+                        color={String(theme.colors.textMuted)}
+                        name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                        size={16}
+                      />
+                    </Pressable>
+                  ) : null}
+                  <Ionicons
+                    color={String(isParentSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
+                    name={isParentSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                    size={18}
+                  />
+                </View>
+
+                {childOptions.length > 0 ? (
+                  <View style={styles.filterTreeChildren}>
+                    {childOptions.map(child => {
+                      const isChildSelected = isParentSelected || selectedTargetAreas.includes(child.value);
+
+                      return (
+                        <Pressable
+                          key={child.value}
+                          onPress={() => onToggleTarget(child.value)}
+                          style={({ pressed }) => [
+                            styles.filterTreeChildRow,
+                            {
+                              backgroundColor: isChildSelected ? glassControls.activeBackgroundColor : glassControls.shellBackgroundColor,
+                              borderColor: isChildSelected ? glassControls.activeBorderColor : glassControls.shellBorderColor,
+                              ...getTapScaleStyle(pressed),
+                            },
+                          ]}
+                        >
+                          <ReedText numberOfLines={1} style={styles.filterOptionLabel} variant="caption">
+                            {child.label}
+                          </ReedText>
+                          <Ionicons
+                            color={String(isChildSelected ? theme.colors.accentPrimary : theme.colors.textMuted)}
+                            name={isChildSelected ? 'checkmark-circle' : 'ellipse-outline'}
+                            size={17}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+              </View>
+            );
+          })
+        )}
+      </View>
+    </View>
+  );
+}
+
+function filterOptions(options: FilterOption[], query: string) {
   const queryText = query.trim().toLowerCase();
   if (!queryText) {
     return options;
   }
 
-  return options.filter(option => option.toLowerCase().includes(queryText));
+  return options.filter(option => option.label.toLowerCase().includes(queryText));
 }
 
 function toggleFilterValue(
@@ -746,6 +949,90 @@ function toggleFilterValue(
   setValues(current =>
     current.includes(value) ? current.filter(existing => existing !== value) : [...current, value],
   );
+}
+
+function toggleDraftFocusArea(
+  value: string,
+  setFocusAreas: (updater: (current: string[]) => string[]) => void,
+  setTargetAreas: (updater: (current: string[]) => string[]) => void,
+  targetOptions: FilterOption[],
+) {
+  setFocusAreas(current => {
+    const isSelected = current.includes(value);
+    const next = isSelected ? current.filter(existing => existing !== value) : [...current, value];
+    setTargetAreas(targets => removeTargetsForFocus(targets, value, targetOptions));
+    return next;
+  });
+}
+
+function toggleDraftTargetArea(
+  value: string,
+  setFocusAreas: (updater: (current: string[]) => string[]) => void,
+  setTargetAreas: (updater: (current: string[]) => string[]) => void,
+  targetOptions: FilterOption[],
+) {
+  const option = targetOptions.find(candidate => candidate.value === value);
+  const parentFocusAreas = option?.parentFocusAreas ?? [];
+
+  setFocusAreas(current => current.filter(focus => !parentFocusAreas.includes(focus)));
+  setTargetAreas(current =>
+    current.includes(value) ? current.filter(existing => existing !== value) : [...current, value],
+  );
+}
+
+function removeTargetsForFocus(targets: string[], focusArea: string, targetOptions: FilterOption[]) {
+  return targets.filter(target => {
+    const option = targetOptions.find(candidate => candidate.value === target);
+    return !(option?.parentFocusAreas?.includes(focusArea) ?? false);
+  });
+}
+
+function getExpandedBodyAreas(
+  selectedFocusAreas: string[],
+  selectedTargetAreas: string[],
+  targetOptions: FilterOption[],
+) {
+  const expanded = new Set(selectedFocusAreas);
+
+  for (const target of selectedTargetAreas) {
+    const option = targetOptions.find(candidate => candidate.value === target);
+    for (const parent of option?.parentFocusAreas ?? []) {
+      expanded.add(parent);
+    }
+  }
+
+  return Array.from(expanded);
+}
+
+function buildBodyAreaTreeRows(focusOptions: FilterOption[], targetOptions: FilterOption[], query: string) {
+  const queryText = query.trim().toLowerCase();
+
+  return focusOptions
+    .map(focus => {
+      const children = targetOptions.filter(option => option.parentFocusAreas?.includes(focus.value));
+      const matchingChildren = queryText.length === 0
+        ? children
+        : children.filter(option => option.label.toLowerCase().includes(queryText));
+      const focusMatches = queryText.length === 0 || focus.label.toLowerCase().includes(queryText);
+      const visibleChildren = queryText.length === 0 || focusMatches ? children : matchingChildren;
+
+      if (!focusMatches && matchingChildren.length === 0) {
+        return null;
+      }
+
+      return {
+        focus,
+        hasChildren: children.length > 0,
+        visibleChildren,
+      };
+    })
+    .filter(isTreeRow);
+}
+
+function isTreeRow(
+  row: { focus: FilterOption; hasChildren: boolean; visibleChildren: FilterOption[] } | null,
+): row is { focus: FilterOption; hasChildren: boolean; visibleChildren: FilterOption[] } {
+  return row !== null;
 }
 
 function getFilterSheetHeight({
@@ -768,18 +1055,31 @@ function getFilterSheetHeight({
 }
 
 function buildFilterSummary({
+  focusOptions,
   selectedEquipment,
-  selectedMuscleGroups,
+  selectedFocusAreas,
+  selectedTargetAreas,
+  targetOptions,
 }: {
+  focusOptions: FilterOption[];
   selectedEquipment: string[];
-  selectedMuscleGroups: string[];
+  selectedFocusAreas: string[];
+  selectedTargetAreas: string[];
+  targetOptions: FilterOption[];
 }) {
-  const musclePart =
-    selectedMuscleGroups.length === 0
-      ? 'Any muscle'
-      : selectedMuscleGroups.length <= 2
-        ? selectedMuscleGroups.join(' + ')
-        : `${selectedMuscleGroups.length} muscles`;
+  const focusLabels = selectedFocusAreas.map(
+    value => focusOptions.find(option => option.value === value)?.label ?? value,
+  );
+  const targetLabels = selectedTargetAreas.map(
+    value => targetOptions.find(option => option.value === value)?.label ?? value,
+  );
+  const focusAndTargetLabels = [...focusLabels, ...targetLabels];
+  const focusPart =
+    focusAndTargetLabels.length === 0
+      ? 'Any body area'
+      : focusAndTargetLabels.length <= 2
+        ? focusAndTargetLabels.join(' + ')
+        : `${focusAndTargetLabels.length} body filters`;
   const equipmentPart =
     selectedEquipment.length === 0
       ? 'Any equipment'
@@ -787,5 +1087,5 @@ function buildFilterSummary({
         ? selectedEquipment.join(' + ')
         : `${selectedEquipment.length} equipment`;
 
-  return `${musclePart} • ${equipmentPart}`;
+  return `${focusPart} • ${equipmentPart}`;
 }
