@@ -54,6 +54,19 @@ type EndedSessionSummary = {
   startedAt: number;
 };
 
+type QuickLogActivity = {
+  _id: Id<'activityLogs'>;
+  exerciseName: string;
+  loggedAt: number;
+  summary: string;
+};
+
+type QuickLogDayGroup = {
+  dayKey: string;
+  latestLoggedAt: number;
+  logs: QuickLogActivity[];
+};
+
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
   const session = useQuery(api.liveSessions.getCurrent, {});
@@ -64,10 +77,12 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [selectedEndedSessionId, setSelectedEndedSessionId] = useState<Id<'liveSessions'> | null>(null);
   const [isEndedInsightsOpen, setIsEndedInsightsOpen] = useState(false);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
+  const [expandedQuickLogDays, setExpandedQuickLogDays] = useState<string[]>([]);
   const endedSessionsPage = useQuery(api.liveSessions.listEndedSummaries, {
     beforeStartedAt: sessionPageBeforeStartedAt ?? undefined,
     limit: 5,
   });
+  const quickLogActivity = useQuery(api.quickLogs.listRecentActivity, { limit: 40 });
   const endedSessionInsights = useQuery(
     api.liveSessionInsights.getForSession,
     selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
@@ -121,6 +136,10 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const restRuntime =
     ((session as { restRuntime?: RestCard | null } | null | undefined)?.restRuntime ?? null) as RestCard | null;
   const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
+  const quickLogDayGroups = useMemo(
+    () => groupQuickLogsByLocalDay((quickLogActivity ?? []) as QuickLogActivity[]),
+    [quickLogActivity],
+  );
   currentRestRemainingRef.current = restRemaining;
   const activeSetEditor = useMemo(() => {
     if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
@@ -878,6 +897,93 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           )}
         </View>
 
+        <View style={styles.startHistory}>
+          <View style={styles.startHistoryHeader}>
+            <ReedText variant="bodyStrong">Quick logs</ReedText>
+          </View>
+          {quickLogActivity === undefined ? (
+            <View style={styles.loadingInline}>
+              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+              <ReedText tone="muted" variant="caption">Loading quick logs.</ReedText>
+            </View>
+          ) : quickLogDayGroups.length > 0 ? (
+            <View style={styles.quickLogDayList}>
+              {quickLogDayGroups.map((group, index) => {
+                const isExpanded = expandedQuickLogDays.includes(group.dayKey);
+                const preview = formatQuickLogDayPreview(group.logs);
+
+                return (
+                  <View
+                    key={group.dayKey}
+                    style={[
+                      styles.quickLogDayBlock,
+                      index < quickLogDayGroups.length - 1
+                        ? { borderBottomColor: theme.colors.borderSoft }
+                        : { borderBottomWidth: 0 },
+                    ]}
+                  >
+                    <Pressable
+                      accessibilityLabel={`${isExpanded ? 'Collapse' : 'Expand'} quick logs from ${formatSessionDate(group.latestLoggedAt)}`}
+                      onPress={() => toggleStringInState(group.dayKey, setExpandedQuickLogDays)}
+                      style={({ pressed }) => [styles.quickLogDayHeader, getTapScaleStyle(pressed)]}
+                    >
+                      <View
+                        style={[
+                          styles.sessionDateMark,
+                          {
+                            backgroundColor: theme.colors.controlFill,
+                            borderColor: theme.colors.controlBorder,
+                          },
+                        ]}
+                      >
+                        <ReedText style={[styles.sessionDateMarkWeekday, { color: theme.colors.textPrimary }]} variant="label">
+                          {formatSessionWeekday(group.latestLoggedAt)}
+                        </ReedText>
+                        <ReedText style={[styles.sessionDateMarkDay, { color: theme.colors.textPrimary }]} variant="section">
+                          {formatSessionDay(group.latestLoggedAt)}
+                        </ReedText>
+                      </View>
+                      <View style={styles.sessionSummaryCopy}>
+                        <View style={styles.sessionSummaryHeader}>
+                          <ReedText numberOfLines={1} style={styles.quickLogDayTitle} variant="bodyStrong">
+                            {group.logs.length} {group.logs.length === 1 ? 'quick log' : 'quick logs'}
+                          </ReedText>
+                        </View>
+                        <ReedText numberOfLines={2} style={styles.sessionExercisePreview} tone="muted" variant="caption">
+                          {preview}
+                        </ReedText>
+                      </View>
+                      <View style={styles.sessionOpenIcon}>
+                        <Ionicons color={String(theme.colors.textMuted)} name={isExpanded ? 'chevron-up' : 'chevron-down'} size={17} />
+                      </View>
+                    </Pressable>
+
+                    {isExpanded ? (
+                      <View style={styles.quickLogEntries}>
+                        {group.logs.map(logEntry => (
+                          <View key={logEntry._id} style={styles.quickLogEntryRow}>
+                            <View style={[styles.quickLogEntryDot, { backgroundColor: theme.colors.textMuted }]} />
+                            <View style={styles.quickLogEntryCopy}>
+                              <ReedText numberOfLines={1} variant="caption">
+                                {logEntry.exerciseName}
+                              </ReedText>
+                              <ReedText numberOfLines={1} tone="muted" variant="caption">
+                                {logEntry.summary}
+                              </ReedText>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : (
+            <ReedText tone="muted" variant="caption">Quick logs will appear here.</ReedText>
+          )}
+        </View>
+
         {errorMessage ? (
           <ReedText style={styles.inlineError} tone="danger">
             {errorMessage}
@@ -1034,6 +1140,39 @@ function formatSessionExercisePreview(session: EndedSessionSummary) {
   const remaining = Math.max(0, session.exerciseCount - visibleExercises.length);
   if (visibleExercises.length === 0) return 'No exercises logged';
   return `${visibleExercises.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
+}
+
+function groupQuickLogsByLocalDay(logs: QuickLogActivity[]): QuickLogDayGroup[] {
+  const groups = new Map<string, QuickLogActivity[]>();
+
+  for (const logEntry of logs) {
+    const dayKey = getLocalDayKey(logEntry.loggedAt);
+    groups.set(dayKey, [...(groups.get(dayKey) ?? []), logEntry]);
+  }
+
+  return Array.from(groups.entries()).map(([dayKey, dayLogs]) => ({
+    dayKey,
+    latestLoggedAt: dayLogs[0]?.loggedAt ?? 0,
+    logs: dayLogs,
+  }));
+}
+
+function getLocalDayKey(timestamp: number) {
+  const date = new Date(timestamp);
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+}
+
+function formatQuickLogDayPreview(logs: QuickLogActivity[]) {
+  const visibleLogs = logs.slice(0, 2).map(logEntry => logEntry.exerciseName);
+  const remaining = Math.max(0, logs.length - visibleLogs.length);
+  return `${visibleLogs.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
+}
+
+function toggleStringInState(
+  value: string,
+  setValues: (updater: (current: string[]) => string[]) => void,
+) {
+  setValues(current => (current.includes(value) ? current.filter(existing => existing !== value) : [...current, value]));
 }
 
 function formatSessionDuration(startedAt: number, endedAt: number) {

@@ -6,6 +6,7 @@ import { requireViewerProfile } from './profiles';
 import { buildQuickLogMetrics } from '../domains/workout/quick-log-intake';
 import { resolveExerciseFocusAreas } from '../domains/workout/exercise-focus';
 import { insertQuickLogActivity } from './workout/setLogging';
+import { summarizeMetrics } from '../domains/workout/recipes';
 
 type PresetSeed = {
   key: string;
@@ -80,6 +81,34 @@ export const listPresets = query({
       label: preset.label,
       sortOrder: preset.sortOrder,
     }));
+  },
+});
+
+export const listRecentActivity = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const limit = Math.max(1, Math.min(args.limit ?? 40, 80));
+    const logs = await ctx.db
+      .query('activityLogs')
+      .withIndex('by_profile_id_and_source_and_logged_at', q =>
+        q.eq('profileId', profile._id).eq('source', 'quick_log'),
+      )
+      .order('desc')
+      .take(limit);
+
+    return await Promise.all(
+      logs.map(async logEntry => {
+        const exercise = await ctx.db.get(logEntry.exerciseCatalogId);
+
+        return {
+          _id: logEntry._id,
+          exerciseName: exercise?.name ?? 'Quick log',
+          loggedAt: logEntry.loggedAt,
+          summary: summarizeMetrics(logEntry.recipeKey, logEntry.metrics),
+        };
+      }),
+    );
   },
 });
 

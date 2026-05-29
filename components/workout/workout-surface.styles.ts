@@ -208,6 +208,46 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 22,
   },
+  quickLogDayList: {
+    gap: 0,
+  },
+  quickLogDayBlock: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+  },
+  quickLogDayHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 62,
+  },
+  quickLogDayTitle: {
+    flexShrink: 1,
+    fontSize: 19,
+    lineHeight: 23,
+    minWidth: 0,
+  },
+  quickLogEntries: {
+    gap: 10,
+    paddingLeft: 72,
+    paddingTop: 12,
+  },
+  quickLogEntryRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  quickLogEntryDot: {
+    borderRadius: 3,
+    height: 6,
+    marginTop: 6,
+    width: 6,
+  },
+  quickLogEntryCopy: {
+    flex: 1,
+    gap: 1,
+    minWidth: 0,
+  },
   timelinePage: {
     flex: 1,
     gap: 16,
