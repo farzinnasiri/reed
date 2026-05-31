@@ -23,6 +23,7 @@ export type TargetEvaluationSubject = {
   endsAt: number;
   rule: TargetRule;
   startsAt: number;
+  timeZone?: string;
 };
 
 export type TargetEvidenceLog = {
@@ -85,8 +86,7 @@ export function evaluateTargetProgress(subject: TargetEvaluationSubject, evidenc
     return evaluatePeriodQuota(subject, logs, now);
   }
 
-  const values = logs.map(log => metricValue(rule, log)).filter(value => value > 0);
-  const current = rule.cadence === 'once' ? Math.max(0, ...values) : values.reduce((sum, value) => sum + value, 0);
+  const current = aggregateMetricValue(rule, logs, rule.cadence, subject.timeZone);
   const completed = current >= rule.threshold;
   return {
     completed,
@@ -97,15 +97,19 @@ export function evaluateTargetProgress(subject: TargetEvaluationSubject, evidenc
 
 function evaluatePeriodQuota(subject: TargetEvaluationSubject, logs: TargetEvidenceLog[], now: number): TargetEvaluationResult {
   const rule = subject.rule;
-  const periods = buildPeriods(subject.startsAt, subject.endsAt, rule.cadence === 'weekly' ? 'weekly' : 'daily', rule.periodCount);
+  const periods = buildPeriods({
+    cadence: rule.cadence === 'weekly' ? 'weekly' : 'daily',
+    endsAt: subject.endsAt,
+    periodCount: rule.periodCount,
+    startsAt: subject.startsAt,
+    timeZone: subject.timeZone,
+  });
   let satisfied = 0;
   let currentPeriodValue = 0;
 
   for (const period of periods) {
-    const value = logs
-      .filter(log => log.loggedAt >= period.startAt && log.loggedAt <= period.endAt)
-      .map(log => metricValue(rule, log))
-      .reduce((sum, item) => sum + item, 0);
+    const periodLogs = logs.filter(log => log.loggedAt >= period.startAt && log.loggedAt <= period.endAt);
+    const value = aggregateMetricValue(rule, periodLogs, 'total', subject.timeZone);
 
     if (now >= period.startAt && now <= period.endAt) currentPeriodValue = value;
     if (value >= rule.threshold) satisfied += 1;
@@ -165,17 +169,58 @@ function metricValue(rule: TargetRule, log: TargetEvidenceLog) {
   }
 }
 
+function aggregateMetricValue(rule: TargetRule, logs: TargetEvidenceLog[], cadence: TargetRule['cadence'], timeZone?: string) {
+  if (rule.metricKind === 'sessionCount') {
+    return countActiveDays(logs, timeZone);
+  }
+
+  const values = logs.map(log => metricValue(rule, log)).filter(value => value > 0);
+  return cadence === 'once' || isBestEffortMetric(rule.metricKind)
+    ? Math.max(0, ...values)
+    : values.reduce((sum, value) => sum + value, 0);
+}
+
+function countActiveDays(logs: TargetEvidenceLog[], timeZone?: string) {
+  const days = new Set(logs.map(log => getLocalDayKey(log.loggedAt, timeZone)));
+  return days.size;
+}
+
+function isBestEffortMetric(metricKind: TargetRule['metricKind']) {
+  return metricKind === 'exerciseMaxLoadKg' ||
+    metricKind === 'exerciseBestHoldSeconds' ||
+    metricKind === 'cardioDistanceWithinDuration';
+}
+
 function totalReps(log: TargetEvidenceLog) {
   return (log.metrics.reps ?? 0) + (log.metrics.leftReps ?? 0) + (log.metrics.rightReps ?? 0);
 }
 
-function buildPeriods(startsAt: number, endsAt: number, cadence: 'daily' | 'weekly', periodCount?: number) {
+function buildPeriods({
+  cadence,
+  endsAt,
+  periodCount,
+  startsAt,
+  timeZone,
+}: {
+  cadence: 'daily' | 'weekly';
+  endsAt: number;
+  periodCount?: number;
+  startsAt: number;
+  timeZone?: string;
+}) {
   const length = cadence === 'daily' ? 24 * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000;
   const max = periodCount ?? Math.max(1, Math.ceil((endsAt - startsAt) / length));
-  return Array.from({ length: max }, (_, index) => ({
-    startAt: startsAt + index * length,
-    endAt: Math.min(endsAt, startsAt + (index + 1) * length - 1),
-  }));
+  const firstStart = cadence === 'daily'
+    ? startOfLocalDay(startsAt, timeZone)
+    : startOfLocalWeek(startsAt, timeZone);
+
+  return Array.from({ length: max }, (_, index) => {
+    const startAt = firstStart + index * length;
+    return {
+      startAt,
+      endAt: Math.min(endsAt, startAt + length - 1),
+    };
+  });
 }
 
 function progress(required: number, current: number, currentLabel: string, requiredLabel: string, label: string): TargetProgressSummary {
@@ -213,4 +258,76 @@ function goalScopeLabel(cadence: TargetRule['cadence']) {
   if (cadence === 'daily') return 'today';
   if (cadence === 'weekly') return 'this week';
   return 'total';
+}
+
+function startOfLocalWeek(timestamp: number, timeZone?: string) {
+  const normalizedTimeZone = normalizeTimeZone(timeZone);
+  const parts = getLocalParts(timestamp, normalizedTimeZone);
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: normalizedTimeZone, weekday: 'short' }).format(new Date(timestamp));
+  const dayIndex = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(weekday);
+  const mondayOffset = dayIndex === 0 ? 6 : Math.max(0, dayIndex - 1);
+  return localTimeToUtcMs({ ...parts, hour: 0, minute: 0, second: 0, millisecond: 0 }, normalizedTimeZone) - mondayOffset * 24 * 60 * 60 * 1000;
+}
+
+function startOfLocalDay(timestamp: number, timeZone?: string) {
+  const normalizedTimeZone = normalizeTimeZone(timeZone);
+  const parts = getLocalParts(timestamp, normalizedTimeZone);
+  return localTimeToUtcMs({ ...parts, hour: 0, minute: 0, second: 0, millisecond: 0 }, normalizedTimeZone);
+}
+
+function getLocalParts(timestamp: number, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23',
+    minute: '2-digit',
+    month: '2-digit',
+    second: '2-digit',
+    timeZone,
+    year: 'numeric',
+  });
+  const parts = Object.fromEntries(formatter.formatToParts(new Date(timestamp)).map(part => [part.type, part.value]));
+  return {
+    day: Number(parts.day),
+    hour: Number(parts.hour),
+    millisecond: 0,
+    minute: Number(parts.minute),
+    month: Number(parts.month),
+    second: Number(parts.second),
+    year: Number(parts.year),
+  };
+}
+
+function localTimeToUtcMs(parts: ReturnType<typeof getLocalParts>, timeZone: string) {
+  let guess = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond);
+  for (let index = 0; index < 2; index += 1) {
+    const offset = getTimeZoneOffsetMs(guess, timeZone);
+    guess = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond) - offset;
+  }
+  return guess;
+}
+
+function getTimeZoneOffsetMs(timestamp: number, timeZone: string) {
+  const parts = getLocalParts(timestamp, timeZone);
+  const localAsUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond);
+  return localAsUtc - timestamp;
+}
+
+function normalizeTimeZone(timeZone?: string) {
+  if (!timeZone || timeZone.length > 80) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return timeZone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+function getLocalDayKey(timestamp: number, timeZone?: string) {
+  const parts = getLocalParts(timestamp, normalizeTimeZone(timeZone));
+  return `${parts.year}-${pad2(parts.month)}-${pad2(parts.day)}`;
+}
+
+function pad2(value: number) {
+  return String(value).padStart(2, '0');
 }

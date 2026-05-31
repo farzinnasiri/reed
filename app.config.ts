@@ -62,6 +62,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     'expo-status-bar',
     'expo-web-browser',
     [
+      'expo-image-picker',
+      {
+        cameraPermission: 'Allow Reed to take training photos you choose to send.',
+        photosPermission: 'Allow Reed to attach training photos you choose from your library.',
+      },
+    ],
+    'expo-document-picker',
+    [
       'expo-audio',
       {
         microphonePermission: false,

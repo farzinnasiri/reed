@@ -167,6 +167,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
     const now = Date.now();
     const durationDays = Math.max(1, Math.round(Number(days)));
     const periods = Math.max(1, Math.round(Number(periodCount)));
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await createTarget({
       endsAt: now + durationDays * 24 * 60 * 60 * 1000,
       notes: notes.trim() || undefined,
@@ -179,6 +180,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
         threshold: Number(threshold),
         thresholdUnit: metric.unit,
       },
+      timeZone,
       title: preview,
     });
     closeSheet();

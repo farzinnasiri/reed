@@ -27,13 +27,15 @@ export const create = mutation({
     previewText: v.string(),
     rule: targetRuleValidator,
     startsAt: v.optional(v.number()),
+    timeZone: v.optional(v.string()),
     title: v.string(),
   },
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const now = Date.now();
     const startsAt = args.startsAt ?? now;
-    validateTargetInput({ ...args, startsAt });
+    const timeZone = normalizeTimeZone(args.timeZone);
+    validateTargetInput({ ...args, startsAt, timeZone });
     const initialProgress = emptyTargetProgress(args.rule);
     const targetId = await ctx.db.insert('trainingTargets', {
       createdAt: now,
@@ -45,6 +47,7 @@ export const create = mutation({
       rule: args.rule,
       startsAt,
       status: 'active',
+      timeZone,
       title: args.title.trim(),
       updatedAt: now,
     });
@@ -156,11 +159,22 @@ async function queryEvidenceLogs(ctx: MutationCtx, target: TargetDoc) {
 
 function statusRank(status: TargetDoc['status']) { return status === 'active' ? 0 : status === 'completed' ? 1 : status === 'missed' ? 2 : 3; }
 
-function validateTargetInput(args: { endsAt: number; notes?: string; previewText: string; rule: TargetDoc['rule']; startsAt: number; title: string }) {
+function validateTargetInput(args: { endsAt: number; notes?: string; previewText: string; rule: TargetDoc['rule']; startsAt: number; timeZone?: string; title: string }) {
   if (!args.title.trim() || args.title.length > 80) throw new ConvexError('Goal title must be 1-80 characters.');
   if (!args.previewText.trim() || args.previewText.length > 180) throw new ConvexError('Goal preview must be 1-180 characters.');
   if (args.notes && args.notes.length > 500) throw new ConvexError('Goal notes must be 500 characters or fewer.');
   if (!Number.isFinite(args.startsAt) || !Number.isFinite(args.endsAt) || args.endsAt <= args.startsAt) throw new ConvexError('Goal needs a valid time boundary.');
+  normalizeTimeZone(args.timeZone);
   if (!Number.isFinite(args.rule.threshold) || args.rule.threshold <= 0) throw new ConvexError('Goal threshold must be positive.');
   if ((args.rule.metricKind !== 'sessionCount') !== Boolean(args.rule.exerciseCatalogId)) throw new ConvexError('Exercise goals need an exercise; session goals cannot have one.');
+}
+
+function normalizeTimeZone(timeZone?: string) {
+  if (!timeZone || timeZone.length > 80) return 'UTC';
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
+    return timeZone;
+  } catch {
+    return 'UTC';
+  }
 }

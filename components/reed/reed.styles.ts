@@ -173,6 +173,17 @@ export const styles = StyleSheet.create({
   messageBubbleRight: {
     borderBottomRightRadius: 6,
   },
+  messageAttachmentGrid: {
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  messageAttachmentImage: {
+    borderRadius: reedRadii.sm,
+    height: 86,
+    width: 86,
+  },
   messageActionBar: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -234,8 +245,58 @@ export const styles = StyleSheet.create({
     borderRadius: reedRadii.xl,
   },
   composerCardContent: {
+    gap: 7,
     paddingHorizontal: 12,
     paddingVertical: 7,
+  },
+  attachmentActionsRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 36,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 0,
+  },
+  attachmentPickerPopover: {
+    alignSelf: 'flex-end',
+  },
+  attachmentTray: {
+    gap: 6,
+  },
+  attachmentPreviewContent: {
+    gap: 8,
+    paddingRight: 2,
+  },
+  attachmentPreview: {
+    borderRadius: reedRadii.md,
+    borderWidth: 1,
+    height: 62,
+    overflow: 'hidden',
+    width: 62,
+  },
+  attachmentImage: {
+    height: '100%',
+    width: '100%',
+  },
+  attachmentStatusOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    bottom: 0,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  attachmentRemoveButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 4,
+    top: 4,
+    width: 24,
   },
   composerInputRow: {
     alignItems: 'flex-end',

@@ -198,6 +198,7 @@ export default defineSchema({
     rule: targetRuleValidator,
     startsAt: v.number(),
     status: targetStatusValidator,
+    timeZone: v.optional(v.string()),
     title: v.string(),
     updatedAt: v.number(),
     verifiedSnapshot: v.optional(targetVerifiedSnapshotValidator),
@@ -231,6 +232,37 @@ export default defineSchema({
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
     .index('by_profile_id_and_client_nonce', ['profileId', 'clientNonce']),
+  reedMessageAttachments: defineTable({
+    messageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+    profileId: v.id('profiles'),
+    storageId: v.id('_storage'),
+    mediaType: v.literal('image/jpeg'),
+    kind: v.literal('image'),
+    status: v.union(v.literal('pending'), v.literal('analyzed'), v.literal('failed')),
+    sortOrder: v.number(),
+    size: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_message_id_and_sort_order', ['messageId', 'sortOrder'])
+    .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
+    .index('by_storage_id', ['storageId']),
+  reedImageAnalyses: defineTable({
+    attachmentId: v.id('reedMessageAttachments'),
+    messageId: v.id('reedMessages'),
+    profileId: v.id('profiles'),
+    status: v.union(v.literal('analyzed'), v.literal('failed')),
+    narrative: v.string(),
+    modelProvider: v.string(),
+    modelName: v.string(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_attachment_id', ['attachmentId'])
+    .index('by_message_id', ['messageId'])
+    .index('by_profile_id_and_created_at', ['profileId', 'createdAt']),
   reedMemorySummaries: defineTable({
     threadId: v.id('reedThreads'),
     profileId: v.id('profiles'),

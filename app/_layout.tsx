@@ -22,6 +22,7 @@ import { ReedThemeProvider, useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { convex, missingPublicEnv } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
+import { requestAppCapabilityPermissionsAsync } from '@/lib/app-permissions';
 
 export {
   ErrorBoundary,
@@ -127,6 +128,14 @@ function RootNavigator() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [isRoutingPending]);
+
+  useEffect(() => {
+    if (!isAppReady) {
+      return;
+    }
+
+    void requestAppCapabilityPermissionsAsync();
+  }, [isAppReady]);
 
   if (isRoutingPending) {
     return (

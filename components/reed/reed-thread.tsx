@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Animated, Pressable, ScrollView, View, type ScrollView as ScrollViewType } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, View, type ScrollView as ScrollViewType } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
@@ -164,12 +164,28 @@ function MessageRow({
             },
           ]}
         >
-          <ReedText
-            style={{ color: messageTextColor }}
-            variant="body"
-          >
-            {messageText}
-          </ReedText>
+          {message.attachments && message.attachments.length > 0 ? (
+            <View style={styles.messageAttachmentGrid}>
+              {message.attachments.map(attachment => (
+                <Image
+                  accessibilityIgnoresInvertColors
+                  key={attachment.id}
+                  resizeMode="cover"
+                  source={{ uri: attachment.url }}
+                  style={styles.messageAttachmentImage}
+                />
+              ))}
+            </View>
+          ) : null}
+
+          {messageText.trim().length > 0 ? (
+            <ReedText
+              style={{ color: messageTextColor }}
+              variant="body"
+            >
+              {messageText}
+            </ReedText>
+          ) : null}
 
           {showActionBar ? (
             <View style={styles.messageActionBar}>

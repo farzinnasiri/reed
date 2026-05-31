@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { summarizeCoachItemTitle } from './reed.presenter';
 import type { CoachItem, ComposerSource, ReedMessage } from './reed.types';
 
@@ -31,6 +32,13 @@ const CONTEXT_PRIMER_MESSAGES = [
 
 type ServerReedMessage = {
   _id: string;
+  attachments?: Array<{
+    _id: string;
+    mediaType: 'image/jpeg';
+    sortOrder: number;
+    status: 'pending' | 'analyzed' | 'failed';
+    url: string;
+  }>;
   clientNonce?: string;
   completedAt?: number;
   content: string;
@@ -129,6 +137,12 @@ export function useReedConversation({
 
       return {
         createdAt: message.createdAt,
+        attachments: message.attachments?.map(attachment => ({
+          id: attachment._id,
+          mediaType: attachment.mediaType,
+          status: attachment.status,
+          url: attachment.url,
+        })),
         id: getRenderMessageId(message, lastUserNonce),
         isContextPrimer: isContextPrimerNonce(message.clientNonce),
         role: message.role,
@@ -259,13 +273,13 @@ export function useReedConversation({
     messagesPage.loadMore(MESSAGE_PAGE_SIZE);
   }, [messagesPage]);
 
-  const sendPrompt = useCallback((prompt: string, source: ComposerSource) => {
+  const sendPrompt = useCallback((prompt: string, source: ComposerSource, attachments: Array<{ storageId: Id<'_storage'> }> = []) => {
     const text = prompt.trim();
-    if (!text || pendingRunId) return false;
+    if ((!text && attachments.length === 0) || pendingRunId) return false;
 
     const now = Date.now();
     const nonce = `${now}-${Math.random().toString(36).slice(2)}`;
-    const shouldShowContextPrimer = isTrainingToolsPrompt(text);
+    const shouldShowContextPrimer = attachments.length > 0 || isTrainingToolsPrompt(text);
     setPendingSendNonce(nonce);
     const nextOptimisticMessages: ReedMessage[] = [
       {
@@ -274,7 +288,9 @@ export function useReedConversation({
         role: 'user',
         source,
         status: 'sent',
-        text,
+        text: attachments.length > 0
+          ? `${text || 'Attached images'}\n${attachments.length} image${attachments.length === 1 ? '' : 's'}`
+          : text,
       },
     ];
     if (shouldShowContextPrimer) {
@@ -304,6 +320,7 @@ export function useReedConversation({
       clientNow: now,
       clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       content: text,
+      attachments,
       source,
     })
       .then(() => {

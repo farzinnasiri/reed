@@ -1012,7 +1012,7 @@ function ProgressSurface({
         </View>
       ) : (
         <>
-          <View style={[styles.progressMetricRow, isCompact && styles.progressMetricRowCompact]}>
+          <View style={styles.progressMetricRow}>
             <ProgressMetricTile label="Sets" value={formatWholeNumber(work.totalSets)} />
             <ProgressMetricTile label="Reps" value={formatWholeNumber(work.totalReps)} />
             <ProgressMetricTile label="Load" value={formatVolume(work.totalVolume)} />
@@ -1142,13 +1142,12 @@ function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) 
 
 function ProgressSkeleton() {
   const { theme } = useReedTheme();
-  const { isCompact } = useBreakpoint();
   const glassControls = getGlassControlTokens(theme);
 
   return (
     <View style={styles.progressSkeleton}>
       <View style={[styles.skeletonLine, { backgroundColor: glassControls.shellBackgroundColor }]} />
-      <View style={[styles.progressMetricRow, isCompact && styles.progressMetricRowCompact]}>
+      <View style={styles.progressMetricRow}>
         {[0, 1, 2].map(index => (
           <View key={index} style={[styles.skeletonMetric, { backgroundColor: glassControls.shellBackgroundColor }]} />
         ))}
@@ -1160,8 +1159,25 @@ function ProgressSkeleton() {
 function ProgressMetricTile({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.progressMetricTile}>
-      <ReedText variant="bodyStrong" style={styles.progressMetricText}>{value}</ReedText>
-      <ReedText tone="muted" variant="label" style={styles.progressMetricText}>{label}</ReedText>
+      <ReedText
+        adjustsFontSizeToFit
+        minimumFontScale={0.76}
+        numberOfLines={1}
+        variant="bodyStrong"
+        style={styles.progressMetricText}
+      >
+        {value}
+      </ReedText>
+      <ReedText
+        adjustsFontSizeToFit
+        minimumFontScale={0.82}
+        numberOfLines={1}
+        tone="muted"
+        variant="label"
+        style={styles.progressMetricText}
+      >
+        {label}
+      </ReedText>
     </View>
   );
 }
@@ -2274,7 +2290,7 @@ const styles = StyleSheet.create({
     paddingTop: 12,
   },
   periodControl: {
-    minWidth: 316,
+    minWidth: 0,
     width: '100%',
   },
   progressContent: {
@@ -2478,9 +2494,6 @@ const styles = StyleSheet.create({
   },
   updateHintOpen: {
     transform: [{ rotate: '90deg' }],
-  },
-  progressMetricRowCompact: {
-    flexDirection: 'column',
   },
   trainingVisualRowCompact: {
     flexDirection: 'column',

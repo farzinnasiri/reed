@@ -26,6 +26,8 @@ const HOT_RECENT_MESSAGE_COUNT = 8;
 const WARM_RECENT_MESSAGE_COUNT = 4;
 const COLD_RECENT_MESSAGE_COUNT = 0;
 const COMPACT_AFTER_MESSAGE_COUNT = 8;
+const MAX_REED_IMAGE_ATTACHMENTS = 5;
+const MAX_REED_IMAGE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
 const DEFAULT_REED_SUMMARY_PROMPT = `Update the durable Reed memory summary for one ongoing user chat.
@@ -56,6 +58,12 @@ const composerSourceValidator = v.union(v.literal('quick-action'), v.literal('ty
 const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly'));
 const reentryStateValidator = v.union(v.literal('hot'), v.literal('warm'), v.literal('cold'));
 type ReedRoute = 'coach_direct' | 'training_tools' | 'refuse_readonly';
+
+type StorageMetadata = {
+  _id: Id<'_storage'>;
+  contentType?: string;
+  size: number;
+};
 
 const quickActionValidator = v.object({
   id: v.string(),
@@ -91,6 +99,10 @@ const attitudePayloadValidator = v.object({
   name: v.string(),
   prompt: v.string(),
   sortOrder: v.number(),
+});
+
+const reedImageAttachmentInputValidator = v.object({
+  storageId: v.id('_storage'),
 });
 
 type ReedAttitudeSeed = {
@@ -182,9 +194,11 @@ export const listMessages = query({
       .order('desc')
       .take(limit + 1);
 
+    const messages = await attachMessageImages(ctx, rows.slice(0, limit).reverse());
+
     return {
       hasMore: rows.length > limit,
-      messages: rows.slice(0, limit).reverse(),
+      messages,
     };
   },
 });
@@ -203,11 +217,16 @@ export const listMessagesPaginated = query({
       };
     }
 
-    return await ctx.db
+    const result = await ctx.db
       .query('reedMessages')
       .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', thread._id))
       .order('desc')
       .paginate(args.paginationOpts);
+
+    return {
+      ...result,
+      page: await attachMessageImages(ctx, result.page),
+    };
   },
 });
 
@@ -388,8 +407,17 @@ export const upsertActivePrompt = mutation({
   },
 });
 
+export const generateImageUploadUrl = mutation({
+  args: {},
+  handler: async ctx => {
+    await requireViewerProfile(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
 export const sendMessage = mutation({
   args: {
+    attachments: v.optional(v.array(reedImageAttachmentInputValidator)),
     clientNonce: v.optional(v.string()),
     clientNow: v.optional(v.number()),
     clientTimeZone: v.optional(v.string()),
@@ -398,11 +426,16 @@ export const sendMessage = mutation({
   },
   handler: async (ctx, args) => {
     const content = args.content.trim();
-    if (!content) throw new ConvexError('Message cannot be empty.');
+    const attachments = args.attachments ?? [];
+    if (!content && attachments.length === 0) throw new ConvexError('Message cannot be empty.');
     if (content.length > 8000) throw new ConvexError('Message is too long.');
+    if (attachments.length > MAX_REED_IMAGE_ATTACHMENTS) {
+      throw new ConvexError(`Reed can read up to ${MAX_REED_IMAGE_ATTACHMENTS} images per message.`);
+    }
 
     const profile = await requireViewerProfile(ctx);
     const now = Date.now();
+    const attachmentMetadata = await validateImageAttachments(ctx, attachments);
 
     if (args.clientNonce) {
       const existing = await ctx.db
@@ -415,20 +448,38 @@ export const sendMessage = mutation({
     const thread = await getOrCreateActiveThread(ctx, profile._id, now);
     const priorLastMessageAt = thread.lastMessageAt ?? null;
     const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
-    const route = routeForMessage(content);
+    const route = routeForMessage(content, attachments.length > 0);
+    const userMessageContent = content || `Attached ${attachments.length} image${attachments.length === 1 ? '' : 's'}`;
+    const hasContextPrimer = route === 'training_tools' && isTrainingToolsText(content);
 
     const userMessageId = await ctx.db.insert('reedMessages', {
       threadId: thread._id,
       profileId: profile._id,
       role: 'user',
-      content,
+      content: userMessageContent,
       source: args.source,
       status: 'sent',
       createdAt: now,
       completedAt: now,
       clientNonce: args.clientNonce,
     });
-    if (route === 'training_tools') {
+    for (let index = 0; index < attachments.length; index += 1) {
+      await ctx.db.insert('reedMessageAttachments', {
+        messageId: userMessageId,
+        threadId: thread._id,
+        profileId: profile._id,
+        storageId: attachments[index].storageId,
+        mediaType: 'image/jpeg',
+        kind: 'image',
+        status: 'pending',
+        sortOrder: index,
+        size: attachmentMetadata[index]?.size,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    if (hasContextPrimer) {
       await ctx.db.insert('reedMessages', {
         threadId: thread._id,
         profileId: profile._id,
@@ -449,7 +500,7 @@ export const sendMessage = mutation({
       content: '',
       source: 'system',
       status: 'pending',
-      createdAt: route === 'training_tools' ? now + 2 : now + 1,
+      createdAt: now + 1 + (hasContextPrimer ? 1 : 0) + (attachments.length > 0 ? 1 : 0),
     });
     await ctx.db.patch(thread._id, { updatedAt: now, lastMessageAt: now });
 
@@ -493,6 +544,7 @@ export const loadAssistantContext = internalQuery({
     assistantMessage: Doc<'reedMessages'>;
     prompt: { _id: Id<'reedPromptVersions'> | null; key: string; content: string; contentHash: string; version: number };
     attitude: { _id: Id<'reedAttitudes'> | null; key: string; name: string; description: string; prompt: string };
+    imageObservations: Array<{ attachmentId: Id<'reedMessageAttachments'>; narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
     journeySummary: string | null;
     memorySummary: string | null;
     recentMessages: Doc<'reedMessages'>[];
@@ -518,6 +570,7 @@ export const loadAssistantContext = internalQuery({
       ? await ctx.db.get(aiSettings.selectedAttitudeId)
       : null;
     const activeAttitude = selectedAttitude?.status === 'active' ? selectedAttitude : null;
+    const imageObservations = await loadImageObservations(ctx, userMessage._id);
 
     return {
       clientNow: args.clientNow,
@@ -545,6 +598,7 @@ export const loadAssistantContext = internalQuery({
             prompt: activeAttitude.prompt,
           }
         : DEFAULT_REED_ATTITUDE,
+      imageObservations,
       journeySummary: journey?.renderedContext ?? null,
       memorySummary: summary?.content ?? null,
       recentMessages,
@@ -586,6 +640,117 @@ export const failAssistantMessage = internalMutation({
       status: 'failed',
       completedAt: args.failedAt,
       error: args.error,
+    });
+  },
+});
+
+export const loadPendingImageAttachments = internalQuery({
+  args: { messageId: v.id('reedMessages') },
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.messageId);
+    if (!message) throw new ConvexError('Message not found.');
+    const attachments = await ctx.db
+      .query('reedMessageAttachments')
+      .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', args.messageId))
+      .order('asc')
+      .collect();
+
+    const pending = [];
+    for (const attachment of attachments) {
+      const existing = await ctx.db
+        .query('reedImageAnalyses')
+        .withIndex('by_attachment_id', q => q.eq('attachmentId', attachment._id))
+        .unique();
+      if (!existing && attachment.status === 'pending') {
+        pending.push(attachment);
+      }
+    }
+
+    return pending;
+  },
+});
+
+export const saveImageAnalysis = internalMutation({
+  args: {
+    attachmentId: v.id('reedMessageAttachments'),
+    error: v.optional(v.string()),
+    modelName: v.string(),
+    modelProvider: v.string(),
+    narrative: v.string(),
+    status: v.union(v.literal('analyzed'), v.literal('failed')),
+  },
+  handler: async (ctx, args) => {
+    const attachment = await ctx.db.get(args.attachmentId);
+    if (!attachment) throw new ConvexError('Attachment not found.');
+
+    const now = Date.now();
+    const existing = await ctx.db
+      .query('reedImageAnalyses')
+      .withIndex('by_attachment_id', q => q.eq('attachmentId', attachment._id))
+      .unique();
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: args.status,
+        narrative: args.narrative,
+        modelProvider: args.modelProvider,
+        modelName: args.modelName,
+        error: args.error,
+        updatedAt: now,
+      });
+      await ctx.db.patch(attachment._id, { status: args.status, updatedAt: now });
+      return existing._id;
+    }
+
+    const analysisId = await ctx.db.insert('reedImageAnalyses', {
+      attachmentId: attachment._id,
+      messageId: attachment.messageId,
+      profileId: attachment.profileId,
+      status: args.status,
+      narrative: args.narrative,
+      modelProvider: args.modelProvider,
+      modelName: args.modelName,
+      error: args.error,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.patch(attachment._id, { status: args.status, updatedAt: now });
+    return analysisId;
+  },
+});
+
+export const insertImageObservationMessage = internalMutation({
+  args: {
+    assistantMessageId: v.id('reedMessages'),
+    userMessageId: v.id('reedMessages'),
+  },
+  handler: async (ctx, args) => {
+    const userMessage = await ctx.db.get(args.userMessageId);
+    const assistantMessage = await ctx.db.get(args.assistantMessageId);
+    if (!userMessage || !assistantMessage) throw new ConvexError('Reed image observation context is incomplete.');
+
+    const existing = await ctx.db
+      .query('reedMessages')
+      .withIndex('by_profile_id_and_client_nonce', q =>
+        q.eq('profileId', userMessage.profileId).eq('clientNonce', `${userMessage._id}:image-observation`),
+      )
+      .unique();
+    if (existing) return existing._id;
+
+    const observations = await loadImageObservations(ctx, userMessage._id);
+    if (observations.length === 0) return null;
+
+    const content = renderImageObservationMessage(observations);
+    return await ctx.db.insert('reedMessages', {
+      threadId: userMessage.threadId,
+      profileId: userMessage.profileId,
+      role: 'assistant',
+      content,
+      source: 'system',
+      status: 'sent',
+      createdAt: Math.max(userMessage.createdAt + 1, assistantMessage.createdAt - 1),
+      completedAt: Date.now(),
+      clientNonce: `${userMessage._id}:image-observation`,
     });
   },
 });
@@ -712,6 +877,100 @@ async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles
   return created;
 }
 
+async function attachMessageImages(ctx: QueryCtx, messages: Doc<'reedMessages'>[]) {
+  const withAttachments = [];
+  for (const message of messages) {
+    const attachments = await ctx.db
+      .query('reedMessageAttachments')
+      .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', message._id))
+      .order('asc')
+      .collect();
+
+    if (attachments.length === 0) {
+      withAttachments.push({ ...message, attachments: [] });
+      continue;
+    }
+
+    const images = [];
+    for (const attachment of attachments) {
+      const url = await ctx.storage.getUrl(attachment.storageId);
+      if (!url) continue;
+      images.push({
+        _id: attachment._id,
+        height: null,
+        mediaType: attachment.mediaType,
+        sortOrder: attachment.sortOrder,
+        status: attachment.status,
+        url,
+        width: null,
+      });
+    }
+
+    withAttachments.push({ ...message, attachments: images });
+  }
+
+  return withAttachments;
+}
+
+async function validateImageAttachments(ctx: MutationCtx, attachments: Array<{ storageId: Id<'_storage'> }>) {
+  const seenStorageIds = new Set<string>();
+  const metadataRows: StorageMetadata[] = [];
+
+  for (const attachment of attachments) {
+    if (seenStorageIds.has(attachment.storageId)) {
+      throw new ConvexError('Duplicate image attachment.');
+    }
+    seenStorageIds.add(attachment.storageId);
+
+    const metadata = await ctx.db.system.get(attachment.storageId) as StorageMetadata | null;
+    if (!metadata) throw new ConvexError('Image upload was not found.');
+    if (metadata.contentType !== 'image/jpeg') {
+      throw new ConvexError('Reed image uploads must be JPEG files.');
+    }
+    if (metadata.size > MAX_REED_IMAGE_BYTES) {
+      throw new ConvexError('Reed image uploads must be 8 MB or smaller after compression.');
+    }
+
+    metadataRows.push(metadata);
+  }
+
+  return metadataRows;
+}
+
+async function loadImageObservations(ctx: QueryCtx, messageId: Id<'reedMessages'>) {
+  const attachments = await ctx.db
+    .query('reedMessageAttachments')
+    .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', messageId))
+    .order('asc')
+    .collect();
+
+  const observations = [];
+  for (const attachment of attachments) {
+    const analysis = await ctx.db
+      .query('reedImageAnalyses')
+      .withIndex('by_attachment_id', q => q.eq('attachmentId', attachment._id))
+      .unique();
+    if (!analysis) continue;
+    observations.push({
+      attachmentId: attachment._id,
+      narrative: analysis.narrative,
+      sortOrder: attachment.sortOrder,
+      status: analysis.status,
+    });
+  }
+
+  return observations;
+}
+
+function renderImageObservationMessage(observations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>) {
+  const sorted = observations.slice().sort((left, right) => left.sortOrder - right.sortOrder);
+  if (sorted.length === 1) return sorted[0].narrative;
+
+  return sorted
+    .map(observation => `Image ${observation.sortOrder + 1}: ${observation.narrative}`)
+    .join('\n\n');
+}
+
 async function loadRecentMessages(
   ctx: QueryCtx,
   threadId: Id<'reedThreads'>,
@@ -751,15 +1010,19 @@ function classifyReentry(lastMessageAt: number | null, now: number) {
   return { state: 'cold' as const, recentTurnCount: COLD_RECENT_MESSAGE_COUNT };
 }
 
-function routeForMessage(content: string): ReedRoute {
+function routeForMessage(content: string, hasImageAttachments = false): ReedRoute {
   const lower = content.toLowerCase();
   if (/\b(update|change|edit|delete|create|log|save)\b/.test(lower) && /\b(workout|profile|goal|plan|session|set)\b/.test(lower)) {
     return 'refuse_readonly';
   }
-  if (/\b(progress|performance|exercise|workout|training|bodyweight|recovery|pr\b|personal record)\b/.test(lower)) {
+  if (hasImageAttachments || isTrainingToolsText(content)) {
     return 'training_tools';
   }
   return 'coach_direct';
+}
+
+function isTrainingToolsText(content: string) {
+  return /\b(progress|performance|exercise|workout|training|bodyweight|recovery|pr\b|personal record)\b/.test(content.toLowerCase());
 }
 
 function getContextPrimerNonce(clientNonce: string) {

@@ -366,16 +366,22 @@ function SummaryMetric({
   return (
     <View style={styles.summaryMetric}>
       <View style={styles.summaryValueRow}>
-        <ReedText style={styles.summaryValue} variant="title">
+        <ReedText
+          adjustsFontSizeToFit
+          minimumFontScale={0.68}
+          numberOfLines={1}
+          style={styles.summaryValue}
+          variant="title"
+        >
           {value.value}
         </ReedText>
         {value.unit ? (
-          <ReedText style={styles.summaryValueUnit} tone="muted" variant="section">
+          <ReedText numberOfLines={1} style={styles.summaryValueUnit} tone="muted" variant="section">
             {value.unit}
           </ReedText>
         ) : null}
       </View>
-      <ReedText tone="muted" variant="label">
+      <ReedText adjustsFontSizeToFit minimumFontScale={0.82} numberOfLines={1} tone="muted" variant="label">
         {label}
       </ReedText>
       {showDivider ? (
@@ -746,10 +752,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 3,
     justifyContent: 'center',
+    maxWidth: '100%',
     minWidth: 0,
   },
   summaryValue: {
     flexShrink: 1,
+    minWidth: 0,
     textAlign: 'center',
   },
   summaryValueUnit: {

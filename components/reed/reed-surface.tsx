@@ -12,6 +12,7 @@ import { createLocalMockReedRuntime } from './reed.runtime';
 import { styles } from './reed.styles';
 import { ReedThread } from './reed-thread';
 import type { ReedSurfaceProps } from './reed.types';
+import { useReedAttachments } from './use-reed-attachments';
 import { useReedConversation } from './use-reed-conversation';
 import { useReedPresence } from './use-reed-presence';
 import { useReedVoiceDraft } from './use-reed-voice-draft';
@@ -28,6 +29,18 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isThreadReady, setIsThreadReady] = useState(false);
+  const {
+    attachFromCamera,
+    attachFromFiles,
+    attachFromLibrary,
+    attachments,
+    canAttachMore,
+    clearAttachments,
+    isPreparingAttachments,
+    lastError: lastAttachmentError,
+    readyAttachmentIds,
+    removeAttachment,
+  } = useReedAttachments();
 
   const runtime = useMemo(() => createLocalMockReedRuntime(), []);
   const presence = useQuery(api.reed.getPresence, {});
@@ -132,17 +145,18 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
 
   function clearComposerState() {
     setComposerText('');
+    clearAttachments();
     resetVoice();
   }
 
   function sendTyped(text: string) {
-    if (sendPrompt(text, 'typed')) {
+    if (sendPrompt(text, 'typed', readyAttachmentIds)) {
       clearComposerState();
     }
   }
 
   function sendVoiceDraft(text: string) {
-    if (sendPrompt(text, 'voice')) {
+    if (sendPrompt(text, 'voice', readyAttachmentIds)) {
       clearComposerState();
     }
   }
@@ -210,14 +224,22 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         ]}
       >
         <ReedComposer
+          attachments={attachments}
+          canAttachMore={canAttachMore}
           composerText={composerText}
           disabled={Boolean(pendingRunId)}
+          isPreparingAttachments={isPreparingAttachments}
+          lastAttachmentError={lastAttachmentError}
           onChangeComposerText={setComposerText}
+          onPickCamera={() => void attachFromCamera()}
+          onPickFiles={() => void attachFromFiles()}
+          onPickLibrary={() => void attachFromLibrary()}
           onQuickAction={prompt => {
-            if (sendPrompt(prompt, 'quick-action')) {
+            if (sendPrompt(prompt, 'quick-action', readyAttachmentIds)) {
               clearComposerState();
             }
           }}
+          onRemoveAttachment={removeAttachment}
           onSendTyped={sendTyped}
           onSendVoiceDraft={sendVoiceDraft}
           onStartVoice={() => startVoice(Boolean(pendingRunId))}

@@ -83,6 +83,7 @@ type NotificationModule = {
 
 let configuredNotificationHandler = false;
 let notificationsModulePromise: Promise<NotificationModule | null> | null = null;
+let appNotificationPermissionRequest: Promise<ScheduledAlertPermissionStatus> | null = null;
 const activeNotificationIdsByChannel = new Map<string, string>();
 
 async function getNotificationsModule() {
@@ -145,24 +146,16 @@ export async function ensureScheduledAlertPermissionsAsync<Payload>(
     });
   }
 
-  const permission = await Notifications.getPermissionsAsync();
-  if (isNotificationPermissionGranted(permission)) {
-    return 'granted';
+  return requestNotificationPermissionsAsync(Notifications);
+}
+
+export async function requestAppNotificationPermissionsAsync(): Promise<ScheduledAlertPermissionStatus> {
+  if (appNotificationPermissionRequest) {
+    return appNotificationPermissionRequest;
   }
 
-  if (!permission.canAskAgain) {
-    return 'permission_denied';
-  }
-
-  const requested = await Notifications.requestPermissionsAsync({
-    ios: {
-      allowAlert: true,
-      allowBadge: false,
-      allowSound: true,
-    },
-  });
-
-  return isNotificationPermissionGranted(requested) ? 'granted' : 'permission_denied';
+  appNotificationPermissionRequest = requestAppNotificationPermissionsOnceAsync();
+  return appNotificationPermissionRequest;
 }
 
 export async function scheduleBackgroundAlertAsync<Payload>({
@@ -265,4 +258,41 @@ function isNotificationPermissionGranted(permission: NotificationPermissionStatu
   }
 
   return permission.granted || (permission.ios?.status ?? 0) >= 2;
+}
+
+async function requestNotificationPermissionsAsync(
+  Notifications: NotificationModule,
+): Promise<ScheduledAlertPermissionStatus> {
+  const permission = await Notifications.getPermissionsAsync();
+  if (isNotificationPermissionGranted(permission)) {
+    return 'granted';
+  }
+
+  if (!permission.canAskAgain) {
+    return 'permission_denied';
+  }
+
+  const requested = await Notifications.requestPermissionsAsync({
+    ios: {
+      allowAlert: true,
+      allowBadge: false,
+      allowSound: true,
+    },
+  });
+
+  return isNotificationPermissionGranted(requested) ? 'granted' : 'permission_denied';
+}
+
+async function requestAppNotificationPermissionsOnceAsync(): Promise<ScheduledAlertPermissionStatus> {
+  const Notifications = await getNotificationsModule();
+  if (!Notifications) {
+    return 'unavailable';
+  }
+
+  const handlerReady = await configureNotificationHandlerOnce();
+  if (!handlerReady) {
+    return 'unavailable';
+  }
+
+  return requestNotificationPermissionsAsync(Notifications);
 }

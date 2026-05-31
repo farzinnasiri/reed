@@ -16,6 +16,8 @@ const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
 const CHAT_REASONING_MODE = 'low';
 const SUMMARY_MODEL_PROVIDER = 'google';
 const SUMMARY_MODEL_NAME = process.env.REED_SUMMARY_MODEL ?? 'gemini-2.5-flash-lite';
+const IMAGE_ANALYSIS_MODEL_PROVIDER = 'google';
+const IMAGE_ANALYSIS_MODEL_NAME = process.env.REED_IMAGE_ANALYSIS_MODEL ?? 'gemini-3.1-flash-lite';
 
 export const runAssistant = internalAction({
   args: {
@@ -38,6 +40,15 @@ export const runAssistant = internalAction({
     }
 
     try {
+      await analyzePendingImageAttachments(ctx, context.userMessage._id);
+      context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
+      if (context.imageObservations.length > 0) {
+        await ctx.runMutation(internal.reed.insertImageObservationMessage, {
+          assistantMessageId: context.assistantMessage._id,
+          userMessageId: context.userMessage._id,
+        });
+      }
+
       const contextBlocks = context.route === 'refuse_readonly'
         ? []
         : await buildContextBlocks(ctx, context);
@@ -131,6 +142,37 @@ async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<ty
   }
 }
 
+async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'reedMessages'>) {
+  const attachments = await ctx.runQuery(internal.reed.loadPendingImageAttachments, { messageId });
+  if (attachments.length === 0) return;
+
+  await Promise.all(attachments.map(async attachment => {
+    try {
+      const narrative = await invokeImageAnalysisModel(ctx, {
+        storageId: attachment.storageId,
+        sortOrder: attachment.sortOrder,
+      });
+      await ctx.runMutation(internal.reed.saveImageAnalysis, {
+        attachmentId: attachment._id,
+        modelProvider: IMAGE_ANALYSIS_MODEL_PROVIDER,
+        modelName: IMAGE_ANALYSIS_MODEL_NAME,
+        narrative,
+        status: 'analyzed',
+      });
+    } catch (error) {
+      console.error('[REED_IMAGE_ANALYSIS_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+      await ctx.runMutation(internal.reed.saveImageAnalysis, {
+        attachmentId: attachment._id,
+        modelProvider: IMAGE_ANALYSIS_MODEL_PROVIDER,
+        modelName: IMAGE_ANALYSIS_MODEL_NAME,
+        narrative: 'Reed could not read this attached image clearly enough to use it as coaching context.',
+        status: 'failed',
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }));
+}
+
 function deterministicContextCalls(context: Awaited<ReturnType<typeof loadContextType>>): ReedContextToolCall[] {
   const currentText = context.userMessage.content.toLowerCase();
   const recentText = [
@@ -187,6 +229,7 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     '',
     'Journey context:',
     context.journeySummary ?? 'No journey snapshot is available yet.',
+    ...buildImageObservationLines(context.imageObservations),
     ...buildContextBlockLines(contextBlocks),
     '',
     'Compacted Reed memory:',
@@ -200,6 +243,22 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildImageObservationLines(observations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>) {
+  if (observations.length === 0) return [''];
+
+  return [
+    '',
+    'Attached image observations:',
+    '- These are narrative observations from a fast vision pass over user-attached JPEG images.',
+    '- Treat them as visual context, not ground truth. Use uncertainty naturally and do not claim medical diagnosis.',
+    ...observations
+      .slice()
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map(observation => `Image ${observation.sortOrder + 1} (${observation.status}): ${observation.narrative}`),
+    '- Use the observations only when they matter to the answer. Do not repeat every detail unless the user asks what you see.',
+  ];
 }
 
 function buildContextBlockLines(blocks: ReedContextBlock[]) {
@@ -363,6 +422,57 @@ async function invokeSummaryModel(prompt: string) {
   return textFromContent(result.content) || deterministicSummary(prompt);
 }
 
+async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'_storage'>; sortOrder: number }) {
+  const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error('Google Gemini API key is not configured for Reed image analysis.');
+  }
+
+  const url = await ctx.storage.getUrl(input.storageId);
+  if (!url) throw new Error('Attached image file is not available in Convex storage.');
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Could not load attached image from storage: ${response.status}`);
+  }
+
+  const imageBytes = await response.arrayBuffer();
+  const base64Image = Buffer.from(imageBytes).toString('base64');
+  const model = new ChatGoogleGenerativeAI({
+    apiKey,
+    model: IMAGE_ANALYSIS_MODEL_NAME,
+    temperature: 0.2,
+    maxRetries: 1,
+  });
+
+  const result = await model.invoke([
+    new SystemMessage([
+      'You are Reed\'s fast visual analysis pass for a fitness coaching chat.',
+      'Look at the attached JPEG like an experienced coach.',
+      'Write a concise narrative observation that separates useful signal from visual noise.',
+      'Focus on training, exercise setup, movement clues, body positioning, equipment, recovery, or safety if visible.',
+      'Mark uncertainty naturally. Do not diagnose medical conditions. Do not invent facts outside the image.',
+      'The final Reed chat model will read this observation before answering the user.',
+    ].join('\n')),
+    new HumanMessage({
+      content: [
+        {
+          type: 'text',
+          text: `Analyze image ${input.sortOrder + 1} for Reed. Return only the narrative observation.`,
+        },
+        {
+          type: 'image_url',
+          image_url: { url: `data:image/jpeg;base64,${base64Image}` },
+        },
+      ],
+    }),
+  ]);
+
+  const narrative = textFromContent(result.content);
+  if (!narrative) throw new Error('Gemini returned an empty image observation.');
+  return narrative.slice(0, 1800);
+}
+
 function buildSummaryPrompt(input: { systemPrompt: string; priorSummary: string | null; messages: Array<{ role: string; content: string }> }) {
   return [
     input.systemPrompt,
@@ -435,6 +545,7 @@ declare function loadContextType(): Promise<{
   userMessage: { content: string };
   prompt: { _id: string | null; content: string; contentHash: string };
   attitude: { _id: string | null; key: string; name: string; description: string; prompt: string };
+  imageObservations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
   journeySummary: string | null;
   memorySummary: string | null;
   recentMessages: Array<{ role: string; content: string }>;
