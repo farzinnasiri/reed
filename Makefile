@@ -4,13 +4,15 @@ ENV_FILE := .env.$(ENV)
 CONVEX_TARGET := $(if $(filter prod production,$(ENV)),prod,dev)
 EAS_ENV := $(if $(filter prod production,$(ENV)),production,development)
 
-.PHONY: help install expo expo-clean convex-dev convex-codegen convex-deploy convex-env-push env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
+.PHONY: help install expo expo-clean control-panel run convex-dev convex-codegen convex-deploy convex-env-push env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
 
 help:
 	@echo "make install           # npm install"
 	@echo "make expo ENV=dev      # start Expo with .env.dev"
 	@echo "make expo-clean ENV=dev # start Expo with .env.dev and clear Metro cache"
 	@echo "make expo ENV=prod     # start Expo with .env.prod"
+	@echo "make control-panel     # start local admin web app with .env.dev"
+	@echo "make control-panel ENV=prod # start local admin web app against prod"
 	@echo "make convex-dev        # push to the dev backend using .env.dev"
 	@echo "make convex-codegen ENV=dev|prod"
 	@echo "make convex-deploy     # deploy Convex backend to production using .env.prod"
@@ -41,6 +43,14 @@ expo-clean: env-check
 	@set -a; source "$(ENV_FILE)"; set +a; \
 	REED_ENV_FILE="$(ENV_FILE)" npx expo start -c
 
+run:
+	@:
+
+control-panel: env-check
+	@set -a; source "$(ENV_FILE)"; set +a; \
+	test -n "$$EXPO_PUBLIC_CONVEX_URL" || (echo "EXPO_PUBLIC_CONVEX_URL is missing in $(ENV_FILE)"; exit 1); \
+	VITE_CONVEX_URL="$$EXPO_PUBLIC_CONVEX_URL" npm --prefix control-panel run dev
+
 convex-dev:
 	@test -f ".env.dev" || (echo "Missing .env.dev"; exit 1)
 	npm run convex:dev -- --env-file .env.dev
@@ -62,13 +72,17 @@ convex-env-push: env-check
 	if [ -n "$$SITE_URL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" SITE_URL "$$SITE_URL"; fi; \
 	if [ -n "$$BETTER_AUTH_TRUSTED_ORIGINS" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_TRUSTED_ORIGINS "$$BETTER_AUTH_TRUSTED_ORIGINS"; fi; \
 	if [ -n "$$XAI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" XAI_API_KEY "$$XAI_API_KEY"; fi; \
+	if [ -n "$$OPENAI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" OPENAI_API_KEY "$$OPENAI_API_KEY"; fi; \
 	if [ -n "$$GOOGLE_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_API_KEY "$$GOOGLE_API_KEY"; fi; \
 	if [ -n "$$GEMINI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GEMINI_API_KEY "$$GEMINI_API_KEY"; fi; \
 	if [ -n "$$REED_CHAT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CHAT_MODEL "$$REED_CHAT_MODEL"; fi; \
+	if [ -n "$$REED_COACH_STATE_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_MODEL "$$REED_COACH_STATE_MODEL"; fi; \
+	if [ -n "$$REED_COACH_STATE_REASONING_EFFORT" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_REASONING_EFFORT "$$REED_COACH_STATE_REASONING_EFFORT"; fi; \
 	if [ -n "$$REED_SUMMARY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_SUMMARY_MODEL "$$REED_SUMMARY_MODEL"; fi; \
 	if [ -n "$$REED_CONTEXT_PLANNER_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTEXT_PLANNER_MODEL "$$REED_CONTEXT_PLANNER_MODEL"; fi; \
+	if [ -n "$$REED_IMAGE_ANALYSIS_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_IMAGE_ANALYSIS_MODEL "$$REED_IMAGE_ANALYSIS_MODEL"; fi; \
 	if [ -n "$$REED_PROFILE_INSIGHT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROFILE_INSIGHT_MODEL "$$REED_PROFILE_INSIGHT_MODEL"; fi; \
-	if [ -n "$$REED_PROMPT_ADMIN_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROMPT_ADMIN_SECRET "$$REED_PROMPT_ADMIN_SECRET"; fi
+	if [ -n "$$REED_CONTROL_PANEL_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTROL_PANEL_SECRET "$$REED_CONTROL_PANEL_SECRET"; fi
 
 eas-env-sync: env-check
 	@set -a; source "$(ENV_FILE)"; set +a; \

@@ -11,24 +11,6 @@ const MESSAGE_PAGE_SIZE = 30;
 const COACH_ITEMS_STORAGE_KEY = 'reed.coachItems.v1';
 const RECENT_MESSAGES_STORAGE_KEY = 'reed.recentMessages.v1';
 const RECENT_MESSAGES_CACHE_LIMIT = INITIAL_MESSAGE_LIMIT;
-const CONTEXT_PRIMER_NONCE_SUFFIX = ':context-primer';
-const CONTEXT_PRIMER_MESSAGES = [
-  'Let me take a look at your recent training first.',
-  'I’ll check your workouts before I answer that.',
-  'Let me pull your training context into this.',
-  'I’m going to look at the recent sessions for signal.',
-  'Give me a moment to check the training log.',
-  'I’ll scan the recent work and then make this specific.',
-  'Let me check what you’ve actually logged.',
-  'I’m looking at your workout history now.',
-  'Let me ground this in your recent sessions.',
-  'I’ll review the training data before calling it.',
-  'Let me look at the work you’ve put in first.',
-  'I’m checking the recent pattern, not guessing.',
-  'Let me read the log and separate signal from noise.',
-  'I’ll pull the relevant workout context now.',
-  'Let me check your recent training before I coach this.',
-] as const;
 
 type ServerReedMessage = {
   _id: string;
@@ -49,40 +31,9 @@ type ServerReedMessage = {
   status: 'failed' | 'pending' | 'sent';
 };
 
-function getContextPrimerNonce(clientNonce: string) {
-  return `${clientNonce}${CONTEXT_PRIMER_NONCE_SUFFIX}`;
-}
-
-function isContextPrimerNonce(clientNonce?: string) {
-  return clientNonce?.endsWith(CONTEXT_PRIMER_NONCE_SUFFIX) ?? false;
-}
-
-function getBaseNonceFromContextPrimer(clientNonce: string) {
-  return clientNonce.slice(0, -CONTEXT_PRIMER_NONCE_SUFFIX.length);
-}
-
-function isTrainingToolsPrompt(content: string) {
-  const lower = content.toLowerCase();
-  if (/\b(update|change|edit|delete|create|log|save)\b/.test(lower) && /\b(workout|profile|goal|plan|session|set)\b/.test(lower)) {
-    return false;
-  }
-  return /\b(progress|performance|exercise|workout|training|bodyweight|recovery|pr\b|personal record)\b/.test(lower);
-}
-
-function pickContextPrimerMessage(seed: string) {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = Math.imul(31, hash) + seed.charCodeAt(index) | 0;
-  }
-  return CONTEXT_PRIMER_MESSAGES[(hash >>> 0) % CONTEXT_PRIMER_MESSAGES.length] ?? CONTEXT_PRIMER_MESSAGES[0];
-}
-
 function getRenderMessageId(message: ServerReedMessage, lastUserNonce: string | null) {
   if (message.role === 'user' && message.clientNonce) return `optimistic-user-${message.clientNonce}`;
-  if (message.role === 'assistant' && message.clientNonce && isContextPrimerNonce(message.clientNonce)) {
-    return `optimistic-context-primer-${getBaseNonceFromContextPrimer(message.clientNonce)}`;
-  }
-  if (message.role === 'assistant' && message.status === 'pending' && lastUserNonce) return `optimistic-assistant-${lastUserNonce}`;
+  if (message.role === 'assistant' && lastUserNonce) return `optimistic-assistant-${lastUserNonce}`;
   return message._id;
 }
 
@@ -119,6 +70,7 @@ export function useReedConversation({
   const effectiveFetchedMessages = fetchedMessages ?? cachedMessages ?? undefined;
   const fetchedHasMore = messagesPage.status === 'CanLoadMore';
   const sendReedMessage = useMutation(api.reed.sendMessage);
+  const retryReedAssistantMessage = useMutation(api.reed.retryAssistantMessage);
   const [coachItems, setCoachItems] = useState<CoachItem[]>(INITIAL_COACH_ITEMS);
   const [hasLoadedCoachItems, setHasLoadedCoachItems] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<ReedMessage[]>([]);
@@ -144,10 +96,10 @@ export function useReedConversation({
           url: attachment.url,
         })),
         id: getRenderMessageId(message, lastUserNonce),
-        isContextPrimer: isContextPrimerNonce(message.clientNonce),
         role: message.role,
+        serverId: message._id,
         source: message.source === 'system' ? 'typed' : message.source,
-        status: message.status === 'failed' ? 'sent' : message.status,
+        status: message.status,
         text: message.content || (message.status === 'pending' ? '' : message.error ?? ''),
       };
     });
@@ -158,19 +110,12 @@ export function useReedConversation({
     if (!effectiveFetchedMessages) return persistedMessages;
 
     const visibleOptimistic = optimisticMessages.filter(message => {
-      if (message.isContextPrimer) {
-        const nonce = message.id.replace(/^optimistic-context-primer-/, '');
-        return !effectiveFetchedMessages.some((serverMessage: ServerReedMessage) =>
-          serverMessage.role === 'assistant' && serverMessage.clientNonce === getContextPrimerNonce(nonce),
-        );
-      }
-
       const nonce = message.id.replace(/^optimistic-(user|assistant)-/, '');
       const serverUserExists = effectiveFetchedMessages.some((serverMessage: ServerReedMessage) => serverMessage.clientNonce === nonce);
       if (message.role === 'user') return !serverUserExists;
 
       const serverAssistantExists = serverUserExists && effectiveFetchedMessages.some((serverMessage: ServerReedMessage) =>
-        serverMessage.role === 'assistant' && !isContextPrimerNonce(serverMessage.clientNonce) && serverMessage.createdAt >= message.createdAt,
+        serverMessage.role === 'assistant' && serverMessage.createdAt >= message.createdAt,
       );
       return !serverAssistantExists;
     });
@@ -279,7 +224,6 @@ export function useReedConversation({
 
     const now = Date.now();
     const nonce = `${now}-${Math.random().toString(36).slice(2)}`;
-    const shouldShowContextPrimer = attachments.length > 0 || isTrainingToolsPrompt(text);
     setPendingSendNonce(nonce);
     const nextOptimisticMessages: ReedMessage[] = [
       {
@@ -293,19 +237,8 @@ export function useReedConversation({
           : text,
       },
     ];
-    if (shouldShowContextPrimer) {
-      nextOptimisticMessages.push({
-        createdAt: now + 1,
-        id: `optimistic-context-primer-${nonce}`,
-        isContextPrimer: true,
-        role: 'assistant',
-        source: 'typed',
-        status: 'sent',
-        text: pickContextPrimerMessage(nonce),
-      });
-    }
     nextOptimisticMessages.push({
-      createdAt: shouldShowContextPrimer ? now + 2 : now + 1,
+      createdAt: now + 1,
       id: `optimistic-assistant-${nonce}`,
       role: 'assistant',
       source: 'typed',
@@ -341,6 +274,16 @@ export function useReedConversation({
     return true;
   }, [markOnline, pendingRunId, sendReedMessage]);
 
+  const retryAssistantMessage = useCallback((message: ReedMessage) => {
+    if (message.role !== 'assistant' || message.status !== 'failed' || !message.serverId || pendingRunId) return;
+    markOnline();
+    void retryReedAssistantMessage({
+      assistantMessageId: message.serverId as Id<'reedMessages'>,
+      clientNow: Date.now(),
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    }).catch(() => {});
+  }, [markOnline, pendingRunId, retryReedAssistantMessage]);
+
   const saveCoachItem = useCallback((message: ReedMessage) => {
     if (!message.text.trim()) return;
     const title = summarizeCoachItemTitle(message.text);
@@ -370,5 +313,6 @@ export function useReedConversation({
     resolveCoachItem,
     saveCoachItem,
     sendPrompt,
+    retryAssistantMessage,
   };
 }

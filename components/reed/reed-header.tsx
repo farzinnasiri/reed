@@ -8,13 +8,11 @@ import { styles } from './reed.styles';
 
 export function ReedHeader({
   label,
-  onOpenAiSettings,
   onOpenCoachItems,
   openItemsCount,
   topInset,
 }: {
   label: string;
-  onOpenAiSettings: () => void;
   onOpenCoachItems: () => void;
   openItemsCount: number;
   topInset: number;
@@ -40,18 +38,6 @@ export function ReedHeader({
           <ReedText tone="muted" variant="caption">{label}</ReedText>
         </View>
         <View style={styles.headerActions}>
-          <Pressable
-            accessibilityHint="Opens Reed AI settings."
-            accessibilityLabel="Open Reed AI settings"
-            accessibilityRole="button"
-            onPress={onOpenAiSettings}
-            style={({ pressed }) => [
-              styles.headerActionIconOnly,
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            <Ionicons color={String(theme.colors.textMuted)} name="settings-outline" size={17} />
-          </Pressable>
           <Pressable
             accessibilityHint="Shows saved coaching notes and follow-up items."
             accessibilityLabel={`Open coach items, ${openItemsCount} open`}

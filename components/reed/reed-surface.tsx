@@ -4,7 +4,6 @@ import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
-import { ReedAiSettingsPage } from './reed-ai-settings-page';
 import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
@@ -23,7 +22,6 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const scrollRef = useRef<ScrollViewType | null>(null);
   const hasInitialScrollSettledRef = useRef(false);
   const hasInitialComposerAlignmentRef = useRef(false);
-  const [isViewingAiSettings, setIsViewingAiSettings] = useState(false);
   const [isViewingCoachItems, setIsViewingCoachItems] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [composerDockHeight, setComposerDockHeight] = useState(0);
@@ -55,6 +53,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     messages,
     pendingRunId,
     resolveCoachItem,
+    retryAssistantMessage,
     saveCoachItem,
     sendPrompt,
   } = useReedConversation({
@@ -78,6 +77,11 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const scrollBottomSpace = composerDockHeight > 0
     ? keyboardLift + composerDockHeight + theme.spacing.lg
     : composerBottomPadding + keyboardLift + theme.spacing.xxxl;
+  const latestMessageSignature = useMemo(() => {
+    const latest = messages[messages.length - 1];
+    if (!latest) return 'empty';
+    return `${latest.id}:${latest.status}:${latest.text.length}:${messages.length}`;
+  }, [messages]);
 
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', event => {
@@ -143,6 +147,17 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     return () => clearTimeout(timeout);
   }, [keyboardLift, voiceState.status]);
 
+  useEffect(() => {
+    if (!isThreadReady || !hasInitialScrollSettledRef.current) return;
+
+    const first = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 40);
+    const second = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 180);
+    return () => {
+      clearTimeout(first);
+      clearTimeout(second);
+    };
+  }, [isThreadReady, latestMessageSignature]);
+
   function clearComposerState() {
     setComposerText('');
     clearAttachments();
@@ -159,17 +174,6 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     if (sendPrompt(text, 'voice', readyAttachmentIds)) {
       clearComposerState();
     }
-  }
-
-  if (isViewingAiSettings) {
-    return (
-      <ReedAiSettingsPage
-        contentTopPadding={contentTopPadding}
-        dockReservedSpace={dockReservedSpace}
-        onBack={() => setIsViewingAiSettings(false)}
-        topInset={headerTopInset}
-      />
-    );
   }
 
   if (isViewingCoachItems) {
@@ -189,7 +193,6 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     <View style={styles.root}>
       <ReedHeader
         label={reedPresenceLabel}
-        onOpenAiSettings={() => setIsViewingAiSettings(true)}
         onOpenCoachItems={() => setIsViewingCoachItems(true)}
         openItemsCount={openCoachItems.length}
         topInset={headerTopInset}
@@ -202,6 +205,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         messages={messages}
         isReady={isThreadReady}
         onLoadOlderMessages={loadOlderMessages}
+        onRetryAssistantMessage={retryAssistantMessage}
         isMessageSaved={isMessageSaved}
         onSaveCoachItem={saveCoachItem}
         scrollRef={scrollRef}

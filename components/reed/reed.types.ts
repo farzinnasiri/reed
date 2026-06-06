@@ -1,6 +1,6 @@
 export type ComposerSource = 'quick-action' | 'typed' | 'voice';
 export type CoachItemStatus = 'open' | 'resolved';
-export type MessageStatus = 'pending' | 'sent';
+export type MessageStatus = 'failed' | 'pending' | 'sent';
 export type VoiceComposerStatus = 'idle' | 'listening' | 'ready';
 
 export type ReedSurfaceProps = {
@@ -47,8 +47,8 @@ export type ReedMessage = {
   }>;
   createdAt: number;
   id: string;
-  isContextPrimer?: boolean;
   role: 'assistant' | 'user';
+  serverId?: string;
   source: ComposerSource;
   status: MessageStatus;
   text: string;

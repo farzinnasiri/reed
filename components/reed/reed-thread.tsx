@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Animated, Image, Pressable, ScrollView, View, type ScrollView as ScrollViewType } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
-import { createTiming, getTapScaleStyle } from '@/design/motion';
+import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './reed.styles';
 import type { ReedMessage } from './reed.types';
@@ -17,6 +17,7 @@ export function ReedThread({
   isReady,
   messages,
   onLoadOlderMessages,
+  onRetryAssistantMessage,
   onSaveCoachItem,
   scrollRef,
 }: {
@@ -27,14 +28,18 @@ export function ReedThread({
   isReady: boolean;
   messages: ReedMessage[];
   onLoadOlderMessages: () => void;
+  onRetryAssistantMessage: (message: ReedMessage) => void;
   onSaveCoachItem: (message: ReedMessage) => void;
   scrollRef: RefObject<ScrollViewType | null>;
 }) {
   const { theme } = useReedTheme();
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const distanceFromBottomRef = useRef(0);
+  const shouldFollowLatestRef = useRef(true);
 
   function handleScrollToBottom() {
     scrollRef.current?.scrollToEnd({ animated: true });
+    shouldFollowLatestRef.current = true;
     setShowScrollToBottom(false);
   }
 
@@ -53,6 +58,10 @@ export function ReedThread({
         onContentSizeChange={() => {
           if (!isReady) {
             scrollRef.current?.scrollToEnd({ animated: false });
+            return;
+          }
+          if (shouldFollowLatestRef.current || distanceFromBottomRef.current < 180) {
+            requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
           }
         }}
         onScroll={event => {
@@ -63,6 +72,8 @@ export function ReedThread({
           const distanceFromBottom = event.nativeEvent.contentSize.height
             - event.nativeEvent.layoutMeasurement.height
             - event.nativeEvent.contentOffset.y;
+          distanceFromBottomRef.current = distanceFromBottom;
+          shouldFollowLatestRef.current = distanceFromBottom < 180;
           setShowScrollToBottom(distanceFromBottom > 260);
         }}
         scrollEventThrottle={16}
@@ -80,6 +91,7 @@ export function ReedThread({
                 <MessageRow
                   isSaved={isMessageSaved(message)}
                   message={message}
+                  onRetryAssistantMessage={onRetryAssistantMessage}
                   onSaveCoachItem={onSaveCoachItem}
                 />
               </View>
@@ -114,23 +126,40 @@ function MessageRow({
   isSaved,
   message,
   onSaveCoachItem,
+  onRetryAssistantMessage,
 }: {
   isSaved: boolean;
   message: ReedMessage;
+  onRetryAssistantMessage: (message: ReedMessage) => void;
   onSaveCoachItem: (message: ReedMessage) => void;
 }) {
   const { theme } = useReedTheme();
   const isAssistant = message.role === 'assistant';
+  const isFailedAssistant = isAssistant && message.status === 'failed';
   const isPendingAssistant = isAssistant && message.status === 'pending';
-  const showActionBar = isAssistant && !message.isContextPrimer && message.status === 'sent' && (message.text?.trim().length ?? 0) > 0;
+  const showActionBar = isAssistant && (message.status === 'sent' || message.status === 'failed') && (message.text?.trim().length ?? 0) > 0;
   const messageText = message.text ?? '';
   const bubbleCornerStyle = isAssistant ? styles.messageBubbleLeft : styles.messageBubbleRight;
   const messageTextColor = String(isAssistant ? theme.colors.textPrimary : theme.colors.accentPrimaryText);
   const [copiedFeedbackMessageId, setCopiedFeedbackMessageId] = useState<string | null>(null);
+  const previousLayoutSignatureRef = useRef(`${message.status}:${messageText.length}:${message.attachments?.length ?? 0}`);
   const isCopiedFeedbackVisible = copiedFeedbackMessageId === message.id;
+
+  useLayoutEffect(() => {
+    const nextSignature = `${message.status}:${messageText.length}:${message.attachments?.length ?? 0}`;
+    if (previousLayoutSignatureRef.current !== nextSignature) {
+      runReedLayoutAnimation(reedMotion.durations.mode);
+      previousLayoutSignatureRef.current = nextSignature;
+    }
+  }, [message.attachments?.length, message.status, messageText.length]);
 
   function handleSave() {
     onSaveCoachItem(message);
+    void Haptics.selectionAsync();
+  }
+
+  function handleRetry() {
+    onRetryAssistantMessage(message);
     void Haptics.selectionAsync();
   }
 
@@ -139,16 +168,6 @@ function MessageRow({
     setCopiedFeedbackMessageId(message.id);
     void Haptics.selectionAsync();
     setTimeout(() => setCopiedFeedbackMessageId(current => (current === message.id ? null : current)), 1200);
-  }
-
-  if (isPendingAssistant) {
-    return (
-      <View style={styles.messageRowLeft}>
-        <View style={[styles.typingBubble, { backgroundColor: theme.colors.controlFill, borderColor: theme.colors.controlBorder }]}>
-          <TypingDots />
-        </View>
-      </View>
-    );
   }
 
   return (
@@ -178,7 +197,9 @@ function MessageRow({
             </View>
           ) : null}
 
-          {messageText.trim().length > 0 ? (
+          {isPendingAssistant ? (
+            <TypingDots />
+          ) : messageText.trim().length > 0 ? (
             <ReedText
               style={{ color: messageTextColor }}
               variant="body"
@@ -190,6 +211,22 @@ function MessageRow({
           {showActionBar ? (
             <View style={styles.messageActionBar}>
               <View style={styles.messageActionCluster}>
+                {isFailedAssistant ? (
+                  <Pressable
+                    accessibilityHint="Retries this Reed response without sending a new message."
+                    accessibilityLabel="Retry Reed response"
+                    accessibilityRole="button"
+                    hitSlop={10}
+                    onPress={handleRetry}
+                    style={({ pressed }) => [styles.messageInlineAction, getTapScaleStyle(pressed)]}
+                  >
+                    <Ionicons
+                      color={String(theme.colors.textMuted)}
+                      name="refresh-outline"
+                      size={15}
+                    />
+                  </Pressable>
+                ) : null}
                 <Pressable
                   accessibilityHint="Saves this Reed response as a coach item."
                   accessibilityLabel="Save as coach item"

@@ -426,7 +426,10 @@ function buildWatchouts(input: {
 }) {
   const watchouts: string[] = [];
   if (input.trainingProfile.constraints.areas.length > 0) {
-    watchouts.push(`Respect constraints around ${formatList(input.trainingProfile.constraints.areas.map(area => formatConstraint(area, input.trainingProfile.constraints.details[area] ?? null)).slice(0, 3))}.`);
+    const formattedConstraints = input.trainingProfile.constraints.areas
+      .map(area => formatConstraint(area, input.trainingProfile.constraints.details[area] ?? null))
+      .slice(0, 3);
+    watchouts.push(`Self-reported movement watchouts exist around ${formatList(formattedConstraints)}; use them as caution context and calibrate to the user's current description.`);
   }
   if (input.trainingProfile.baseline.recoveryQuality === 'fragile') {
     watchouts.push('Recovery baseline is fragile, so load and frequency shifts should stay conservative.');
@@ -546,9 +549,7 @@ function renderJourneyContext(input: {
   const goalLines = profile.goals.length > 0
     ? profile.goals.map((goal, index) => `${index + 1}. ${formatGoalContextLine(goal)}`)
     : ['No ranked goals captured.'];
-  const constraints = profile.constraints.length > 0
-    ? formatList(profile.constraints.map(formatConstraintContextLine))
-    : null;
+  const constraints = formatConstraintEvidencePhrase(subject, profile.constraints);
   const anchors = input.baseline.anchorSummary.length > 0
     ? `Known starting numbers include ${formatList(input.baseline.anchorSummary.slice(0, 6))}.`
     : 'Known starting numbers are limited.';
@@ -564,9 +565,7 @@ function renderJourneyContext(input: {
     'His priorities are:',
     ...goalLines,
     '',
-    constraints
-      ? `${subject} has flagged ${constraints} constraints. Respect those when suggesting exercises, progressions, substitutions, warm-ups, or volume increases.`
-      : `${subject} has not flagged pain, health, or movement constraints.`,
+    constraints,
     '',
     anchors,
     '',
@@ -658,9 +657,24 @@ function formatCoachReadParagraph(pronouns: ReturnType<typeof getPronouns>, sign
   const workload = signalNarrative('workload', signals.workload, 'logged set count and finished sessions over the current-state window');
   const goalAlignment = signalNarrative('goal alignment', signals.goalAlignment, 'whether recent top movements match the primary training goal over the available account history');
   const recoveryRisk = signalNarrative('recovery risk', signals.recoveryRisk, 'recovery baseline, recent workload, session frequency, gaps, and constraints');
-  const watchoutText = watchouts.length > 0 ? ` The main watchouts are: ${watchouts.join(' ')}` : '';
+  const watchoutText = watchouts.length > 0 ? ` Watchouts from profile and training evidence: ${watchouts.join(' ')}` : '';
 
-  return `The current read is that ${consistency}. ${progression}. ${workload}. ${goalAlignment}. ${recoveryRisk}.${watchoutText} Coach ${pronouns.object} by making training easier to repeat before optimizing details, respecting constraints, and avoiding sudden jumps in volume or intensity when recovery risk is elevated.`;
+  return `The current read is that ${consistency}. ${progression}. ${workload}. ${goalAlignment}. ${recoveryRisk}.${watchoutText} Coaching implication: make training easier to repeat before optimizing details, treat low-detail background facts as context rather than conclusions, and avoid sudden jumps in volume or intensity when recovery evidence is elevated.`;
+}
+
+function formatConstraintEvidencePhrase(subject: string, constraints: JourneySnapshotInput['profileContext']['constraints']) {
+  if (constraints.length === 0) return `${subject} has not flagged pain, health, or movement watchouts in the captured profile.`;
+
+  const detailed = constraints.filter(constraint => constraint.severity || constraint.timing || constraint.customDetail);
+  const formatted = formatList(constraints.map(formatConstraintContextLine));
+  if (detailed.length === constraints.length) {
+    return `${subject} has self-reported movement watchouts around ${formatted}. Use the detail provided, and adjust normal training only as much as the current conversation and safety signals justify.`;
+  }
+  if (detailed.length > 0) {
+    const vague = constraints.filter(constraint => !constraint.severity && !constraint.timing && !constraint.customDetail);
+    return `${subject} has mixed-detail movement watchouts: ${formatList(detailed.map(formatConstraintContextLine))} with detail, plus low-detail mentions around ${formatList(vague.map(formatConstraintContextLine))}. Treat low-detail mentions as caution signals, not hard limitations.`;
+  }
+  return `${subject} has low-detail self-reported movement watchouts around ${formatted}. Severity and timing are not captured here; use them as background caution, not as hard restrictions.`;
 }
 
 function signalNarrative(label: string, signal: JourneySignal, explanation: string) {

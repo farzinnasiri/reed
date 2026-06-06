@@ -276,24 +276,20 @@ export default defineSchema({
   })
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt']),
-  reedAttitudes: defineTable({
-    key: v.string(),
-    name: v.string(),
-    description: v.string(),
-    prompt: v.string(),
-    status: v.union(v.literal('active'), v.literal('archived')),
-    sortOrder: v.number(),
+  reedCoachStates: defineTable({
+    profileId: v.id('profiles'),
+    threadId: v.id('reedThreads'),
+    content: v.string(),
+    sourceFromMessageId: v.optional(v.id('reedMessages')),
+    updatedThroughMessageId: v.id('reedMessages'),
+    modelProvider: v.string(),
+    modelName: v.string(),
+    promptHash: v.string(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index('by_key', ['key'])
-    .index('by_status_and_sort_order', ['status', 'sortOrder']),
-  reedProfileAiSettings: defineTable({
-    profileId: v.id('profiles'),
-    selectedAttitudeId: v.optional(v.id('reedAttitudes')),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  }).index('by_profile_id', ['profileId']),
+    .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
+    .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
   profileInsights: defineTable({
     profileId: v.id('profiles'),
     content: v.string(),

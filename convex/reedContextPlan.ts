@@ -1,9 +1,9 @@
 "use node";
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
+import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
 import type { ReedContextToolCall, ReedTimeRange } from './reedContextTypes';
 
 const CONTEXT_PLANNER_MODEL_NAME = process.env.REED_CONTEXT_PLANNER_MODEL ?? 'gemini-2.5-flash-lite';
@@ -45,11 +45,10 @@ export async function planReedContext(args: {
   recentMessages: Array<{ role: string; content: string }>;
   userMessage: string;
 }): Promise<ReedContextToolCall[]> {
-  if (!process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) return [];
+  if (!hasApiKeyForModel(CONTEXT_PLANNER_MODEL_NAME)) return [];
 
-  const model = new ChatGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
-    model: CONTEXT_PLANNER_MODEL_NAME,
+  const model = createChatModel({
+    modelName: CONTEXT_PLANNER_MODEL_NAME,
     temperature: 0,
     maxRetries: 1,
   }).bindTools(contextTools);
@@ -71,6 +70,12 @@ function buildPlannerSystemPrompt(args: {
     'You choose which context tools Reed needs before answering a fitness coaching chat.',
     'Call only tools that would materially improve the answer. Prefer fewer calls.',
     'Do not answer the user. Do not call tools for generic encouragement, greetings, or purely conversational replies.',
+    'Do not call tools just because the message mentions training. Call tools only when the user needs app data, history, goals, load, recovery, bodyweight, or exercise performance.',
+    'For progress/results questions, use training history and relevant exercise history.',
+    'For plan/programming questions, prefer goals plus a recent workload window.',
+    'For recovery/load questions, prefer recent workload. Add bodyweight only if the user asks about bodyweight or body composition.',
+    'For simple technique, image, or clarification questions, usually do not call tools unless app history materially changes the answer.',
+    'When the user corrects Reed or pushes back on a recommendation, prefer recent chat context over fetching more app data.',
     'Use semantic time ranges only; never generate absolute dates.',
     'For today/this week/last week, use the matching preset.',
     'For progress goals, use enough history to judge current ability and trend, usually last_n_days 30-90.',

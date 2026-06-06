@@ -1,10 +1,10 @@
 "use node";
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
+import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
 
 const MODEL_NAME = process.env.REED_PROFILE_INSIGHT_MODEL ?? 'gemini-2.5-flash-lite';
@@ -51,10 +51,9 @@ async function loadSnapshot(ctx: ActionCtx, profileId: Id<'profiles'>, reason: s
 }
 
 async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
-  if (!process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) return fallback;
-  const model = new ChatGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
-    model: MODEL_NAME,
+  if (!hasApiKeyForModel(MODEL_NAME)) return fallback;
+  const model = createChatModel({
+    modelName: MODEL_NAME,
     temperature: 0.35,
     maxRetries: 1,
   });

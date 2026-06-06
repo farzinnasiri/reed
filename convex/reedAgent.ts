@@ -1,7 +1,8 @@
 "use node";
 
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
+import { PromptTemplate } from '@langchain/core/prompts';
+import { ChatOpenAI } from '@langchain/openai';
 import { ChatXAI } from '@langchain/xai';
 import { createAgent } from 'langchain';
 import { internalAction, type ActionCtx } from './_generated/server';
@@ -9,14 +10,19 @@ import { planReedContext } from './reedContextPlan';
 import type { ReedContextBlock, ReedContextToolCall } from './reedContextTypes';
 import { internal } from './_generated/api';
 import { v } from 'convex/values';
+import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
 
 const CHAT_MODEL_PROVIDER = 'xai';
 const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
 const CHAT_REASONING_MODE = 'low';
-const SUMMARY_MODEL_PROVIDER = 'google';
+const CHAT_MODEL_ATTEMPTS = 2;
+const CHAT_MODEL_TIMEOUT_MS = 25_000;
+const CHAT_MODEL_RETRY_DELAY_MS = 900;
 const SUMMARY_MODEL_NAME = process.env.REED_SUMMARY_MODEL ?? 'gemini-2.5-flash-lite';
-const IMAGE_ANALYSIS_MODEL_PROVIDER = 'google';
+const COACH_STATE_MODEL_PROVIDER = 'openai';
+const COACH_STATE_MODEL_NAME = process.env.REED_COACH_STATE_MODEL ?? 'gpt-5.2';
+const COACH_STATE_REASONING_EFFORT = process.env.REED_COACH_STATE_REASONING_EFFORT ?? 'low';
 const IMAGE_ANALYSIS_MODEL_NAME = process.env.REED_IMAGE_ANALYSIS_MODEL ?? 'gemini-3.1-flash-lite';
 
 export const runAssistant = internalAction({
@@ -32,22 +38,16 @@ export const runAssistant = internalAction({
     userMessageId: v.id('reedMessages'),
   },
   handler: async (ctx, args) => {
-    let context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
-
-    if (context.reentryState === 'cold') {
-      await compactThreadHandler(ctx, { threadId: context.thread._id, beforeMessageId: context.userMessage._id });
-      context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
-    }
-
     try {
+      let context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
+
+      if (context.reentryState === 'cold') {
+        await compactThreadHandler(ctx, { threadId: context.thread._id, beforeMessageId: context.userMessage._id });
+        context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
+      }
+
       await analyzePendingImageAttachments(ctx, context.userMessage._id);
       context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
-      if (context.imageObservations.length > 0) {
-        await ctx.runMutation(internal.reed.insertImageObservationMessage, {
-          assistantMessageId: context.assistantMessage._id,
-          userMessageId: context.userMessage._id,
-        });
-      }
 
       const contextBlocks = context.route === 'refuse_readonly'
         ? []
@@ -61,11 +61,12 @@ export const runAssistant = internalAction({
         assistantMessageId: context.assistantMessage._id,
         content: response,
         completedAt: Date.now(),
+        reentryState: context.reentryState,
       });
     } catch (error) {
       console.error('[REED_ASSISTANT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
       await ctx.runMutation(internal.reed.failAssistantMessage, {
-        assistantMessageId: context.assistantMessage._id,
+        assistantMessageId: args.assistantMessageId,
         failedAt: Date.now(),
         error: error instanceof Error ? error.message : String(error),
       });
@@ -78,6 +79,45 @@ export const compactThread = internalAction({
   handler: compactThreadHandler,
 });
 
+export const refreshCoachState = internalAction({
+  args: {
+    sourceThroughMessageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const context = await ctx.runQuery(internal.reed.loadCoachStateRefreshContext, args);
+      if (!context) return null;
+
+      const prompt = await renderCoachStatePrompt({
+        template: context.prompt.content,
+        previousCoachState: context.previousState?.content ?? null,
+        rollingSummary: context.activeSummary?.content ?? null,
+        journeyContext: context.journeySummary,
+        recentMessages: context.recentMessages.map((message: { role: string; content: string }) => ({
+          role: message.role,
+          content: message.content,
+        })),
+      });
+      const content = await invokeCoachStateModel(prompt);
+
+      await ctx.runMutation(internal.reed.saveCoachState, {
+        threadId: context.thread._id,
+        content,
+        modelProvider: COACH_STATE_MODEL_PROVIDER,
+        modelName: COACH_STATE_MODEL_NAME,
+        promptHash: context.prompt.contentHash,
+        sourceFromMessageId: context.sourceFromMessage._id,
+        updatedThroughMessageId: context.sourceThroughMessage._id,
+      });
+    } catch (error) {
+      console.error('[REED_COACH_STATE_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+    }
+
+    return null;
+  },
+});
+
 async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id<'reedMessages'>; threadId: Id<'reedThreads'> }) {
   const context = await ctx.runQuery(internal.reed.loadCompactionContext, { beforeMessageId: args.beforeMessageId, threadId: args.threadId });
   const messages = context.messages;
@@ -85,7 +125,7 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
 
   const sourceThroughMessage = messages[messages.length - 1];
   const sourceFromMessage = messages[0];
-  const prompt = buildSummaryPrompt({
+  const prompt = await buildSummaryPrompt({
     systemPrompt: context.prompt.content,
     priorSummary: context.activeSummary?.content ?? null,
     messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
@@ -95,7 +135,7 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
   await ctx.runMutation(internal.reed.saveMemorySummary, {
     threadId: args.threadId,
     content,
-    modelProvider: SUMMARY_MODEL_PROVIDER,
+    modelProvider: providerForModel(SUMMARY_MODEL_NAME),
     modelName: SUMMARY_MODEL_NAME,
     promptHash: context.prompt.contentHash,
     sourceFromMessageId: sourceFromMessage._id,
@@ -143,7 +183,8 @@ async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<ty
 }
 
 async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'reedMessages'>) {
-  const attachments = await ctx.runQuery(internal.reed.loadPendingImageAttachments, { messageId });
+  const attachments: Array<{ _id: Id<'reedMessageAttachments'>; storageId: Id<'_storage'>; sortOrder: number }> =
+    await ctx.runQuery(internal.reed.loadPendingImageAttachments, { messageId });
   if (attachments.length === 0) return;
 
   await Promise.all(attachments.map(async attachment => {
@@ -154,7 +195,7 @@ async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'ree
       });
       await ctx.runMutation(internal.reed.saveImageAnalysis, {
         attachmentId: attachment._id,
-        modelProvider: IMAGE_ANALYSIS_MODEL_PROVIDER,
+        modelProvider: providerForModel(IMAGE_ANALYSIS_MODEL_NAME),
         modelName: IMAGE_ANALYSIS_MODEL_NAME,
         narrative,
         status: 'analyzed',
@@ -163,7 +204,7 @@ async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'ree
       console.error('[REED_IMAGE_ANALYSIS_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
       await ctx.runMutation(internal.reed.saveImageAnalysis, {
         attachmentId: attachment._id,
-        modelProvider: IMAGE_ANALYSIS_MODEL_PROVIDER,
+        modelProvider: providerForModel(IMAGE_ANALYSIS_MODEL_NAME),
         modelName: IMAGE_ANALYSIS_MODEL_NAME,
         narrative: 'Reed could not read this attached image clearly enough to use it as coaching context.',
         status: 'failed',
@@ -175,31 +216,50 @@ async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'ree
 
 function deterministicContextCalls(context: Awaited<ReturnType<typeof loadContextType>>): ReedContextToolCall[] {
   const currentText = context.userMessage.content.toLowerCase();
-  const recentText = [
-    ...context.recentMessages.slice(-6).map((message: { content: string }) => message.content),
-    context.userMessage.content,
-  ].join('\n').toLowerCase();
-
   const calls: ReedContextToolCall[] = [];
 
-  const trainingInThread = /\b(workout|session|training|lift|exercise|exercises|set|sets|rep|reps|hit|logged|bench|squat|deadlift|press|curl|row|pull[- ]?up|dip|run|cardio)\b/.test(recentText);
-  const contextSeekingMessage = /\b(access|see|read|retrieve|look up|pull up|know|check|review|progress|what|how|today|week|recent|last|finished|did|hit|them|it|that|this)\b/.test(currentText);
-  const wantsWeeklyContext = /\b(this week|week|weekly)\b/.test(currentText);
-  const wantsProgressContext = /\b(progress|trend|improving|stronger|weaker|compare|history)\b/.test(currentText);
+  const asksProgress = /\b(progress|progressing|improving|stronger|weaker|plateau|stalled|trend|compare|working|results?|changed|pr\b|personal record)\b/.test(currentText);
+  const asksHistory = /\b(today|yesterday|this week|last week|recent|last session|last workout|what did i do|how did .* go|logged|finished|hit)\b/.test(currentText);
+  const asksPlan = /\b(what should i (train|do|focus)|build .*session|make .*program|plan|routine|split|workout should|next focus|exercise should i choose|which exercise)\b/.test(currentText);
+  const asksRecovery = /\b(tired|fatigue|sore|recovery|rest|sleep|overtraining|overtrain|can i train|should i train|deload|ache|pain|hurts?)\b/.test(currentText);
+  const asksBodyweight = /\b(weight|bodyweight|body weight|fat loss|lose fat|cutting|bulk|gaining|measurements?)\b/.test(currentText);
+  const exerciseQuery = extractExerciseQuery(currentText);
 
-  if (trainingInThread && contextSeekingMessage) {
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'today' } } });
-  }
-
-  if (trainingInThread && wantsWeeklyContext) {
+  if (/\b(this week|week|weekly)\b/.test(currentText)) {
     calls.push({ name: 'summarize_training_window', args: { range: { preset: 'this_week' } } });
   }
 
-  if (trainingInThread && wantsProgressContext) {
+  if (asksProgress) {
     calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 30 } } });
   }
 
+  if (asksHistory && !asksProgress) {
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'today' } } });
+  }
+
+  if (asksPlan) {
+    calls.push({ name: 'get_training_goals', args: { status: 'active', limit: 5 } });
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 14 } } });
+  }
+
+  if (asksRecovery) {
+    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 14 } } });
+  }
+
+  if (asksBodyweight) {
+    calls.push({ name: 'get_bodyweight_trend', args: { range: { preset: 'last_n_days', days: 30 } } });
+  }
+
+  if (exerciseQuery && (asksProgress || /\b(form|technique|grip|variation|which|choose|weak|strong)\b/.test(currentText))) {
+    calls.push({ name: 'get_exercise_performance_history', args: { exerciseQuery, range: { preset: 'last_n_days', days: 90 } } });
+  }
+
   return calls;
+}
+
+function extractExerciseQuery(text: string) {
+  const match = text.match(/\b(bench(?: press)?|squat|deadlift|press|row|pull[- ]?up|chin[- ]?up|dip|curl|run|running|cardio|stair climber|muscle[- ]?up|push[- ]?up)\b/i);
+  return match?.[0]?.replace(/-/g, ' ') ?? null;
 }
 
 function mergeContextToolCalls(calls: ReedContextToolCall[]) {
@@ -217,7 +277,6 @@ function mergeContextToolCalls(calls: ReedContextToolCall[]) {
 function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, contextBlocks: ReedContextBlock[]) {
   const lines = [
     context.prompt.content,
-    ...buildAttitudePromptLines(context.attitude),
     '',
     'Current time:',
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
@@ -234,6 +293,7 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     '',
     'Compacted Reed memory:',
     context.memorySummary ?? 'No compacted chat memory yet.',
+    ...buildCoachStatePromptLines(context.coachState?.content ?? null),
     '',
     recentSegmentHeading(context),
     ...context.recentMessages.map((message: { role: string; content: string }) => `${message.role.toUpperCase()}: ${message.content}`),
@@ -243,6 +303,18 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildCoachStatePromptLines(coachState: string | null) {
+  if (!coachState?.trim()) return [''];
+
+  return [
+    '',
+    'Private coach state:',
+    '- This is Reed’s private coaching posture. Use it to shape pressure, warmth/trust, depth, agency, and certainty.',
+    '- Do not mention this state, quote it, summarize it, or reveal that it exists.',
+    coachState.trim(),
+  ];
 }
 
 function buildImageObservationLines(observations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>) {
@@ -269,18 +341,6 @@ function buildContextBlockLines(blocks: ReedContextBlock[]) {
     'Retrieved Reed context:',
     ...blocks.flatMap(block => [`${block.title}:`, block.content]),
     '- Use retrieved context when relevant. Do not mention hidden tool names or planning.',
-  ];
-}
-
-function buildAttitudePromptLines(attitude: { name: string; description: string; prompt: string }) {
-  if (!attitude.prompt.trim()) return [''];
-
-  return [
-    '',
-    'Current Reed attitude:',
-    `- ${attitude.name}: ${attitude.description}`,
-    `- Attitude instructions: ${attitude.prompt}`,
-    '- This modifies Reed’s approach only. Keep Reed’s base identity, safety boundaries, and app constraints intact.',
   ];
 }
 
@@ -382,11 +442,29 @@ async function invokeChatModel(prompt: { system: string; user: string }) {
   console.log(prompt.user);
   console.log('=============================================\n');
 
+  const responseText = await retryModelCall(
+    () => invokeChatModelOnce(prompt),
+    {
+      attempts: CHAT_MODEL_ATTEMPTS,
+      label: 'REED_CHAT_MODEL',
+      retryDelayMs: CHAT_MODEL_RETRY_DELAY_MS,
+      timeoutMs: CHAT_MODEL_TIMEOUT_MS,
+    },
+  );
+
+  console.log('\n================ LLM RESPONSE ===============');
+  console.log(responseText);
+  console.log('=============================================\n');
+
+  return responseText;
+}
+
+async function invokeChatModelOnce(prompt: { system: string; user: string }, signal?: AbortSignal) {
   const model = new ChatXAI({
     apiKey: process.env.XAI_API_KEY,
     model: CHAT_MODEL_NAME,
     temperature: 0.45,
-    maxRetries: 1,
+    maxRetries: 0,
     // xAI-specific reasoning controls differ by model/API version; keep isolated here.
     reasoningEffort: CHAT_REASONING_MODE,
   } as ConstructorParameters<typeof ChatXAI>[0] & { reasoningEffort?: string });
@@ -397,35 +475,53 @@ async function invokeChatModel(prompt: { system: string; user: string }) {
     systemPrompt: prompt.system,
   });
 
-  const result = await agent.invoke({ messages: [new HumanMessage(prompt.user)] }, { recursionLimit: 4 });
-  const responseText = extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
+  const result = await agent.invoke(
+    { messages: [new HumanMessage(prompt.user)] },
+    { recursionLimit: 4, signal } as { recursionLimit: number; signal?: AbortSignal },
+  );
+  return extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
+}
 
-  console.log('\n================ LLM RESPONSE ===============');
-  console.log(responseText);
-  console.log('=============================================\n');
+async function invokeCoachStateModel(prompt: string) {
+  if (!process.env.OPENAI_API_KEY) {
+    return deterministicCoachState(prompt);
+  }
 
-  return responseText;
+  const model = new ChatOpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    model: COACH_STATE_MODEL_NAME,
+    maxRetries: 1,
+    reasoning: { effort: COACH_STATE_REASONING_EFFORT },
+  } as ConstructorParameters<typeof ChatOpenAI>[0] & { reasoning?: { effort: string } });
+  const result = await model.invoke([
+    new SystemMessage(prompt),
+    new HumanMessage('Write only the updated private coach state.'),
+  ]);
+  return (textFromContent(result.content) || deterministicCoachState(prompt)).slice(0, 2400);
 }
 
 async function invokeSummaryModel(prompt: string) {
-  if (!process.env.GOOGLE_API_KEY && !process.env.GEMINI_API_KEY) {
+  if (!hasApiKeyForModel(SUMMARY_MODEL_NAME)) {
     return deterministicSummary(prompt);
   }
 
-  const model = new ChatGoogleGenerativeAI({
-    apiKey: process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY,
-    model: SUMMARY_MODEL_NAME,
+  const model = createChatModel({
+    modelName: SUMMARY_MODEL_NAME,
     temperature: 0.1,
     maxRetries: 1,
   });
-  const result = await model.invoke([new SystemMessage('Summarize Reed coaching continuity. Be compact and factual.'), new HumanMessage(prompt)]);
-  return textFromContent(result.content) || deterministicSummary(prompt);
+  try {
+    const result = await model.invoke([new SystemMessage('Summarize Reed coaching continuity. Be compact and factual.'), new HumanMessage(prompt)]);
+    return textFromContent(result.content) || deterministicSummary(prompt);
+  } catch (error) {
+    console.error('[REED_SUMMARY_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
+    return deterministicSummary(prompt);
+  }
 }
 
 async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'_storage'>; sortOrder: number }) {
-  const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('Google Gemini API key is not configured for Reed image analysis.');
+  if (!hasApiKeyForModel(IMAGE_ANALYSIS_MODEL_NAME)) {
+    throw new Error(`API key is not configured for Reed image analysis model ${IMAGE_ANALYSIS_MODEL_NAME}.`);
   }
 
   const url = await ctx.storage.getUrl(input.storageId);
@@ -438,9 +534,8 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
 
   const imageBytes = await response.arrayBuffer();
   const base64Image = Buffer.from(imageBytes).toString('base64');
-  const model = new ChatGoogleGenerativeAI({
-    apiKey,
-    model: IMAGE_ANALYSIS_MODEL_NAME,
+  const model = createChatModel({
+    modelName: IMAGE_ANALYSIS_MODEL_NAME,
     temperature: 0.2,
     maxRetries: 1,
   });
@@ -473,16 +568,34 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
   return narrative.slice(0, 1800);
 }
 
-function buildSummaryPrompt(input: { systemPrompt: string; priorSummary: string | null; messages: Array<{ role: string; content: string }> }) {
-  return [
-    input.systemPrompt,
-    '',
-    'Prior summary:',
-    input.priorSummary ?? 'None.',
-    '',
-    'New messages:',
-    ...input.messages.map(message => `${message.role.toUpperCase()}: ${message.content}`),
-  ].join('\n');
+async function buildSummaryPrompt(input: { systemPrompt: string; priorSummary: string | null; messages: Array<{ role: string; content: string }> }) {
+  return renderMustachePrompt(input.systemPrompt, {
+    previous_summary: input.priorSummary?.trim() || 'No previous memory summary yet.',
+    recent_messages: input.messages.length > 0
+      ? input.messages.map(message => `${message.role.toUpperCase()}: ${message.content}`).join('\n')
+      : 'No recent messages are available.',
+  });
+}
+
+async function renderCoachStatePrompt(input: {
+  template: string;
+  previousCoachState: string | null;
+  rollingSummary: string | null;
+  journeyContext: string | null;
+  recentMessages: Array<{ role: string; content: string }>;
+}) {
+  return renderMustachePrompt(input.template, {
+    previous_coach_state: input.previousCoachState?.trim() || 'No previous private coach dialogue yet.',
+    rolling_summary: input.rollingSummary?.trim() || 'No compacted chat summary yet.',
+    journey_context: input.journeyContext?.trim() || 'No journey snapshot is available yet.',
+    recent_messages: input.recentMessages.length > 0
+      ? input.recentMessages.map(message => `${message.role.toUpperCase()}: ${message.content}`).join('\n')
+      : 'No recent messages are available.',
+  });
+}
+
+async function renderMustachePrompt(template: string, values: Record<string, string>) {
+  return await PromptTemplate.fromTemplate(template, { templateFormat: 'mustache' }).format(values);
 }
 
 function buildReadonlyRefusal() {
@@ -502,6 +615,61 @@ function deterministicSummary(prompt: string) {
   return lines.length > 0
     ? `Recent Reed continuity:\n${lines.join('\n')}`
     : 'No durable coaching memory has been established yet.';
+}
+
+function deterministicCoachState(prompt: string) {
+  const lines = prompt
+    .split('\n')
+    .filter(line => /^(USER|ASSISTANT):/.test(line))
+    .slice(-8)
+    .map(line => line.slice(0, 220));
+  const recent = lines.length > 0 ? ` Recent evidence: ${lines.join(' / ')}` : '';
+  return `I do not have enough model-backed evidence to update this deeply yet. I should stay steady, practical, and honest: keep pressure moderate, warmth/trust stable, depth brief unless the user asks for more, and agency collaborative. I should avoid pretending certainty or switching into a persona.${recent} Reconsider after the next meaningful exchange.`;
+}
+
+async function retryModelCall<T>(
+  call: (signal?: AbortSignal) => Promise<T>,
+  options: { attempts: number; label: string; retryDelayMs: number; timeoutMs: number },
+) {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
+    try {
+      return await callWithTimeout(signal => call(signal), options.timeoutMs);
+    } catch (error) {
+      lastError = error;
+      console.error(`[${options.label}_ATTEMPT_FAILED]`, {
+        attempt,
+        message: error instanceof Error ? error.message : String(error),
+      });
+      if (attempt < options.attempts) {
+        await delay(options.retryDelayMs);
+      }
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+}
+
+async function callWithTimeout<T>(call: (signal: AbortSignal) => Promise<T>, timeoutMs: number) {
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      call(controller.signal),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => {
+          controller.abort();
+          reject(new Error(`Model call timed out after ${timeoutMs}ms.`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+function delay(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function extractLastText(messages: unknown) {
@@ -544,7 +712,7 @@ declare function loadContextType(): Promise<{
   assistantMessage: { _id: string };
   userMessage: { content: string };
   prompt: { _id: string | null; content: string; contentHash: string };
-  attitude: { _id: string | null; key: string; name: string; description: string; prompt: string };
+  coachState: { content: string } | null;
   imageObservations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
   journeySummary: string | null;
   memorySummary: string | null;

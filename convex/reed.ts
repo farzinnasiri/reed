@@ -12,48 +12,61 @@ V1 is read-only: you cannot change workouts, profile, goals, plans, or app data.
 If data is missing or context is weak, say so plainly and ask one narrow follow-up.
 Use the profile and memory context when present. Do not pretend to know facts not in context.`;
 
-const DEFAULT_REED_ATTITUDE = {
-  _id: null,
-  key: 'default',
-  name: 'Default',
-  description: 'No extra attitude prompt.',
-  prompt: '',
-};
-
 const HOT_AFTER_MS = 5 * 60 * 1000;
 const WARM_AFTER_MS = 60 * 60 * 1000;
-const HOT_RECENT_MESSAGE_COUNT = 8;
+const HOT_RECENT_MESSAGE_COUNT = 24;
 const WARM_RECENT_MESSAGE_COUNT = 4;
 const COLD_RECENT_MESSAGE_COUNT = 0;
-const COMPACT_AFTER_MESSAGE_COUNT = 8;
+const COMPACT_AFTER_MESSAGE_COUNT = 24;
+const COACH_STATE_REFRESH_AFTER_USER_MESSAGES = 4;
 const MAX_REED_IMAGE_ATTACHMENTS = 5;
 const MAX_REED_IMAGE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
-const DEFAULT_REED_SUMMARY_PROMPT = `Update the durable Reed memory summary for one ongoing user chat.
-Preserve: user goals and constraints, coaching decisions, open questions, cautions, preferences, and what Reed should remember next time.
-Discard: greetings, filler, exact phrasing, transient small talk, and implementation details.
-Do not invent facts. If information is uncertain, mark it as uncertain.
-Keep the summary compact and useful for future coaching continuity. Maximum 220 words.`;
-const CONTEXT_PRIMER_NONCE_SUFFIX = ':context-primer';
-const CONTEXT_PRIMER_MESSAGES = [
-  'Let me take a look at your recent training first.',
-  'I’ll check your workouts before I answer that.',
-  'Let me pull your training context into this.',
-  'I’m going to look at the recent sessions for signal.',
-  'Give me a moment to check the training log.',
-  'I’ll scan the recent work and then make this specific.',
-  'Let me check what you’ve actually logged.',
-  'I’m looking at your workout history now.',
-  'Let me ground this in your recent sessions.',
-  'I’ll review the training data before calling it.',
-  'Let me look at the work you’ve put in first.',
-  'I’m checking the recent pattern, not guessing.',
-  'Let me read the log and separate signal from noise.',
-  'I’ll pull the relevant workout context now.',
-  'Let me check your recent training before I coach this.',
-] as const;
+const DEFAULT_COACH_STATE_PROMPT_KEY = 'reed_coach_state_system';
+const CHECKED_IN_COACH_STATE_PROMPT_HASH = 'h7a119f49';
+const DEFAULT_REED_SUMMARY_PROMPT = `You update Reed's compact memory of an ongoing coaching conversation.
 
+This memory is objective continuity for a coach. It is not a transcript, not a psychological profile, not a private coaching strategy, and not an analysis of the user's personality.
+
+<previous_summary>
+{{previous_summary}}
+</previous_summary>
+
+<recent_history>
+{{recent_messages}}
+</recent_history>
+
+Preserve signal: user goals, constraints, preferences, training context, real agreements, proposed plans not yet accepted, corrections, pushback, doubts, changes of direction, training-relevant life context, recovery or pain signals, recent outcomes, and open questions.
+
+Forget noise: greetings, filler, repeated acknowledgements, small talk, exact wording unless it matters, internal tool messages, model behavior, routing, image-analysis mechanics, prompt details, and generic advice that did not change the user's plan or understanding.
+
+Be careful with certainty. Do not turn a suggestion into an agreement. Do not turn a vague concern into a diagnosis. Do not turn old app data into the user's current preference. If something is unclear, say it is unclear. If the user pushed back, preserve the pushback.
+
+Write compact objective history, mostly short narrative or light bullets. No therapy language. No hidden speculation about the user's personality. No private coaching posture. Maximum 220 words unless the conversation contains multiple important unresolved threads.
+
+Write only the updated memory.`;
+const DEFAULT_COACH_STATE_PROMPT = `You are Reed's private coaching observer.
+
+Update Reed's private coaching dialogue from the previous dialogue and new evidence.
+
+<previous_dialogue>
+{{previous_coach_state}}
+</previous_dialogue>
+
+<rolling_summary>
+{{rolling_summary}}
+</rolling_summary>
+
+<journey_context>
+{{journey_context}}
+</journey_context>
+
+<recent_history>
+{{recent_messages}}
+</recent_history>
+
+Write only Reed's updated private inner dialogue as compact first-person prose. No markdown, headings, bullets, JSON, numeric scores, persona labels, or user-facing reply. Naturally encode pressure, warmth/trust, depth, agency, certainty, what changed, the next coaching approach, what to avoid, and when to reconsider.`;
 const composerSourceValidator = v.union(v.literal('quick-action'), v.literal('typed'), v.literal('voice'));
 const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly'));
 const reentryStateValidator = v.union(v.literal('hot'), v.literal('warm'), v.literal('cold'));
@@ -93,84 +106,9 @@ const DEFAULT_QUICK_ACTIONS = [
   },
 ] as const;
 
-const attitudePayloadValidator = v.object({
-  description: v.string(),
-  key: v.string(),
-  name: v.string(),
-  prompt: v.string(),
-  sortOrder: v.number(),
-});
-
 const reedImageAttachmentInputValidator = v.object({
   storageId: v.id('_storage'),
 });
-
-type ReedAttitudeSeed = {
-  description: string;
-  key: string;
-  name: string;
-  prompt: string;
-  sortOrder: number;
-};
-
-const DEFAULT_REED_ATTITUDE_SEEDS: ReedAttitudeSeed[] = [
-  {
-    key: 'drill_sergeant',
-    name: 'Drill sergeant',
-    description: 'Hard, blunt accountability for moments when excuses are louder than action.',
-    prompt: 'Take a strict, no-excuses coaching stance. Be blunt, serious, and action-oriented, but never insulting, shaming, reckless, or unsafe. Cut through rationalization, name the next concrete action, and push the user to execute now. Keep Reed’s base personality intact: precise, protective, and useful.',
-    sortOrder: 10,
-  },
-  {
-    key: 'tough_love',
-    name: 'Tough love',
-    description: 'Firm and compassionate: honest pressure without theatrics.',
-    prompt: 'Use tough love. Tell the truth plainly, challenge weak reasoning, and hold the user to their stated goals. Pair every hard truth with one practical next step. Avoid motivational yelling; the tone should feel like a coach who cares enough not to indulge avoidance.',
-    sortOrder: 20,
-  },
-  {
-    key: 'steady_coach',
-    name: 'Steady coach',
-    description: 'Balanced, grounded coaching for everyday training decisions.',
-    prompt: 'Use a steady coaching attitude: warm, direct, concise, and practical. Help the user reduce ambiguity, choose the next useful action, and maintain momentum without over-explaining. This is the default Reed approach.',
-    sortOrder: 30,
-  },
-  {
-    key: 'soft_supportive',
-    name: 'Soft support',
-    description: 'Gentle, reassuring, and confidence-building when the user feels low or overwhelmed.',
-    prompt: 'Use a softer supportive attitude. Validate the difficulty briefly, reduce pressure, and help the user find a small safe step forward. Do not coddle or remove agency. Keep guidance concrete and calm, with extra care around fatigue, discouragement, and recovery.',
-    sortOrder: 40,
-  },
-  {
-    key: 'analytical',
-    name: 'Analytical',
-    description: 'Structured reasoning, tradeoffs, and evidence-first coaching.',
-    prompt: 'Use an analytical coaching attitude. Break the situation into variables, constraints, tradeoffs, and likely outcomes. Prefer clear reasoning over hype. When data is missing, say what would change the recommendation. End with a decision or a narrow next question.',
-    sortOrder: 50,
-  },
-  {
-    key: 'practical_operator',
-    name: 'Practical operator',
-    description: 'Execution-first coaching with checklists, steps, and minimum viable action.',
-    prompt: 'Use a practical operator attitude. Convert the user’s situation into an immediate plan, checklist, or decision rule. Minimize theory unless it changes the action. Optimize for what the user can do today with their available time, equipment, and energy.',
-    sortOrder: 60,
-  },
-  {
-    key: 'academic',
-    name: 'Academic',
-    description: 'Deeper explanations for users who want the why behind training advice.',
-    prompt: 'Use an academic teaching attitude. Explain mechanisms, principles, and assumptions in plain language. Keep it rigorous but not verbose. Separate established principles from uncertainty, and translate the lesson back into training practice before ending.',
-    sortOrder: 70,
-  },
-  {
-    key: 'minimalist',
-    name: 'Minimalist',
-    description: 'Very concise coaching for users who want signal only.',
-    prompt: 'Use a minimalist attitude. Be terse, specific, and high-signal. Avoid long explanations, emotional padding, and multiple options unless necessary. Give the user the cleanest answer and the next action.',
-    sortOrder: 80,
-  },
-];
 
 export const getOrCreateThread = mutation({
   args: {},
@@ -194,7 +132,8 @@ export const listMessages = query({
       .order('desc')
       .take(limit + 1);
 
-    const messages = await attachMessageImages(ctx, rows.slice(0, limit).reverse());
+    const visibleRows = rows.filter(message => !isInternalArtifactMessage(message));
+    const messages = await attachMessageImages(ctx, visibleRows.slice(0, limit).reverse());
 
     return {
       hasMore: rows.length > limit,
@@ -225,7 +164,7 @@ export const listMessagesPaginated = query({
 
     return {
       ...result,
-      page: await attachMessageImages(ctx, result.page),
+      page: await attachMessageImages(ctx, result.page.filter(message => !isInternalArtifactMessage(message))),
     };
   },
 });
@@ -248,136 +187,6 @@ export const listQuickActions = query({
   handler: async () => [...DEFAULT_QUICK_ACTIONS].sort((left, right) => left.sortOrder - right.sortOrder),
 });
 
-export const listAttitudes = query({
-  args: {},
-  handler: async ctx => {
-    await requireViewerProfile(ctx);
-    const rows = await ctx.db
-      .query('reedAttitudes')
-      .withIndex('by_status_and_sort_order', q => q.eq('status', 'active'))
-      .order('asc')
-      .take(100);
-
-    return rows.map(row => ({
-      _id: row._id,
-      key: row.key,
-      name: row.name,
-      description: row.description,
-      prompt: row.prompt,
-      sortOrder: row.sortOrder,
-    }));
-  },
-});
-
-export const getAiSettings = query({
-  args: {},
-  handler: async ctx => {
-    const profile = await requireViewerProfile(ctx);
-    const settings = await getAiSettingsForProfile(ctx, profile._id);
-    const selectedAttitude = settings?.selectedAttitudeId
-      ? await ctx.db.get(settings.selectedAttitudeId)
-      : null;
-
-    return {
-      selectedAttitudeId: selectedAttitude?.status === 'active' ? selectedAttitude._id : null,
-      fallbackAttitude: DEFAULT_REED_ATTITUDE,
-    };
-  },
-});
-
-export const setAiAttitude = mutation({
-  args: { attitudeId: v.union(v.id('reedAttitudes'), v.null()) },
-  handler: async (ctx, args) => {
-    const profile = await requireViewerProfile(ctx);
-    if (args.attitudeId) {
-      const attitude = await ctx.db.get(args.attitudeId);
-      if (!attitude || attitude.status !== 'active') {
-        throw new ConvexError('That Reed attitude is not available.');
-      }
-    }
-
-    const now = Date.now();
-    const existing = await getAiSettingsForProfile(ctx, profile._id);
-    const selectedAttitudeId = args.attitudeId ?? undefined;
-    if (existing) {
-      await ctx.db.patch(existing._id, { selectedAttitudeId, updatedAt: now });
-      return existing._id;
-    }
-
-    return await ctx.db.insert('reedProfileAiSettings', {
-      profileId: profile._id,
-      selectedAttitudeId,
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
-export const upsertAttitude = mutation({
-  args: { adminSecret: v.string(), attitude: attitudePayloadValidator },
-  handler: async (ctx, args) => {
-    assertPromptAdmin(args.adminSecret);
-    const key = normalizeAttitudeKey(args.attitude.key);
-    const name = args.attitude.name.trim();
-    const description = args.attitude.description.trim();
-    const prompt = args.attitude.prompt.trim();
-    if (name.length < 2) throw new ConvexError('Attitude name is too short.');
-    if (description.length < 8) throw new ConvexError('Attitude description is too short.');
-    if (prompt.length < 40) throw new ConvexError('Attitude prompt is too short.');
-
-    const now = Date.now();
-    const existing = await ctx.db
-      .query('reedAttitudes')
-      .withIndex('by_key', q => q.eq('key', key))
-      .unique();
-
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        name,
-        description,
-        prompt,
-        sortOrder: args.attitude.sortOrder,
-        status: 'active',
-        updatedAt: now,
-      });
-      return existing._id;
-    }
-
-    return await ctx.db.insert('reedAttitudes', {
-      key,
-      name,
-      description,
-      prompt,
-      sortOrder: args.attitude.sortOrder,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    });
-  },
-});
-
-export const deleteAttitude = mutation({
-  args: { adminSecret: v.string(), attitudeId: v.id('reedAttitudes') },
-  handler: async (ctx, args) => {
-    assertPromptAdmin(args.adminSecret);
-    const attitude = await ctx.db.get(args.attitudeId);
-    if (!attitude) return null;
-    await ctx.db.delete(args.attitudeId);
-    return null;
-  },
-});
-
-export const seedDefaultAttitudes = mutation({
-  args: {},
-  handler: async ctx => {
-    const ids = [];
-    for (const seed of DEFAULT_REED_ATTITUDE_SEEDS) {
-      ids.push(await insertMissingAttitudeSeed(ctx, seed));
-    }
-    return { count: ids.length, ids };
-  },
-});
-
 export const upsertActivePrompt = mutation({
   args: { adminSecret: v.string(), content: v.string(), key: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -386,23 +195,21 @@ export const upsertActivePrompt = mutation({
     const content = args.content.trim();
     if (content.length < 100) throw new ConvexError('Prompt content is too short.');
 
-    const now = Date.now();
-    const current = await ctx.db
-      .query('reedPromptVersions')
-      .withIndex('by_key_and_status', q => q.eq('key', key).eq('status', 'active'))
-      .order('desc')
-      .first();
-    if (current?.content === content) return current._id;
-    if (current) await ctx.db.patch(current._id, { status: 'archived', updatedAt: now });
+    return await upsertPromptVersion(ctx, { key, content });
+  },
+});
 
-    return await ctx.db.insert('reedPromptVersions', {
-      key,
+export const seedCoachStatePrompt = mutation({
+  args: { content: v.string() },
+  handler: async (ctx, args) => {
+    const content = args.content.trim();
+    if (simpleHash(content) !== CHECKED_IN_COACH_STATE_PROMPT_HASH) {
+      throw new ConvexError('Coach state prompt content does not match the checked-in prompt.');
+    }
+
+    return await upsertPromptVersion(ctx, {
+      key: DEFAULT_COACH_STATE_PROMPT_KEY,
       content,
-      status: 'active',
-      version: (current?.version ?? 0) + 1,
-      contentHash: simpleHash(content),
-      createdAt: now,
-      updatedAt: now,
     });
   },
 });
@@ -450,7 +257,6 @@ export const sendMessage = mutation({
     const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
     const route = routeForMessage(content, attachments.length > 0);
     const userMessageContent = content || `Attached ${attachments.length} image${attachments.length === 1 ? '' : 's'}`;
-    const hasContextPrimer = route === 'training_tools' && isTrainingToolsText(content);
 
     const userMessageId = await ctx.db.insert('reedMessages', {
       threadId: thread._id,
@@ -479,20 +285,6 @@ export const sendMessage = mutation({
       });
     }
 
-    if (hasContextPrimer) {
-      await ctx.db.insert('reedMessages', {
-        threadId: thread._id,
-        profileId: profile._id,
-        role: 'assistant',
-        content: pickContextPrimerMessage(args.clientNonce ?? `${now}:${content}`),
-        source: 'system',
-        status: 'sent',
-        createdAt: now + 1,
-        completedAt: now + 1,
-        clientNonce: args.clientNonce ? getContextPrimerNonce(args.clientNonce) : undefined,
-      });
-    }
-
     const assistantMessageId = await ctx.db.insert('reedMessages', {
       threadId: thread._id,
       profileId: profile._id,
@@ -500,7 +292,7 @@ export const sendMessage = mutation({
       content: '',
       source: 'system',
       status: 'pending',
-      createdAt: now + 1 + (hasContextPrimer ? 1 : 0) + (attachments.length > 0 ? 1 : 0),
+      createdAt: now + 1,
     });
     await ctx.db.patch(thread._id, { updatedAt: now, lastMessageAt: now });
 
@@ -517,6 +309,63 @@ export const sendMessage = mutation({
     });
 
     return { threadId: thread._id, userMessageId, assistantMessageId };
+  },
+});
+
+export const retryAssistantMessage = mutation({
+  args: {
+    assistantMessageId: v.id('reedMessages'),
+    clientNow: v.optional(v.number()),
+    clientTimeZone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const assistantMessage = await ctx.db.get(args.assistantMessageId);
+    if (!assistantMessage || assistantMessage.profileId !== profile._id || assistantMessage.role !== 'assistant') {
+      throw new ConvexError('Reed response not found.');
+    }
+    if (assistantMessage.status === 'pending') {
+      return { assistantMessageId: assistantMessage._id, status: 'pending' as const };
+    }
+    if (assistantMessage.status !== 'failed') {
+      throw new ConvexError('Only failed Reed responses can be retried.');
+    }
+
+    const previousMessages = (await ctx.db
+      .query('reedMessages')
+      .withIndex('by_thread_id_and_created_at', q =>
+        q.eq('threadId', assistantMessage.threadId).lt('createdAt', assistantMessage.createdAt),
+      )
+      .order('desc')
+      .take(20)).filter(message => !isInternalArtifactMessage(message));
+    const userMessage = previousMessages.find(message => message.role === 'user');
+    if (!userMessage) throw new ConvexError('Original user message is missing.');
+    const priorMessage = previousMessages.find(message => message._id !== userMessage._id && message.status === 'sent');
+    const attachmentCount = await countMessageAttachments(ctx, userMessage._id);
+    const now = Date.now();
+    const priorLastMessageAt = priorMessage?.completedAt ?? priorMessage?.createdAt ?? null;
+    const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
+
+    await ctx.db.patch(assistantMessage._id, {
+      content: '',
+      status: 'pending',
+      completedAt: undefined,
+      error: undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.reedAgent.runAssistant, {
+      assistantMessageId: assistantMessage._id,
+      clientNow: args.clientNow ?? now,
+      clientTimeZone: args.clientTimeZone,
+      priorLastMessageAt,
+      recentTurnCount,
+      reentryState: state,
+      route: routeForMessage(userMessage.content, attachmentCount > 0),
+      threadId: assistantMessage.threadId,
+      userMessageId: userMessage._id,
+    });
+
+    return { assistantMessageId: assistantMessage._id, status: 'pending' as const };
   },
 });
 
@@ -543,7 +392,7 @@ export const loadAssistantContext = internalQuery({
     userMessage: Doc<'reedMessages'>;
     assistantMessage: Doc<'reedMessages'>;
     prompt: { _id: Id<'reedPromptVersions'> | null; key: string; content: string; contentHash: string; version: number };
-    attitude: { _id: Id<'reedAttitudes'> | null; key: string; name: string; description: string; prompt: string };
+    coachState: Doc<'reedCoachStates'> | null;
     imageObservations: Array<{ attachmentId: Id<'reedMessageAttachments'>; narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
     journeySummary: string | null;
     memorySummary: string | null;
@@ -565,11 +414,7 @@ export const loadAssistantContext = internalQuery({
       .first();
     const summary = thread.activeSummaryId ? await ctx.db.get(thread.activeSummaryId) : null;
     const recentMessages = await loadRecentMessages(ctx, thread._id, args.recentTurnCount, userMessage._id);
-    const aiSettings = await getAiSettingsForProfile(ctx, thread.profileId);
-    const selectedAttitude = aiSettings?.selectedAttitudeId
-      ? await ctx.db.get(aiSettings.selectedAttitudeId)
-      : null;
-    const activeAttitude = selectedAttitude?.status === 'active' ? selectedAttitude : null;
+    const coachState = await getCoachStateForThread(ctx, thread._id);
     const imageObservations = await loadImageObservations(ctx, userMessage._id);
 
     return {
@@ -589,15 +434,7 @@ export const loadAssistantContext = internalQuery({
         contentHash: simpleHash(DEFAULT_REED_SYSTEM_PROMPT),
         version: 0,
       },
-      attitude: activeAttitude
-        ? {
-            _id: activeAttitude._id,
-            key: activeAttitude.key,
-            name: activeAttitude.name,
-            description: activeAttitude.description,
-            prompt: activeAttitude.prompt,
-          }
-        : DEFAULT_REED_ATTITUDE,
+      coachState,
       imageObservations,
       journeySummary: journey?.renderedContext ?? null,
       memorySummary: summary?.content ?? null,
@@ -611,6 +448,7 @@ export const completeAssistantMessage = internalMutation({
     assistantMessageId: v.id('reedMessages'),
     content: v.string(),
     completedAt: v.number(),
+    reentryState: reentryStateValidator,
     threadId: v.id('reedThreads'),
   },
   handler: async (ctx, args) => {
@@ -624,6 +462,17 @@ export const completeAssistantMessage = internalMutation({
     const unsummarized = await loadUnsummarizedMessages(ctx, args.threadId, COMPACT_AFTER_MESSAGE_COUNT + 1);
     if (unsummarized.length >= COMPACT_AFTER_MESSAGE_COUNT) {
       await ctx.scheduler.runAfter(0, internal.reedAgent.compactThread, { threadId: args.threadId });
+    }
+
+    if (await shouldRefreshCoachState(ctx, {
+      completedAssistantMessageId: args.assistantMessageId,
+      reentryState: args.reentryState,
+      threadId: args.threadId,
+    })) {
+      await ctx.scheduler.runAfter(0, internal.reedAgent.refreshCoachState, {
+        sourceThroughMessageId: args.assistantMessageId,
+        threadId: args.threadId,
+      });
     }
   },
 });
@@ -719,42 +568,6 @@ export const saveImageAnalysis = internalMutation({
   },
 });
 
-export const insertImageObservationMessage = internalMutation({
-  args: {
-    assistantMessageId: v.id('reedMessages'),
-    userMessageId: v.id('reedMessages'),
-  },
-  handler: async (ctx, args) => {
-    const userMessage = await ctx.db.get(args.userMessageId);
-    const assistantMessage = await ctx.db.get(args.assistantMessageId);
-    if (!userMessage || !assistantMessage) throw new ConvexError('Reed image observation context is incomplete.');
-
-    const existing = await ctx.db
-      .query('reedMessages')
-      .withIndex('by_profile_id_and_client_nonce', q =>
-        q.eq('profileId', userMessage.profileId).eq('clientNonce', `${userMessage._id}:image-observation`),
-      )
-      .unique();
-    if (existing) return existing._id;
-
-    const observations = await loadImageObservations(ctx, userMessage._id);
-    if (observations.length === 0) return null;
-
-    const content = renderImageObservationMessage(observations);
-    return await ctx.db.insert('reedMessages', {
-      threadId: userMessage.threadId,
-      profileId: userMessage.profileId,
-      role: 'assistant',
-      content,
-      source: 'system',
-      status: 'sent',
-      createdAt: Math.max(userMessage.createdAt + 1, assistantMessage.createdAt - 1),
-      completedAt: Date.now(),
-      clientNonce: `${userMessage._id}:image-observation`,
-    });
-  },
-});
-
 export const loadCompactionContext = internalQuery({
   args: { beforeMessageId: v.optional(v.id('reedMessages')), threadId: v.id('reedThreads') },
   handler: async (ctx, args) => {
@@ -783,6 +596,114 @@ export const loadCompactionContext = internalQuery({
         version: 0,
       },
     };
+  },
+});
+
+export const loadCoachStateRefreshContext = internalQuery({
+  args: {
+    sourceThroughMessageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+  },
+  handler: async (ctx, args): Promise<null | {
+    thread: Doc<'reedThreads'>;
+    profile: Doc<'profiles'>;
+    previousState: Doc<'reedCoachStates'> | null;
+    activeSummary: Doc<'reedMemorySummaries'> | null;
+    prompt: { _id: Id<'reedPromptVersions'> | null; key: string; content: string; contentHash: string; version: number };
+    journeySummary: string | null;
+    recentMessages: Doc<'reedMessages'>[];
+    sourceFromMessage: Doc<'reedMessages'>;
+    sourceThroughMessage: Doc<'reedMessages'>;
+  }> => {
+    const thread = await ctx.db.get(args.threadId);
+    const sourceThroughMessage = await ctx.db.get(args.sourceThroughMessageId);
+    if (!thread || !sourceThroughMessage) throw new ConvexError('Coach state refresh context is incomplete.');
+    if (sourceThroughMessage.threadId !== thread._id) throw new ConvexError('Coach state message does not belong to thread.');
+
+    const profile = await ctx.db.get(thread.profileId);
+    if (!profile) throw new ConvexError('Profile not found.');
+
+    const previousState = await getCoachStateForThread(ctx, thread._id);
+    if (previousState?.updatedThroughMessageId === args.sourceThroughMessageId) {
+      return null;
+    }
+    if (previousState) {
+      const previousThroughMessage = await ctx.db.get(previousState.updatedThroughMessageId);
+      if (previousThroughMessage && previousThroughMessage.createdAt >= sourceThroughMessage.createdAt) {
+        return null;
+      }
+    }
+
+    const activeSummary = thread.activeSummaryId ? await ctx.db.get(thread.activeSummaryId) : null;
+    const promptVersion = await ctx.db
+      .query('reedPromptVersions')
+      .withIndex('by_key_and_status', q => q.eq('key', DEFAULT_COACH_STATE_PROMPT_KEY).eq('status', 'active'))
+      .order('desc')
+      .first();
+    const journey: Doc<'reedJourneySnapshots'> | null = await ctx.runQuery(internal.reedJourney.latestForProfile, { profileId: thread.profileId });
+    const recentMessages = [
+      ...await loadRecentMessages(ctx, thread._id, 23, args.sourceThroughMessageId),
+      sourceThroughMessage,
+    ].filter(message => message.status === 'sent');
+    const sourceFromMessage = recentMessages[0] ?? sourceThroughMessage;
+
+    return {
+      thread,
+      profile,
+      previousState,
+      activeSummary,
+      prompt: promptVersion ?? {
+        _id: null,
+        key: DEFAULT_COACH_STATE_PROMPT_KEY,
+        content: DEFAULT_COACH_STATE_PROMPT,
+        contentHash: simpleHash(DEFAULT_COACH_STATE_PROMPT),
+        version: 0,
+      },
+      journeySummary: journey?.renderedContext ?? null,
+      recentMessages,
+      sourceFromMessage,
+      sourceThroughMessage,
+    };
+  },
+});
+
+export const saveCoachState = internalMutation({
+  args: {
+    content: v.string(),
+    modelName: v.string(),
+    modelProvider: v.string(),
+    promptHash: v.string(),
+    sourceFromMessageId: v.optional(v.id('reedMessages')),
+    updatedThroughMessageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+  },
+  handler: async (ctx, args) => {
+    const thread = await ctx.db.get(args.threadId);
+    if (!thread) throw new ConvexError('Thread not found.');
+
+    const now = Date.now();
+    const latest = await getCoachStateForThread(ctx, args.threadId);
+    if (latest) {
+      const latestThroughMessage = await ctx.db.get(latest.updatedThroughMessageId);
+      const nextThroughMessage = await ctx.db.get(args.updatedThroughMessageId);
+      if (!nextThroughMessage) throw new ConvexError('Coach state source message not found.');
+      if (latestThroughMessage && latestThroughMessage.createdAt >= nextThroughMessage.createdAt) {
+        return latest._id;
+      }
+    }
+
+    return await ctx.db.insert('reedCoachStates', {
+      threadId: args.threadId,
+      profileId: thread.profileId,
+      content: args.content,
+      sourceFromMessageId: args.sourceFromMessageId,
+      updatedThroughMessageId: args.updatedThroughMessageId,
+      modelProvider: args.modelProvider,
+      modelName: args.modelName,
+      promptHash: args.promptHash,
+      createdAt: now,
+      updatedAt: now,
+    });
   },
 });
 
@@ -827,45 +748,32 @@ async function getActiveThread(ctx: QueryCtx | MutationCtx, profileId: Id<'profi
     .unique();
 }
 
-async function getAiSettingsForProfile(ctx: QueryCtx | MutationCtx, profileId: Id<'profiles'>) {
-  return await ctx.db
-    .query('reedProfileAiSettings')
-    .withIndex('by_profile_id', q => q.eq('profileId', profileId))
-    .unique();
-}
-
-async function insertMissingAttitudeSeed(ctx: MutationCtx, seed: ReedAttitudeSeed) {
-  const key = normalizeAttitudeKey(seed.key);
-  const existing = await ctx.db
-    .query('reedAttitudes')
-    .withIndex('by_key', q => q.eq('key', key))
-    .unique();
-  if (existing) return existing._id;
-
-  const now = Date.now();
-  return await ctx.db.insert('reedAttitudes', {
-    key,
-    name: seed.name,
-    description: seed.description,
-    prompt: seed.prompt,
-    sortOrder: seed.sortOrder,
-    status: 'active',
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
 function assertPromptAdmin(adminSecret: string) {
-  const expectedSecret = process.env.REED_PROMPT_ADMIN_SECRET;
+  const expectedSecret = process.env.REED_CONTROL_PANEL_SECRET;
   if (!expectedSecret || adminSecret !== expectedSecret) {
     throw new ConvexError('Prompt editing is not enabled for this deployment.');
   }
 }
 
-function normalizeAttitudeKey(key: string) {
-  const normalized = key.trim().toLowerCase().replace(/[^a-z0-9_]+/g, '_').replace(/^_+|_+$/g, '');
-  if (normalized.length < 2) throw new ConvexError('Attitude key is too short.');
-  return normalized;
+async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; content: string }) {
+  const now = Date.now();
+  const current = await ctx.db
+    .query('reedPromptVersions')
+    .withIndex('by_key_and_status', q => q.eq('key', args.key).eq('status', 'active'))
+    .order('desc')
+    .first();
+  if (current?.content === args.content) return current._id;
+  if (current) await ctx.db.patch(current._id, { status: 'archived', updatedAt: now });
+
+  return await ctx.db.insert('reedPromptVersions', {
+    key: args.key,
+    content: args.content,
+    status: 'active',
+    version: (current?.version ?? 0) + 1,
+    contentHash: simpleHash(args.content),
+    createdAt: now,
+    updatedAt: now,
+  });
 }
 
 async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles'>, now: number) {
@@ -875,6 +783,60 @@ async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles
   const created = await ctx.db.get(threadId);
   if (!created) throw new ConvexError('Could not create Reed thread.');
   return created;
+}
+
+async function getCoachStateForThread(ctx: QueryCtx | MutationCtx, threadId: Id<'reedThreads'>) {
+  return await ctx.db
+    .query('reedCoachStates')
+    .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', threadId))
+    .order('desc')
+    .first();
+}
+
+async function shouldRefreshCoachState(
+  ctx: MutationCtx,
+  input: {
+    completedAssistantMessageId: Id<'reedMessages'>;
+    reentryState: 'hot' | 'warm' | 'cold';
+    threadId: Id<'reedThreads'>;
+  },
+) {
+  const latest = await getCoachStateForThread(ctx, input.threadId);
+  if (!latest) return true;
+  if (input.reentryState !== 'hot') return true;
+
+  const latestThroughMessage = await ctx.db.get(latest.updatedThroughMessageId);
+  const completedAssistantMessage = await ctx.db.get(input.completedAssistantMessageId);
+  if (!completedAssistantMessage) throw new ConvexError('Assistant message not found.');
+  if (!latestThroughMessage) return true;
+  if (latestThroughMessage.createdAt >= completedAssistantMessage.createdAt) return false;
+
+  const messagesSinceState = await ctx.db
+    .query('reedMessages')
+    .withIndex('by_thread_id_and_created_at', q =>
+      q
+        .eq('threadId', input.threadId)
+        .gt('createdAt', latestThroughMessage.createdAt)
+        .lte('createdAt', completedAssistantMessage.createdAt),
+    )
+    .order('asc')
+    .take(24);
+  const sentMessagesSinceState = messagesSinceState.filter(message => message.status === 'sent');
+  const userMessagesSinceState = sentMessagesSinceState.filter(message => message.role === 'user');
+  if (userMessagesSinceState.length >= COACH_STATE_REFRESH_AFTER_USER_MESSAGES) return true;
+
+  return hasCoachStateTrigger(sentMessagesSinceState.map(message => message.content).join('\n'));
+}
+
+function hasCoachStateTrigger(text: string) {
+  return /\b(avoid|avoiding|skipped|skip|quit|quitting|lazy|laziness|stuck|plateau|not progressing|no progress|no results|unmotivated|motivation|depressed|depression|burned out|burnt out|overwhelmed|tired|exhausted|injury|injured|pain|hurts|hurt|sore|rejected|crush|failed|failure|you'?re not helping|not helping|doesn'?t work|didn'?t work|angry|frustrated|frustration|hate this|can'?t be arsed)\b/i.test(text);
+}
+
+async function countMessageAttachments(ctx: QueryCtx | MutationCtx, messageId: Id<'reedMessages'>) {
+  return (await ctx.db
+    .query('reedMessageAttachments')
+    .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', messageId))
+    .collect()).length;
 }
 
 async function attachMessageImages(ctx: QueryCtx, messages: Doc<'reedMessages'>[]) {
@@ -962,15 +924,6 @@ async function loadImageObservations(ctx: QueryCtx, messageId: Id<'reedMessages'
   return observations;
 }
 
-function renderImageObservationMessage(observations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>) {
-  const sorted = observations.slice().sort((left, right) => left.sortOrder - right.sortOrder);
-  if (sorted.length === 1) return sorted[0].narrative;
-
-  return sorted
-    .map(observation => `Image ${observation.sortOrder + 1}: ${observation.narrative}`)
-    .join('\n\n');
-}
-
 async function loadRecentMessages(
   ctx: QueryCtx,
   threadId: Id<'reedThreads'>,
@@ -985,7 +938,7 @@ async function loadRecentMessages(
     .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', threadId).lt('createdAt', current.createdAt))
     .order('desc')
     .take(limit);
-  return rows.reverse().filter(message => message.status === 'sent');
+  return rows.reverse().filter(message => message.status === 'sent' && !isInternalArtifactMessage(message));
 }
 
 async function loadUnsummarizedMessages(ctx: QueryCtx | MutationCtx, threadId: Id<'reedThreads'>, limit: number, beforeCreatedAt?: number) {
@@ -999,7 +952,7 @@ async function loadUnsummarizedMessages(ctx: QueryCtx | MutationCtx, threadId: I
     if (beforeCreatedAt !== undefined) return scoped.lt('createdAt', beforeCreatedAt);
     return scoped;
   });
-  return (await query.order('asc').take(limit)).filter(message => message.status === 'sent');
+  return (await query.order('asc').take(limit)).filter(message => message.status === 'sent' && !isInternalArtifactMessage(message));
 }
 
 function classifyReentry(lastMessageAt: number | null, now: number) {
@@ -1022,19 +975,21 @@ function routeForMessage(content: string, hasImageAttachments = false): ReedRout
 }
 
 function isTrainingToolsText(content: string) {
-  return /\b(progress|performance|exercise|workout|training|bodyweight|recovery|pr\b|personal record)\b/.test(content.toLowerCase());
+  const lower = content.toLowerCase();
+  return [
+    /\b(progress|progressing|improving|stronger|weaker|plateau|stalled|trend|compare|results?|pr\b|personal record)\b/,
+    /\b(today|yesterday|this week|last week|recent|last session|last workout|what did i do|logged|finished|hit)\b/,
+    /\b(what should i (train|do|focus)|build .*session|make .*program|plan|routine|split|next focus|which exercise)\b/,
+    /\b(tired|fatigue|sore|recovery|rest|sleep|overtraining|overtrain|can i train|should i train|deload)\b/,
+    /\b(weight|bodyweight|body weight|fat loss|lose fat|cutting|bulk|gaining|measurements?)\b/,
+  ].some(pattern => pattern.test(lower));
 }
 
-function getContextPrimerNonce(clientNonce: string) {
-  return `${clientNonce}${CONTEXT_PRIMER_NONCE_SUFFIX}`;
-}
-
-function pickContextPrimerMessage(seed: string) {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = Math.imul(31, hash) + seed.charCodeAt(index) | 0;
-  }
-  return CONTEXT_PRIMER_MESSAGES[(hash >>> 0) % CONTEXT_PRIMER_MESSAGES.length] ?? CONTEXT_PRIMER_MESSAGES[0];
+function isInternalArtifactMessage(message: Pick<Doc<'reedMessages'>, 'clientNonce' | 'content' | 'role' | 'source'>) {
+  if (message.role !== 'assistant' || message.source !== 'system') return false;
+  if (message.clientNonce?.endsWith(':context-primer')) return true;
+  if (message.clientNonce?.endsWith(':image-observation')) return true;
+  return message.content === 'Reed could not read this attached image clearly enough to use it as coaching context.';
 }
 
 function simpleHash(value: string) {
