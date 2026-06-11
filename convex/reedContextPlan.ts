@@ -5,6 +5,7 @@ import { tool } from '@langchain/core/tools';
 import { z } from 'zod';
 import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
 import type { ReedContextToolCall, ReedTimeRange } from './reedContextTypes';
+import { formatReedTimelineTime } from './reedContextTime';
 
 const CONTEXT_PLANNER_MODEL_NAME = process.env.REED_CONTEXT_PLANNER_MODEL ?? 'gemini-2.5-flash-lite';
 
@@ -42,7 +43,7 @@ const contextTools = [
 export async function planReedContext(args: {
   clientNow: number;
   clientTimeZone?: string;
-  recentMessages: Array<{ role: string; content: string }>;
+  recentMessages: Array<{ role: string; content: string; createdAt?: number }>;
   userMessage: string;
 }): Promise<ReedContextToolCall[]> {
   if (!hasApiKeyForModel(CONTEXT_PLANNER_MODEL_NAME)) return [];
@@ -64,7 +65,7 @@ export async function planReedContext(args: {
 function buildPlannerSystemPrompt(args: {
   clientNow: number;
   clientTimeZone?: string;
-  recentMessages: Array<{ role: string; content: string }>;
+  recentMessages: Array<{ role: string; content: string; createdAt?: number }>;
 }) {
   return [
     'You choose which context tools Reed needs before answering a fitness coaching chat.',
@@ -83,8 +84,13 @@ function buildPlannerSystemPrompt(args: {
     `Current local time: ${formatCurrentTime(args.clientNow, args.clientTimeZone)}`,
     '',
     'Recent context:',
-    ...args.recentMessages.slice(-6).map(message => `${message.role.toUpperCase()}: ${message.content.slice(0, 500)}`),
+    ...args.recentMessages.slice(-6).map(message => `${formatMessageForPlanner(message, args.clientNow, args.clientTimeZone)}: ${message.content.slice(0, 500)}`),
   ].join('\n');
+}
+
+function formatMessageForPlanner(message: { role: string; createdAt?: number }, now: number, timeZone?: string) {
+  if (typeof message.createdAt !== 'number') return message.role.toUpperCase();
+  return `[${formatReedTimelineTime({ timestamp: message.createdAt, now, timeZone })}] ${message.role.toUpperCase()}`;
 }
 
 function parseToolCalls(toolCalls: unknown): ReedContextToolCall[] {

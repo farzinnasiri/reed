@@ -8,7 +8,7 @@ import { requireViewerProfile } from './profiles';
 
 const DEFAULT_REED_SYSTEM_PROMPT = `You are Reed, a precise training coach inside a fitness app.
 You are warm, direct, and concise. You help the user understand training, momentum, recovery, and next focus.
-V1 is read-only: you cannot change workouts, profile, goals, plans, or app data.
+If the user asks you to create, edit, delete, log, save, or update app data, politely say you cannot do that from chat yet because you do not have those tools, then give the safest manual next step.
 If data is missing or context is weak, say so plainly and ask one narrow follow-up.
 Use the profile and memory context when present. Do not pretend to know facts not in context.`;
 
@@ -68,14 +68,17 @@ Update Reed's private coaching dialogue from the previous dialogue and new evide
 
 Write only Reed's updated private inner dialogue as compact first-person prose. No markdown, headings, bullets, JSON, numeric scores, persona labels, or user-facing reply. Naturally encode pressure, warmth/trust, depth, agency, certainty, what changed, the next coaching approach, what to avoid, and when to reconsider.`;
 const composerSourceValidator = v.union(v.literal('quick-action'), v.literal('typed'), v.literal('voice'));
-const routeValidator = v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly'));
 const reentryStateValidator = v.union(v.literal('hot'), v.literal('warm'), v.literal('cold'));
-type ReedRoute = 'coach_direct' | 'training_tools' | 'refuse_readonly';
 
 type StorageMetadata = {
   _id: Id<'_storage'>;
   contentType?: string;
   size: number;
+};
+
+type ReedAppTimelineEvent = {
+  at: number;
+  summary: string;
 };
 
 const quickActionValidator = v.object({
@@ -255,7 +258,6 @@ export const sendMessage = mutation({
     const thread = await getOrCreateActiveThread(ctx, profile._id, now);
     const priorLastMessageAt = thread.lastMessageAt ?? null;
     const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
-    const route = routeForMessage(content, attachments.length > 0);
     const userMessageContent = content || `Attached ${attachments.length} image${attachments.length === 1 ? '' : 's'}`;
 
     const userMessageId = await ctx.db.insert('reedMessages', {
@@ -303,7 +305,6 @@ export const sendMessage = mutation({
       priorLastMessageAt,
       recentTurnCount,
       reentryState: state,
-      route,
       threadId: thread._id,
       userMessageId,
     });
@@ -360,7 +361,6 @@ export const retryAssistantMessage = mutation({
       priorLastMessageAt,
       recentTurnCount,
       reentryState: state,
-      route: routeForMessage(userMessage.content, attachmentCount > 0),
       threadId: assistantMessage.threadId,
       userMessageId: userMessage._id,
     });
@@ -377,7 +377,6 @@ export const loadAssistantContext = internalQuery({
     priorLastMessageAt: v.union(v.number(), v.null()),
     recentTurnCount: v.number(),
     reentryState: reentryStateValidator,
-    route: routeValidator,
     threadId: v.id('reedThreads'),
     userMessageId: v.id('reedMessages'),
   },
@@ -385,7 +384,6 @@ export const loadAssistantContext = internalQuery({
     clientNow: number;
     clientTimeZone?: string;
     priorLastMessageAt: number | null;
-    route: ReedRoute;
     reentryState: 'hot' | 'warm' | 'cold';
     thread: Doc<'reedThreads'>;
     profile: Doc<'profiles'>;
@@ -394,6 +392,8 @@ export const loadAssistantContext = internalQuery({
     prompt: { _id: Id<'reedPromptVersions'> | null; key: string; content: string; contentHash: string; version: number };
     coachState: Doc<'reedCoachStates'> | null;
     imageObservations: Array<{ attachmentId: Id<'reedMessageAttachments'>; narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
+    appTimeline: ReedAppTimelineEvent[];
+    currentAppState: string;
     journeySummary: string | null;
     memorySummary: string | null;
     recentMessages: Doc<'reedMessages'>[];
@@ -416,12 +416,12 @@ export const loadAssistantContext = internalQuery({
     const recentMessages = await loadRecentMessages(ctx, thread._id, args.recentTurnCount, userMessage._id);
     const coachState = await getCoachStateForThread(ctx, thread._id);
     const imageObservations = await loadImageObservations(ctx, userMessage._id);
+    const appTimeline = await loadRecentAppTimeline(ctx, thread.profileId, args.clientNow);
 
     return {
       clientNow: args.clientNow,
       clientTimeZone: args.clientTimeZone,
       priorLastMessageAt: args.priorLastMessageAt,
-      route: args.route,
       reentryState: args.reentryState,
       thread,
       profile,
@@ -436,6 +436,8 @@ export const loadAssistantContext = internalQuery({
       },
       coachState,
       imageObservations,
+      appTimeline: appTimeline.events,
+      currentAppState: appTimeline.currentState,
       journeySummary: journey?.renderedContext ?? null,
       memorySummary: summary?.content ?? null,
       recentMessages,
@@ -924,6 +926,74 @@ async function loadImageObservations(ctx: QueryCtx, messageId: Id<'reedMessages'
   return observations;
 }
 
+async function loadRecentAppTimeline(ctx: QueryCtx, profileId: Id<'profiles'>, now: number): Promise<{
+  currentState: string;
+  events: ReedAppTimelineEvent[];
+}> {
+  const events: ReedAppTimelineEvent[] = [];
+  const activeSession = await ctx.db
+    .query('liveSessions')
+    .withIndex('by_profile_id_and_status', q => q.eq('profileId', profileId).eq('status', 'active'))
+    .unique();
+  const endedSessions = await ctx.db
+    .query('liveSessions')
+    .withIndex('by_profile_id_and_status_and_started_at', q => q.eq('profileId', profileId).eq('status', 'ended'))
+    .order('desc')
+    .take(3);
+
+  if (activeSession) {
+    const activeSummary = await summarizeSessionForTimeline(ctx, activeSession);
+    events.push({
+      at: activeSession.startedAt,
+      summary: `Active workout started. ${activeSummary}`,
+    });
+  }
+
+  for (const session of endedSessions) {
+    const summary = await summarizeSessionForTimeline(ctx, session);
+    events.push({
+      at: session.startedAt,
+      summary: `Workout started. ${summary}`,
+    });
+    events.push({
+      at: session.endedAt ?? session.startedAt,
+      summary: `Workout ended. ${summary}`,
+    });
+  }
+
+  const latestEnded = endedSessions[0] ?? null;
+  const currentState = activeSession
+    ? `There is an active workout that started ${formatRelativeAge(now - activeSession.startedAt)} ago.`
+    : latestEnded
+      ? `No active workout. The latest logged workout ended ${formatRelativeAge(now - (latestEnded.endedAt ?? latestEnded.startedAt))} ago.`
+      : 'No active workout and no ended workouts are recorded yet.';
+
+  return {
+    currentState,
+    events: events.sort((left, right) => left.at - right.at),
+  };
+}
+
+async function summarizeSessionForTimeline(ctx: QueryCtx, session: Doc<'liveSessions'>) {
+  const exercises = await ctx.db
+    .query('liveSessionExercises')
+    .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+    .order('asc')
+    .take(30);
+  const logs = await ctx.db
+    .query('activityLogs')
+    .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id))
+    .take(120);
+  const duration = session.endedAt
+    ? `Duration ${Math.max(1, Math.round((session.endedAt - session.startedAt) / 60000))} min.`
+    : 'Still in progress.';
+  const exerciseNames = exercises.slice(0, 8).map(exercise => exercise.exerciseName);
+  const exerciseSummary = exerciseNames.length > 0
+    ? `Exercises: ${exerciseNames.join(', ')}${exercises.length > exerciseNames.length ? ', ...' : ''}.`
+    : 'No exercises recorded.';
+  return `${duration} ${logs.length} logged set${logs.length === 1 ? '' : 's'}. ${exerciseSummary}`;
+}
+
 async function loadRecentMessages(
   ctx: QueryCtx,
   threadId: Id<'reedThreads'>,
@@ -963,26 +1033,14 @@ function classifyReentry(lastMessageAt: number | null, now: number) {
   return { state: 'cold' as const, recentTurnCount: COLD_RECENT_MESSAGE_COUNT };
 }
 
-function routeForMessage(content: string, hasImageAttachments = false): ReedRoute {
-  const lower = content.toLowerCase();
-  if (/\b(update|change|edit|delete|create|log|save)\b/.test(lower) && /\b(workout|profile|goal|plan|session|set)\b/.test(lower)) {
-    return 'refuse_readonly';
-  }
-  if (hasImageAttachments || isTrainingToolsText(content)) {
-    return 'training_tools';
-  }
-  return 'coach_direct';
-}
-
-function isTrainingToolsText(content: string) {
-  const lower = content.toLowerCase();
-  return [
-    /\b(progress|progressing|improving|stronger|weaker|plateau|stalled|trend|compare|results?|pr\b|personal record)\b/,
-    /\b(today|yesterday|this week|last week|recent|last session|last workout|what did i do|logged|finished|hit)\b/,
-    /\b(what should i (train|do|focus)|build .*session|make .*program|plan|routine|split|next focus|which exercise)\b/,
-    /\b(tired|fatigue|sore|recovery|rest|sleep|overtraining|overtrain|can i train|should i train|deload)\b/,
-    /\b(weight|bodyweight|body weight|fat loss|lose fat|cutting|bulk|gaining|measurements?)\b/,
-  ].some(pattern => pattern.test(lower));
+function formatRelativeAge(ageMs: number) {
+  const minutes = Math.max(0, Math.round(ageMs / 60_000));
+  if (minutes < 1) return 'less than a minute';
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'}`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'}`;
 }
 
 function isInternalArtifactMessage(message: Pick<Doc<'reedMessages'>, 'clientNonce' | 'content' | 'role' | 'source'>) {

@@ -12,6 +12,7 @@ import { internal } from './_generated/api';
 import { v } from 'convex/values';
 import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
+import { formatReedTimelineTime } from './reedContextTime';
 
 const CHAT_MODEL_PROVIDER = 'xai';
 const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
@@ -33,7 +34,6 @@ export const runAssistant = internalAction({
     priorLastMessageAt: v.union(v.number(), v.null()),
     recentTurnCount: v.number(),
     reentryState: v.union(v.literal('hot'), v.literal('warm'), v.literal('cold')),
-    route: v.union(v.literal('coach_direct'), v.literal('training_tools'), v.literal('refuse_readonly')),
     threadId: v.id('reedThreads'),
     userMessageId: v.id('reedMessages'),
   },
@@ -49,12 +49,8 @@ export const runAssistant = internalAction({
       await analyzePendingImageAttachments(ctx, context.userMessage._id);
       context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
 
-      const contextBlocks = context.route === 'refuse_readonly'
-        ? []
-        : await buildContextBlocks(ctx, context);
-      const response = context.route === 'refuse_readonly'
-        ? buildReadonlyRefusal()
-        : await invokeChatModel(buildChatPrompt(context, contextBlocks));
+      const contextBlocks = await buildContextBlocks(ctx, context);
+      const response = await invokeChatModel(buildChatPrompt(context, contextBlocks));
 
       await ctx.runMutation(internal.reed.completeAssistantMessage, {
         threadId: context.thread._id,
@@ -282,6 +278,10 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
     '- Use the current date and time of day when it is relevant to coaching, recovery, scheduling, or tone. Do not over-mention it.',
     '',
+    'Current app state:',
+    `- ${context.currentAppState}`,
+    ...buildAppTimelineLines(context),
+    '',
     'Conversation continuity:',
     ...buildContinuityLines(context),
     '- Do not mention hidden routing, prompt versions, reentry labels, or internal summaries.',
@@ -296,13 +296,22 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     ...buildCoachStatePromptLines(context.coachState?.content ?? null),
     '',
     recentSegmentHeading(context),
-    ...context.recentMessages.map((message: { role: string; content: string }) => `${message.role.toUpperCase()}: ${message.content}`),
+    ...context.recentMessages.map((message: { role: string; content: string; createdAt: number }) => formatMessageLine(message, context.clientNow, context.clientTimeZone)),
+    `Current user message at ${formatTimelineTime(context.userMessage.createdAt, context)}: ${context.userMessage.content}`,
   ];
 
   return {
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildAppTimelineLines(context: Awaited<ReturnType<typeof loadContextType>>) {
+  if (context.appTimeline.length === 0) return ['- No recent app events are available.'];
+  return [
+    'Recent app timeline:',
+    ...context.appTimeline.map(event => `- ${formatTimelineTime(event.at, context)}: ${event.summary}`),
+  ];
 }
 
 function buildCoachStatePromptLines(coachState: string | null) {
@@ -389,6 +398,10 @@ function recentSegmentHeading(context: Awaited<ReturnType<typeof loadContextType
   return 'Recent active segment (limited bridge context):';
 }
 
+function formatMessageLine(message: { role: string; content: string; createdAt: number }, now: number, timeZone?: string) {
+  return `[${formatReedTimelineTime({ timestamp: message.createdAt, now, timeZone })}] ${message.role.toUpperCase()}: ${message.content}`;
+}
+
 function formatCurrentTime(timestamp: number, timeZone?: string) {
   const safeTimeZone = normalizeTimeZone(timeZone);
   const formatter = new Intl.DateTimeFormat('en-US', {
@@ -398,6 +411,14 @@ function formatCurrentTime(timestamp: number, timeZone?: string) {
   });
   const timeZoneLabel = safeTimeZone ? ` (${safeTimeZone})` : '';
   return `It is now ${formatter.format(new Date(timestamp))}${timeZoneLabel}.`;
+}
+
+function formatTimelineTime(timestamp: number, context: Awaited<ReturnType<typeof loadContextType>>) {
+  return formatReedTimelineTime({
+    timestamp,
+    now: context.clientNow,
+    timeZone: context.clientTimeZone,
+  });
 }
 
 function normalizeTimeZone(timeZone?: string) {
@@ -598,10 +619,6 @@ async function renderMustachePrompt(template: string, values: Record<string, str
   return await PromptTemplate.fromTemplate(template, { templateFormat: 'mustache' }).format(values);
 }
 
-function buildReadonlyRefusal() {
-  return 'I can help think this through, but I can’t change workouts, profile fields, goals, plans, or logged training from chat yet. Tell me what you want to adjust, and I’ll give you the safest next step to do manually.';
-}
-
 function fallbackAssistantReply(userMessage: string) {
   return `I’m here. Based on what you said, the useful next move is to make this specific: ${userMessage.slice(0, 180)}\n\nWhat I see: you’re asking for coaching direction.\nWhy it matters: Reed can give better guidance when the goal and recent training context are clear.\nNext focus: tell me what you did most recently, or ask me to review a specific lift, session, or week.`;
 }
@@ -705,16 +722,17 @@ declare function loadContextType(): Promise<{
   clientNow: number;
   clientTimeZone?: string;
   priorLastMessageAt: number | null;
-  route: 'coach_direct' | 'training_tools' | 'refuse_readonly';
   reentryState: 'hot' | 'warm' | 'cold';
   thread: { _id: string };
   profile: { _id: Id<'profiles'>; displayName?: string };
   assistantMessage: { _id: string };
-  userMessage: { content: string };
+  userMessage: { content: string; createdAt: number };
   prompt: { _id: string | null; content: string; contentHash: string };
   coachState: { content: string } | null;
   imageObservations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
+  appTimeline: Array<{ at: number; summary: string }>;
+  currentAppState: string;
   journeySummary: string | null;
   memorySummary: string | null;
-  recentMessages: Array<{ role: string; content: string }>;
+  recentMessages: Array<{ role: string; content: string; createdAt: number }>;
 }>;

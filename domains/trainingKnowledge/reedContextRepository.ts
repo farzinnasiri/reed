@@ -55,14 +55,17 @@ export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
   return {
     title: `Training summary: ${range.label}`,
     content: [
+      `Window: ${formatDateForContext(range.startAt, args.clientTimeZone)} to ${formatDateForContext(range.endAt, args.clientTimeZone)}.`,
       `${summary.activityCount} logged set${summary.activityCount === 1 ? '' : 's'} in ${range.label}.`,
       sessionExercises.length > 0 ? `Ended sessions: ${sessionExercises.map(item => {
         const names = item.exercises.slice(0, 5).map(exercise => exercise.exerciseName).join(', ');
         const durationMinutes = item.session.endedAt ? Math.max(1, Math.round((item.session.endedAt - item.session.startedAt) / 60000)) : null;
-        return `${formatDateForContext(item.session.startedAt, args.clientTimeZone)}${durationMinutes ? ` (${durationMinutes} min)` : ''}${names ? `: ${names}` : ''}`;
+        const started = formatDateForContext(item.session.startedAt, args.clientTimeZone);
+        const ended = item.session.endedAt ? formatDateForContext(item.session.endedAt, args.clientTimeZone) : 'not ended';
+        return `${started}-${ended}${durationMinutes ? ` (${durationMinutes} min)` : ''}${names ? `: ${names}` : ''}`;
       }).join('; ')}.` : null,
       summary.byExercise.length > 0 ? `Top exercises: ${summary.byExercise.slice(0, 6).map(exercise => `${exercise.exerciseName} (${exercise.setCount})`).join(', ')}.` : 'No exercises logged in this range.',
-      summary.recentActivities.length > 0 ? `Recent work: ${summary.recentActivities.slice(0, 6).map(activity => `${activity.exerciseName} ${activity.summary}`).join('; ')}.` : null,
+      summary.recentActivities.length > 0 ? `Recent work: ${summary.recentActivities.slice(0, 6).map(activity => `${formatDateForContext(activity.loggedAt, args.clientTimeZone)} ${activity.exerciseName} ${activity.summary}`).join('; ')}.` : null,
       summary.work.groups.length > 0 ? `Main work focus: ${summary.work.groups.slice(0, 5).map(group => `${group.label} (${group.setCount} sets)`).join(', ')}.` : null,
     ].filter(Boolean).join('\n'),
   };
@@ -123,7 +126,7 @@ export async function exercisePerformanceHistoryContext(ctx: QueryCtx, args: {
   const recent = [...workingLogs]
     .sort((left, right) => right.loggedAt - left.loggedAt)
     .slice(0, 8)
-    .map(log => summarizeLogForCoaching(log.recipeKey as RecipeKey, log.metrics, log.setOutcomeDetails ?? null));
+    .map(log => `${formatDateForContext(log.loggedAt, args.clientTimeZone)} ${summarizeLogForCoaching(log.recipeKey as RecipeKey, log.metrics, log.setOutcomeDetails ?? null)}`);
 
   return {
     title: `${exercise.name} history: ${range.label}`,

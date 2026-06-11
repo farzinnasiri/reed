@@ -47,6 +47,33 @@ export function resolveReedTimeRange(args: {
   }
 }
 
+export function formatReedTimelineTime(args: {
+  now: number;
+  timestamp: number;
+  timeZone?: string;
+}) {
+  const timeZone = normalizeTimeZone(args.timeZone);
+  const eventDay = localDateKey(args.timestamp, timeZone);
+  const nowDay = localDateKey(args.now, timeZone);
+  const yesterdayDay = localDateKey(args.now - DAY_MS, timeZone);
+  const time = new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  }).format(new Date(args.timestamp));
+
+  if (eventDay === nowDay) return `Today ${time}`;
+  if (eventDay === yesterdayDay) return `Yesterday ${time}`;
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  }).format(new Date(args.timestamp));
+}
+
 function startOfLocalWeek(timestamp: number, timeZone: string) {
   const parts = getLocalParts(timestamp, timeZone);
   const weekday = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' }).format(new Date(timestamp));
@@ -81,6 +108,15 @@ function getLocalParts(timestamp: number, timeZone: string) {
     second: Number(parts.second),
     millisecond: 0,
   };
+}
+
+function localDateKey(timestamp: number, timeZone: string) {
+  return new Intl.DateTimeFormat('en-CA', {
+    day: '2-digit',
+    month: '2-digit',
+    timeZone,
+    year: 'numeric',
+  }).format(new Date(timestamp));
 }
 
 function localTimeToUtcMs(parts: ReturnType<typeof getLocalParts>, timeZone: string) {
