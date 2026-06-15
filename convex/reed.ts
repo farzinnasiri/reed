@@ -24,7 +24,9 @@ const MAX_REED_IMAGE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
 const DEFAULT_COACH_STATE_PROMPT_KEY = 'reed_coach_state_system';
+const COACHING_MEMORY_PROMPT_KEY = 'reed_coaching_memory_system';
 const CHECKED_IN_COACH_STATE_PROMPT_HASH = 'h7a119f49';
+const CHECKED_IN_COACHING_MEMORY_PROMPT_HASH = 'hda6c67d4';
 const DEFAULT_REED_SUMMARY_PROMPT = `You update Reed's compact memory of an ongoing coaching conversation.
 
 This memory is objective continuity for a coach. It is not a transcript, not a psychological profile, not a private coaching strategy, and not an analysis of the user's personality.
@@ -49,6 +51,8 @@ Write only the updated memory.`;
 const DEFAULT_COACH_STATE_PROMPT = `You are Reed's private coaching observer.
 
 Update Reed's private coaching dialogue from the previous dialogue and new evidence.
+
+Focus on coaching posture: pressure, warmth/trust, depth, agency, certainty, what changed relationally, what to avoid, and when to reconsider. Do not try to carry the whole durable memory system; coach mental model and private coaching journeys handle broad user memory, and the chat agenda handles turn-to-turn coaching actions.
 
 <previous_dialogue>
 {{previous_coach_state}}
@@ -212,6 +216,23 @@ export const seedCoachStatePrompt = mutation({
 
     return await upsertPromptVersion(ctx, {
       key: DEFAULT_COACH_STATE_PROMPT_KEY,
+      content,
+    });
+  },
+});
+
+export const seedCheckedInPrompt = mutation({
+  args: { content: v.string(), key: v.string() },
+  handler: async (ctx, args) => {
+    const content = args.content.trim();
+    const expectedHash = checkedInPromptHash(args.key);
+    if (!expectedHash) throw new ConvexError('Prompt key is not a checked-in prompt.');
+    if (simpleHash(content) !== expectedHash) {
+      throw new ConvexError('Prompt content does not match the checked-in prompt.');
+    }
+
+    return await upsertPromptVersion(ctx, {
+      key: args.key,
       content,
     });
   },
@@ -447,6 +468,7 @@ export const loadAssistantContext = internalQuery({
 
 export const completeAssistantMessage = internalMutation({
   args: {
+    agendaItems: v.array(v.string()),
     assistantMessageId: v.id('reedMessages'),
     content: v.string(),
     completedAt: v.number(),
@@ -459,7 +481,11 @@ export const completeAssistantMessage = internalMutation({
       status: 'sent',
       completedAt: args.completedAt,
     });
-    await ctx.db.patch(args.threadId, { updatedAt: args.completedAt, lastMessageAt: args.completedAt });
+    await ctx.db.patch(args.threadId, {
+      agendaItems: args.agendaItems.map(item => item.trim()).filter(Boolean).map(item => item.slice(0, 160)).slice(0, 4),
+      updatedAt: args.completedAt,
+      lastMessageAt: args.completedAt,
+    });
 
     const unsummarized = await loadUnsummarizedMessages(ctx, args.threadId, COMPACT_AFTER_MESSAGE_COUNT + 1);
     if (unsummarized.length >= COMPACT_AFTER_MESSAGE_COUNT) {
@@ -669,6 +695,17 @@ export const loadCoachStateRefreshContext = internalQuery({
   },
 });
 
+export const loadPromptByKey = internalQuery({
+  args: { key: v.string() },
+  handler: async (ctx, args): Promise<{ _id: Id<'reedPromptVersions'>; key: string; content: string; contentHash: string; version: number } | null> => {
+    return await ctx.db
+      .query('reedPromptVersions')
+      .withIndex('by_key_and_status', q => q.eq('key', args.key).eq('status', 'active'))
+      .order('desc')
+      .first();
+  },
+});
+
 export const saveCoachState = internalMutation({
   args: {
     content: v.string(),
@@ -776,6 +813,12 @@ async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; conten
     createdAt: now,
     updatedAt: now,
   });
+}
+
+function checkedInPromptHash(key: string) {
+  if (key === DEFAULT_COACH_STATE_PROMPT_KEY) return CHECKED_IN_COACH_STATE_PROMPT_HASH;
+  if (key === COACHING_MEMORY_PROMPT_KEY) return CHECKED_IN_COACHING_MEMORY_PROMPT_HASH;
+  return null;
 }
 
 async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles'>, now: number) {

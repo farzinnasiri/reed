@@ -62,13 +62,20 @@ export async function summarizeTrainingWindowContext(ctx: QueryCtx, args: {
         const durationMinutes = item.session.endedAt ? Math.max(1, Math.round((item.session.endedAt - item.session.startedAt) / 60000)) : null;
         const started = formatDateForContext(item.session.startedAt, args.clientTimeZone);
         const ended = item.session.endedAt ? formatDateForContext(item.session.endedAt, args.clientTimeZone) : 'not ended';
-        return `${started}-${ended}${durationMinutes ? ` (${durationMinutes} min)` : ''}${names ? `: ${names}` : ''}`;
+        const note = formatSessionNoteForContext(item.session.userNotes);
+        return `${started}-${ended}${durationMinutes ? ` (${durationMinutes} min)` : ''}${names ? `: ${names}` : ''}${note ? `; user note: ${note}` : ''}`;
       }).join('; ')}.` : null,
       summary.byExercise.length > 0 ? `Top exercises: ${summary.byExercise.slice(0, 6).map(exercise => `${exercise.exerciseName} (${exercise.setCount})`).join(', ')}.` : 'No exercises logged in this range.',
       summary.recentActivities.length > 0 ? `Recent work: ${summary.recentActivities.slice(0, 6).map(activity => `${formatDateForContext(activity.loggedAt, args.clientTimeZone)} ${activity.exerciseName} ${activity.summary}`).join('; ')}.` : null,
       summary.work.groups.length > 0 ? `Main work focus: ${summary.work.groups.slice(0, 5).map(group => `${group.label} (${group.setCount} sets)`).join(', ')}.` : null,
     ].filter(Boolean).join('\n'),
   };
+}
+
+function formatSessionNoteForContext(value: string | undefined) {
+  const note = value?.trim();
+  if (!note) return null;
+  return note.length > 500 ? `${note.slice(0, 497)}...` : note;
 }
 
 export async function bodyweightTrendContext(ctx: QueryCtx, args: {

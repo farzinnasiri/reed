@@ -3,7 +3,7 @@ import { pickVoiceTranscript } from './reed.presenter';
 import type { ReedMessage, VoiceComposerState } from './reed.types';
 
 export function useReedVoiceDraft(messages: ReedMessage[]) {
-  const [voiceState, setVoiceState] = useState<VoiceComposerState>({ status: 'idle', transcript: '' });
+  const [voiceState, setVoiceState] = useState<VoiceComposerState>({ status: 'idle', transcript: '', voiceLevel: 0 });
   const messagesRef = useRef(messages);
   const voiceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -24,7 +24,7 @@ export function useReedVoiceDraft(messages: ReedMessage[]) {
       clearTimeout(voiceTimeoutRef.current);
       voiceTimeoutRef.current = null;
     }
-    setVoiceState({ status: 'idle', transcript: '' });
+    setVoiceState({ status: 'idle', transcript: '', voiceLevel: 0 });
   }, []);
 
   const startVoice = useCallback((disabled: boolean) => {
@@ -36,9 +36,9 @@ export function useReedVoiceDraft(messages: ReedMessage[]) {
       clearTimeout(voiceTimeoutRef.current);
     }
 
-    setVoiceState({ status: 'listening', transcript: '' });
+    setVoiceState({ status: 'listening', transcript: '', voiceLevel: 0 });
     voiceTimeoutRef.current = setTimeout(() => {
-      setVoiceState({ status: 'ready', transcript: pickVoiceTranscript(messagesRef.current) });
+      setVoiceState({ status: 'ready', transcript: pickVoiceTranscript(messagesRef.current), voiceLevel: 0 });
       voiceTimeoutRef.current = null;
     }, 1200);
   }, []);
@@ -50,17 +50,17 @@ export function useReedVoiceDraft(messages: ReedMessage[]) {
     }
 
     if (voiceState.status === 'listening') {
-      setVoiceState({ status: 'ready', transcript: pickVoiceTranscript(messagesRef.current) });
+      setVoiceState({ status: 'ready', transcript: pickVoiceTranscript(messagesRef.current), voiceLevel: 0 });
       return existingComposerText;
     }
 
     if (voiceState.status === 'ready' && voiceState.transcript.trim() && existingComposerText.trim().length === 0) {
       const draft = voiceState.transcript;
-      setVoiceState({ status: 'idle', transcript: '' });
+      setVoiceState({ status: 'idle', transcript: '', voiceLevel: 0 });
       return draft;
     }
 
-    setVoiceState({ status: 'idle', transcript: '' });
+    setVoiceState({ status: 'idle', transcript: '', voiceLevel: 0 });
     return existingComposerText;
   }, [voiceState]);
 

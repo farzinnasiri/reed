@@ -18,10 +18,12 @@ export function useRestBackgroundAlerts({
   restRemaining,
 }: UseRestBackgroundAlertsParams) {
   const hasCheckedPermissionRef = useRef(false);
+  const loggedAlertKeyRef = useRef<string | null>(null);
   const isRestRunning = cardMode === 'rest' && Boolean(restCard?.isRunning);
+  const scheduledRemainingSeconds = restCard?.remainingSeconds ?? null;
   const alertKey =
     isRestRunning && restCard
-      ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${restCard.durationSeconds}:${restCard.isRunning ? 'running' : 'idle'}`
+      ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${restCard.durationSeconds}:${scheduledRemainingSeconds}:${restCard.isRunning ? 'running' : 'idle'}`
       : null;
   const payload = useMemo(
     () =>
@@ -42,6 +44,25 @@ export function useRestBackgroundAlerts({
     onPermissionDenied,
     payload,
   });
+
+  useEffect(() => {
+    if (!alertKey) {
+      loggedAlertKeyRef.current = null;
+      return;
+    }
+
+    if (!restCard || loggedAlertKeyRef.current === alertKey) {
+      return;
+    }
+
+    loggedAlertKeyRef.current = alertKey;
+    console.info('[rest-timer-alerts]', 'schedule-requested', {
+      durationSeconds: restCard.durationSeconds,
+      fireInSeconds: restRemaining,
+      nextSetNumber: restCard.nextSetNumber,
+      scheduledRemainingSeconds,
+    });
+  }, [alertKey, restCard, restRemaining, scheduledRemainingSeconds]);
 
   useEffect(() => {
     if (!isRestRunning || hasCheckedPermissionRef.current) {

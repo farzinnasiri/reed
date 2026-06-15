@@ -143,9 +143,12 @@ export default defineSchema({
     endedAt: v.optional(v.number()),
     activeSessionExerciseId: v.optional(v.id('liveSessionExercises')),
     activeProcess: activeProcessValidator,
+    userNotes: v.optional(v.string()),
+    userNotesUpdatedAt: v.optional(v.number()),
   })
     .index('by_profile_id_and_status', ['profileId', 'status'])
-    .index('by_profile_id_and_status_and_started_at', ['profileId', 'status', 'startedAt']),
+    .index('by_profile_id_and_status_and_started_at', ['profileId', 'status', 'startedAt'])
+    .index('by_status_and_started_at', ['status', 'startedAt']),
   liveSessionExercises: defineTable({
     sessionId: v.id('liveSessions'),
     profileId: v.id('profiles'),
@@ -214,6 +217,7 @@ export default defineSchema({
     lastMessageAt: v.optional(v.number()),
     activeSummaryId: v.optional(v.id('reedMemorySummaries')),
     compactedThroughMessageId: v.optional(v.id('reedMessages')),
+    agendaItems: v.optional(v.array(v.string())),
   })
     .index('by_profile_id_and_status', ['profileId', 'status'])
     .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
@@ -231,6 +235,7 @@ export default defineSchema({
   })
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
+    .index('by_created_at', ['createdAt'])
     .index('by_profile_id_and_client_nonce', ['profileId', 'clientNonce']),
   reedMessageAttachments: defineTable({
     messageId: v.id('reedMessages'),
@@ -290,6 +295,43 @@ export default defineSchema({
   })
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
     .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
+  reedCoachMentalModels: defineTable({
+    profileId: v.id('profiles'),
+    content: v.string(),
+    sourceFingerprint: v.string(),
+    modelProvider: v.string(),
+    modelName: v.string(),
+    promptHash: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_profile_id', ['profileId'])
+    .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
+  reedCoachingJourneys: defineTable({
+    profileId: v.id('profiles'),
+    title: v.string(),
+    slug: v.string(),
+    status: v.union(v.literal('active'), v.literal('background'), v.literal('dormant'), v.literal('archived')),
+    strength: v.number(),
+    confidence: v.number(),
+    summary: v.string(),
+    lastEvidenceAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_profile_id_and_status', ['profileId', 'status'])
+    .index('by_profile_id_and_slug', ['profileId', 'slug'])
+    .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
+  reedCoachingMemoryStates: defineTable({
+    profileId: v.id('profiles'),
+    lastSourceFingerprint: v.string(),
+    lastSourceThroughAt: v.number(),
+    lastReconciledAt: v.number(),
+    lastStatus: v.union(v.literal('completed'), v.literal('failed')),
+    error: v.optional(v.string()),
+  })
+    .index('by_profile_id', ['profileId'])
+    .index('by_last_reconciled_at', ['lastReconciledAt']),
   profileInsights: defineTable({
     profileId: v.id('profiles'),
     content: v.string(),
@@ -318,6 +360,7 @@ export default defineSchema({
     profileId: v.id('profiles'),
     trigger: v.union(
       v.literal('session_ended'),
+      v.literal('session_notes_updated'),
       v.literal('onboarding_updated'),
       v.literal('assessment_updated'),
       v.literal('body_metrics_updated'),

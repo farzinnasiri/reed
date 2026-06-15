@@ -26,6 +26,10 @@ export function getRemainingSeconds(process: RestProcessLike, now = Date.now()) 
   return clampSeconds(process.remainingSeconds - elapsedSeconds);
 }
 
+export function getRemainingSecondsUntil(endsAt: number, now = Date.now()) {
+  return clampSeconds(Math.ceil((endsAt - now) / 1000));
+}
+
 export function clampSeconds(value: number, min = 0, max = 240) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }

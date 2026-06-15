@@ -10,6 +10,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ConvexProvider } from 'convex/react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useQuery } from 'convex/react';
 import { useEffect } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -45,7 +46,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ReedThemeProvider>
-        <RootApp />
+        <GestureHandlerRootView style={styles.gestureRoot}>
+          <RootApp />
+        </GestureHandlerRootView>
       </ReedThemeProvider>
     </SafeAreaProvider>
   );
@@ -169,6 +172,9 @@ function RootNavigator() {
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   safeArea: {
     flex: 1,
   },

@@ -15,7 +15,7 @@ const BODY_WINDOW_DAYS = 120;
 const RECORD_WINDOW_DAYS = 365;
 const JOURNEY_VERSION = 1;
 
-type JourneyTrigger = 'session_ended' | 'onboarding_updated' | 'assessment_updated' | 'body_metrics_updated';
+type JourneyTrigger = 'session_ended' | 'session_notes_updated' | 'onboarding_updated' | 'assessment_updated' | 'body_metrics_updated';
 type SignalTrend = 'up' | 'flat' | 'down';
 type SignalConfidence = 'low' | 'medium' | 'high';
 
@@ -130,6 +130,7 @@ export const rebuildLatest = internalMutation({
     profileId: v.id('profiles'),
     trigger: v.union(
       v.literal('session_ended'),
+      v.literal('session_notes_updated'),
       v.literal('onboarding_updated'),
       v.literal('assessment_updated'),
       v.literal('body_metrics_updated'),

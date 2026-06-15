@@ -1,4 +1,6 @@
 import * as DocumentPicker from 'expo-document-picker';
+import { fetch as expoFetch } from 'expo/fetch';
+import { File as ExpoFile } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,8 +14,17 @@ import type { ReedDraftAttachment } from './reed.types';
 const MAX_ATTACHMENTS = 5;
 const MAX_IMAGE_EDGE = 1600;
 const JPEG_QUALITY = 0.78;
+const ATTACHMENT_LOG_PREFIX = 'ReedAttachmentUpload';
 
 type PendingImage = {
+  height?: number;
+  mimeType?: string;
+  name?: string;
+  uri: string;
+  width?: number;
+};
+
+type EditedImage = {
   height?: number;
   name?: string;
   uri: string;
@@ -45,12 +56,57 @@ async function compressToJpeg(image: PendingImage) {
   );
 }
 
-async function uploadJpeg(uploadUrl: string, uri: string) {
-  const response = await fetch(uri);
-  if (!response.ok) throw new Error('Could not prepare the selected image.');
-  const blob = await response.blob();
-  const uploadResponse = await fetch(uploadUrl, {
-    body: blob,
+function logAttachmentStepError(step: string, error: unknown, details?: Record<string, unknown>) {
+  console.warn(`${ATTACHMENT_LOG_PREFIX}:${step}`, {
+    ...details,
+    error: error instanceof Error ? error.message : String(error),
+  });
+}
+
+function toUserAttachmentError(step: string) {
+  switch (step) {
+    case 'manipulation':
+      return 'Could not prepare the selected image.';
+    case 'local-file-read':
+      return 'Could not read the prepared image from this device.';
+    case 'upload-url':
+      return 'Could not start the image upload.';
+    case 'storage-upload':
+      return 'Could not upload the selected image.';
+    default:
+      return 'Could not attach this image.';
+  }
+}
+
+type UploadableJpeg = Blob | ExpoFile;
+
+async function getReadableJpeg(uri: string): Promise<UploadableJpeg> {
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    if (!response.ok) throw new Error(`Prepared image is not readable. status=${response.status}`);
+    const blob = await response.blob();
+    if (blob.size <= 0) throw new Error('Prepared image blob is empty.');
+    return blob;
+  }
+
+  const file = new ExpoFile(uri);
+  if (!file.exists || file.size <= 0) {
+    throw new Error(`Prepared image is not readable. exists=${file.exists} size=${file.size}`);
+  }
+  return file;
+}
+
+function uploadableSize(file: UploadableJpeg) {
+  return file.size;
+}
+
+function uploadableType(file: UploadableJpeg) {
+  return file.type || 'image/jpeg';
+}
+
+async function uploadJpeg(uploadUrl: string, file: UploadableJpeg) {
+  const uploadResponse = await expoFetch(uploadUrl, {
+    body: file,
     headers: { 'Content-Type': 'image/jpeg' },
     method: 'POST',
   });
@@ -61,9 +117,11 @@ async function uploadJpeg(uploadUrl: string, uri: string) {
 export function useReedAttachments() {
   const generateImageUploadUrl = useMutation(api.reed.generateImageUploadUrl);
   const [attachments, setAttachments] = useState<ReedDraftAttachment[]>([]);
+  const [editingImages, setEditingImages] = useState<PendingImage[]>([]);
   const [lastError, setLastError] = useState<string | null>(null);
 
   const canAttachMore = attachments.length < MAX_ATTACHMENTS;
+  const editingImage = editingImages[0] ?? null;
   const isPreparingAttachments = useMemo(
     () => attachments.some(attachment => attachment.status === 'preparing'),
     [attachments],
@@ -75,6 +133,16 @@ export function useReedAttachments() {
       .map(attachment => ({ storageId: attachment.storageId as Id<'_storage'> })),
     [attachments],
   );
+
+  const openImageEditor = useCallback((images: PendingImage[]) => {
+    if (images.length === 0) return;
+    setEditingImages(images);
+    setLastError(null);
+  }, []);
+
+  const closeCurrentEditorImage = useCallback(() => {
+    setEditingImages(current => current.slice(1));
+  }, []);
 
   const prepareAndUpload = useCallback(async (image: PendingImage) => {
     const id = createDraftId();
@@ -90,7 +158,17 @@ export function useReedAttachments() {
     });
 
     try {
-      const compressed = await compressToJpeg(image);
+      let compressed: ImageManipulator.ImageResult;
+      try {
+        compressed = await compressToJpeg(image);
+      } catch (error) {
+        logAttachmentStepError('manipulation', error, {
+          sourceMimeType: image.mimeType ?? 'unknown',
+          sourceName: image.name ?? 'unknown',
+          sourceUriScheme: image.uri.split(':')[0],
+        });
+        throw new Error(toUserAttachmentError('manipulation'));
+      }
       setAttachments(current => current.map(attachment => attachment.id === id
         ? {
             ...attachment,
@@ -101,8 +179,29 @@ export function useReedAttachments() {
           }
         : attachment));
 
-      const uploadUrl = await generateImageUploadUrl({});
-      const uploaded = await uploadJpeg(uploadUrl, compressed.uri);
+      let file: UploadableJpeg;
+      try {
+        file = await getReadableJpeg(compressed.uri);
+      } catch (error) {
+        logAttachmentStepError('local-file-read', error, { compressedUriScheme: compressed.uri.split(':')[0] });
+        throw new Error(toUserAttachmentError('local-file-read'));
+      }
+
+      let uploadUrl: string;
+      try {
+        uploadUrl = await generateImageUploadUrl({});
+      } catch (error) {
+        logAttachmentStepError('upload-url', error);
+        throw new Error(toUserAttachmentError('upload-url'));
+      }
+
+      let uploaded: { storageId: Id<'_storage'> };
+      try {
+        uploaded = await uploadJpeg(uploadUrl, file);
+      } catch (error) {
+        logAttachmentStepError('storage-upload', error, { fileSize: uploadableSize(file), mimeType: uploadableType(file) });
+        throw new Error(toUserAttachmentError('storage-upload'));
+      }
       setAttachments(current => current.map(attachment => attachment.id === id
         ? { ...attachment, status: 'ready', storageId: uploaded.storageId }
         : attachment));
@@ -118,6 +217,22 @@ export function useReedAttachments() {
       setLastError(error instanceof Error ? error.message : 'Could not attach this image.');
     }
   }, [generateImageUploadUrl]);
+
+  const uploadEditedImage = useCallback((editedImage: EditedImage) => {
+    if (!editingImage) return;
+    void prepareAndUpload({
+      ...editingImage,
+      height: editedImage.height,
+      name: editedImage.name ?? editingImage.name,
+      uri: editedImage.uri,
+      width: editedImage.width,
+    });
+    closeCurrentEditorImage();
+  }, [closeCurrentEditorImage, editingImage, prepareAndUpload]);
+
+  const cancelImageEditor = useCallback(() => {
+    closeCurrentEditorImage();
+  }, [closeCurrentEditorImage]);
 
   const attachFromCamera = useCallback(async () => {
     if (!canAttachMore) return;
@@ -135,13 +250,14 @@ export function useReedAttachments() {
     if (result.canceled) return;
     const asset = result.assets[0];
     if (!asset) return;
-    await prepareAndUpload({
+    openImageEditor([{
       height: asset.height,
+      mimeType: asset.mimeType,
       name: asset.fileName ?? 'Camera photo',
       uri: asset.uri,
       width: asset.width,
-    });
-  }, [canAttachMore, prepareAndUpload]);
+    }]);
+  }, [canAttachMore, openImageEditor]);
 
   const attachFromLibrary = useCallback(async () => {
     const slots = remainingSlots(attachments.length);
@@ -157,18 +273,20 @@ export function useReedAttachments() {
       allowsMultipleSelection: slots > 1,
       mediaTypes: ['images'],
       orderedSelection: true,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
       quality: 1,
       selectionLimit: slots,
     });
     if (result.canceled) return;
 
-    await Promise.all(result.assets.slice(0, slots).map(asset => prepareAndUpload({
+    openImageEditor(result.assets.slice(0, slots).map(asset => ({
       height: asset.height,
+      mimeType: asset.mimeType,
       name: asset.fileName ?? 'Library image',
       uri: asset.uri,
       width: asset.width,
     })));
-  }, [attachments.length, prepareAndUpload]);
+  }, [attachments.length, openImageEditor]);
 
   const attachFromFiles = useCallback(async () => {
     const slots = remainingSlots(attachments.length);
@@ -181,11 +299,12 @@ export function useReedAttachments() {
     });
     if (result.canceled) return;
 
-    await Promise.all(result.assets.slice(0, slots).map(asset => prepareAndUpload({
+    openImageEditor(result.assets.slice(0, slots).map(asset => ({
+      mimeType: asset.mimeType,
       name: asset.name,
       uri: asset.uri,
     })));
-  }, [attachments.length, prepareAndUpload]);
+  }, [attachments.length, openImageEditor]);
 
   const removeAttachment = useCallback((attachmentId: string) => {
     setAttachments(current => current.filter(attachment => attachment.id !== attachmentId));
@@ -193,6 +312,7 @@ export function useReedAttachments() {
 
   const clearAttachments = useCallback(() => {
     setAttachments([]);
+    setEditingImages([]);
     setLastError(null);
   }, []);
 
@@ -201,11 +321,14 @@ export function useReedAttachments() {
     attachFromFiles,
     attachFromLibrary,
     attachments,
+    cancelImageEditor,
     canAttachMore,
     clearAttachments,
+    editingImage,
     isPreparingAttachments,
     lastError,
     readyAttachmentIds,
     removeAttachment,
+    uploadEditedImage,
   };
 }

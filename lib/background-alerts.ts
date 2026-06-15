@@ -7,7 +7,7 @@ export type ScheduledAlertDefinition<Payload> = {
   androidChannelId: string;
   androidChannelName: string;
   foregroundSound?: unknown;
-  sound: 'default';
+  sound: 'default' | string;
   vibrationPattern?: number[];
   buildContent: (payload: Payload) => {
     body: string;
@@ -33,7 +33,7 @@ type NotificationHandlerResponse = {
 type NotificationRequest = {
   content: {
     body: string;
-    sound: 'default';
+    sound: 'default' | string;
     title: string;
   };
   trigger:
@@ -72,7 +72,7 @@ type NotificationModule = {
       importance: number;
       lockscreenVisibility: number;
       name: string;
-      sound: 'default';
+      sound: 'default' | string;
       vibrationPattern: number[];
     },
   ) => Promise<void>;
@@ -85,6 +85,10 @@ let configuredNotificationHandler = false;
 let notificationsModulePromise: Promise<NotificationModule | null> | null = null;
 let appNotificationPermissionRequest: Promise<ScheduledAlertPermissionStatus> | null = null;
 const activeNotificationIdsByChannel = new Map<string, string>();
+
+function logScheduledAlert(message: string, details?: Record<string, unknown>) {
+  console.info('[background-alerts]', message, details ?? {});
+}
 
 async function getNotificationsModule() {
   if (Platform.OS === 'web') {
@@ -137,6 +141,11 @@ export async function ensureScheduledAlertPermissionsAsync<Payload>(
   }
 
   if (Platform.OS === 'android') {
+    logScheduledAlert('ensure-channel', {
+      channelId: definition.androidChannelId,
+      platform: Platform.OS,
+      sound: definition.sound,
+    });
     await Notifications.setNotificationChannelAsync(definition.androidChannelId, {
       importance: Notifications.AndroidImportance.MAX,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
@@ -192,6 +201,11 @@ export async function scheduleBackgroundAlertAsync<Payload>({
     },
   });
   activeNotificationIdsByChannel.set(definition.androidChannelId, notificationId);
+  logScheduledAlert('scheduled', {
+    channelId: definition.androidChannelId,
+    notificationId,
+    seconds,
+  });
 
   return { notificationId, status: 'scheduled' };
 }
@@ -223,6 +237,10 @@ export async function showImmediateBackgroundAlertAsync<Payload>({
     trigger: null,
   });
   activeNotificationIdsByChannel.set(definition.androidChannelId, notificationId);
+  logScheduledAlert('shown-immediate', {
+    channelId: definition.androidChannelId,
+    notificationId,
+  });
 
   return notificationId;
 }
@@ -237,6 +255,7 @@ export async function clearBackgroundAlertAsync(notificationId: string | null) {
     Notifications.cancelScheduledNotificationAsync(notificationId),
     Notifications.dismissNotificationAsync(notificationId),
   ]);
+  logScheduledAlert('cleared', { notificationId });
 
   for (const [channelId, activeNotificationId] of activeNotificationIdsByChannel) {
     if (activeNotificationId === notificationId) {

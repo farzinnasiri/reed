@@ -32,6 +32,19 @@ button {
   font-weight: 700;
 }
 
+button.tab {
+  min-height: 38px;
+  color: #404040;
+  background: #f5f6f8;
+  border: 1px solid #d8dbe2;
+}
+
+button.tab.active {
+  color: #f8fafc;
+  background: #171717;
+  border-color: #171717;
+}
+
 button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -128,6 +141,12 @@ h3 {
   gap: 12px;
 }
 
+.tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .status {
   margin-top: auto;
   font-size: 13px;
@@ -136,6 +155,210 @@ h3 {
 
 .status.error {
   color: #b91c1c;
+}
+
+.debug {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 20px;
+  padding: 28px;
+  background: #f8f9fb;
+}
+
+.debugLayout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.contextRail {
+  position: sticky;
+  top: 20px;
+  display: grid;
+  gap: 12px;
+}
+
+.profileBlock {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  padding: 14px;
+  background: #ffffff;
+}
+
+.profileBlock span {
+  min-width: 0;
+  overflow: hidden;
+  color: #6f6f6f;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #ffffff;
+}
+
+.metric span {
+  color: #6f6f6f;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.metric strong {
+  font-size: 22px;
+  line-height: 26px;
+}
+
+.sectionNav {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.sectionNav button {
+  justify-content: flex-start;
+  min-height: 38px;
+  color: #404040;
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+}
+
+.sectionNav button.active {
+  color: #171717;
+  background: #ffffff;
+  border-color: #d8dbe2;
+}
+
+.contextPane,
+.contextStack {
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border: 1px solid #e1e3e8;
+  border-radius: 8px;
+  padding: 16px;
+  background: #ffffff;
+}
+
+.panel header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.panel pre {
+  max-height: 340px;
+  margin: 0;
+  overflow: auto;
+  border-radius: 8px;
+  padding: 12px;
+  color: #27272a;
+  background: #f5f6f8;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.readableText {
+  max-width: 78ch;
+  margin: 0;
+  color: #27272a;
+  font-size: 15px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.agendaList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.agendaList li {
+  line-height: 1.45;
+}
+
+.journeyList,
+.summaryList,
+.messageList {
+  display: grid;
+  gap: 10px;
+}
+
+.journeyRow,
+.summaryRow,
+.messageRow {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid #eef0f3;
+  padding-top: 10px;
+}
+
+.journeyRow:first-child,
+.summaryRow:first-child,
+.messageRow:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.journeyRow div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.journeyRow p,
+.messageRow p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.journeyRow span,
+.journeyRow small {
+  color: #6f6f6f;
+  font-size: 12px;
+}
+
+.journeyRow footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.journeyRow footer small {
+  border: 1px solid #e1e3e8;
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #f8f9fb;
+}
+
+.messageRow.assistant {
+  border-left: 3px solid #171717;
+  padding-left: 10px;
+}
+
+.messageRow.user {
+  border-left: 3px solid #2455e6;
+  padding-left: 10px;
 }
 
 .editor {
@@ -201,6 +424,18 @@ h3 {
 @media (max-width: 780px) {
   .shell {
     grid-template-columns: 1fr;
+  }
+
+  .debugLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .contextRail {
+    position: static;
+  }
+
+  .sectionNav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .sidebar {

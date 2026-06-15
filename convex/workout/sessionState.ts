@@ -77,8 +77,11 @@ export function buildCurrentLiveSessionState(args: {
       cardMode: 'capture',
       restRuntime: null,
       session: {
+        sessionId: session._id,
         startedAt: session.startedAt,
         status: session.status,
+        userNotes: session.userNotes ?? '',
+        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
       },
       timeline,
     };
@@ -113,8 +116,11 @@ export function buildCurrentLiveSessionState(args: {
       cardMode: 'live_cardio',
       restRuntime,
       session: {
+        sessionId: session._id,
         startedAt: session.startedAt,
         status: session.status,
+        userNotes: session.userNotes ?? '',
+        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
       },
       timeline,
     };
@@ -152,8 +158,11 @@ export function buildCurrentLiveSessionState(args: {
       cardMode: 'capture',
       restRuntime,
       session: {
+        sessionId: session._id,
         startedAt: session.startedAt,
         status: session.status,
+        userNotes: session.userNotes ?? '',
+        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
       },
       timeline,
     };
@@ -168,8 +177,11 @@ export function buildCurrentLiveSessionState(args: {
     cardMode: 'rest',
     restRuntime,
     session: {
+      sessionId: session._id,
       startedAt: session.startedAt,
       status: session.status,
+      userNotes: session.userNotes ?? '',
+      userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
     },
     timeline,
   };

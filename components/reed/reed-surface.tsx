@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Keyboard, Platform, View, type ScrollView as ScrollViewType } from 'react-native';
+import { Platform, View, type ScrollView as ScrollViewType } from 'react-native';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
+import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
 import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
+import { ReedImageEditor } from './reed-image-editor';
 import { createLocalMockReedRuntime } from './reed.runtime';
 import { styles } from './reed.styles';
 import { ReedThread } from './reed-thread';
@@ -14,7 +16,7 @@ import type { ReedSurfaceProps } from './reed.types';
 import { useReedAttachments } from './use-reed-attachments';
 import { useReedConversation } from './use-reed-conversation';
 import { useReedPresence } from './use-reed-presence';
-import { useReedVoiceDraft } from './use-reed-voice-draft';
+import { useSpeechDraft } from '@/lib/speech/use-speech-draft';
 
 export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps) {
   const { theme } = useReedTheme();
@@ -32,12 +34,15 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     attachFromFiles,
     attachFromLibrary,
     attachments,
+    cancelImageEditor,
     canAttachMore,
     clearAttachments,
+    editingImage,
     isPreparingAttachments,
     lastError: lastAttachmentError,
     readyAttachmentIds,
     removeAttachment,
+    uploadEditedImage,
   } = useReedAttachments();
 
   const runtime = useMemo(() => createLocalMockReedRuntime(), []);
@@ -62,7 +67,25 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     runtime,
     shouldDelayAssistantStart,
   });
-  const { resetVoice, startVoice, stopVoice, voiceState } = useReedVoiceDraft(messages);
+  const {
+    reset: resetVoice,
+    retry: retryVoice,
+    start: startVoice,
+    state: speechState,
+    stop: stopVoice,
+  } = useSpeechDraft('chat', transcript => {
+    setComposerText(current => current.trim() ? `${current.trimEnd()} ${transcript}` : transcript);
+  });
+  const voiceState = useMemo(() => ({
+    error: speechState.error,
+    status: speechState.status,
+    transcript: speechState.status === 'transcribing'
+      ? 'Transcribing...'
+      : speechState.status === 'failed'
+        ? speechState.error ?? 'Could not transcribe audio.'
+        : '',
+    voiceLevel: speechState.voiceLevel,
+  }), [speechState.error, speechState.status, speechState.voiceLevel]);
 
   const openCoachItems = useMemo(
     () => coachItems.filter(item => item.status === 'open'),
@@ -84,16 +107,26 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   }, [messages]);
 
   useEffect(() => {
-    const showSubscription = Keyboard.addListener('keyboardDidShow', event => {
-      setKeyboardHeight(event.endCoordinates.height);
-    });
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
-    });
+    const showSubscriptions = [
+      KeyboardEvents.addListener('keyboardWillShow', event => {
+        setKeyboardHeight(event.height);
+      }),
+      KeyboardEvents.addListener('keyboardDidShow', event => {
+        setKeyboardHeight(event.height);
+      }),
+    ];
+    const hideSubscriptions = [
+      KeyboardEvents.addListener('keyboardWillHide', () => {
+        setKeyboardHeight(0);
+      }),
+      KeyboardEvents.addListener('keyboardDidHide', () => {
+        setKeyboardHeight(0);
+      }),
+    ];
 
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
+      showSubscriptions.forEach(subscription => subscription.remove());
+      hideSubscriptions.forEach(subscription => subscription.remove());
     };
   }, []);
 
@@ -244,20 +277,23 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
             }
           }}
           onRemoveAttachment={removeAttachment}
+          onRetryVoice={() => void retryVoice()}
           onSendTyped={sendTyped}
           onSendVoiceDraft={sendVoiceDraft}
-          onStartVoice={() => startVoice(Boolean(pendingRunId))}
-          onStopVoice={() => {
-            const nextText = stopVoice(composerText);
-            if (nextText !== composerText) {
-              setComposerText(nextText);
-            }
-          }}
+          onStartVoice={() => void startVoice()}
+          onStopVoice={() => void stopVoice()}
           quickActions={visibleQuickActions}
           shouldShowQuickActions={shouldShowQuickActions}
           voiceState={voiceState}
         />
       </View>
+
+      <ReedImageEditor
+        image={editingImage}
+        onCancel={cancelImageEditor}
+        onUseImage={uploadEditedImage}
+        visible={Boolean(editingImage)}
+      />
     </View>
   );
 }

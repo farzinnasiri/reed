@@ -8,10 +8,10 @@ export type RestCompleteAlertPayload = {
 };
 
 export const restCompleteAlert: ScheduledAlertDefinition<RestCompleteAlertPayload> = {
-  androidChannelId: 'rest-timer-alerts-v2',
+  androidChannelId: 'rest-timer-alerts-v3',
   androidChannelName: 'Rest timer alerts',
   foregroundSound: REST_TIMER_CUE,
-  sound: 'default',
+  sound: 'rest-timer-complete.wav',
   vibrationPattern: [0, 250, 200, 250],
   buildContent: ({ exerciseName, nextSetNumber }) => ({
     body: `${exerciseName} · Set ${nextSetNumber} is ready.`,

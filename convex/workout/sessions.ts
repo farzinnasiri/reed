@@ -32,6 +32,7 @@ import { buildCurrentLiveSessionState } from './sessionState';
 import { setMetricsValidator, setOutcomeDetailsValidator } from './validators';
 
 const DEFAULT_REST_SECONDS = 90;
+const SESSION_NOTES_MAX_LENGTH = 2000;
 
 type ActiveSession = Doc<'liveSessions'> & { status: 'active' };
 type SessionExerciseWithRecipe = Doc<'liveSessionExercises'> & {
@@ -101,6 +102,8 @@ export const getLatestEndedSummary = query({
         endedAt: endedSession.endedAt ?? endedSession.startedAt,
         sessionId: endedSession._id,
         startedAt: endedSession.startedAt,
+        userNotes: endedSession.userNotes ?? '',
+        userNotesUpdatedAt: endedSession.userNotesUpdatedAt ?? null,
       };
     }
 
@@ -146,6 +149,8 @@ export const getEndedTimeline = query({
         ...item,
         state: item.setCount > 0 ? 'logged' as const : 'idle' as const,
       })),
+      userNotes: session.userNotes ?? '',
+      userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
     };
   },
 });
@@ -182,6 +187,8 @@ export const listEndedSummaries = query({
         endedAt: endedSession.endedAt ?? endedSession.startedAt,
         sessionId: endedSession._id,
         startedAt: endedSession.startedAt,
+        userNotes: endedSession.userNotes ?? '',
+        userNotesUpdatedAt: endedSession.userNotesUpdatedAt ?? null,
       });
     }
 
@@ -297,6 +304,38 @@ export const reorderExercises = mutation({
     );
 
     return null;
+  },
+});
+
+export const updateSessionNotes = mutation({
+  args: {
+    notes: v.string(),
+    sessionId: v.id('liveSessions'),
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await ctx.db.get(args.sessionId);
+
+    if (!session || session.profileId !== profile._id) {
+      throw new ConvexError('Session not found.');
+    }
+
+    const notes = args.notes.trim();
+    if (notes.length > SESSION_NOTES_MAX_LENGTH) {
+      throw new ConvexError(`Session notes must be ${SESSION_NOTES_MAX_LENGTH} characters or fewer.`);
+    }
+
+    await ctx.db.patch(session._id, {
+      userNotes: notes || undefined,
+      userNotesUpdatedAt: notes ? Date.now() : undefined,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
+      profileId: profile._id,
+      trigger: 'session_notes_updated',
+    });
+
+    return { notes };
   },
 });
 

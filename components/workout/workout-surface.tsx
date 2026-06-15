@@ -8,6 +8,7 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { getRemainingSecondsUntil } from '@/domains/workout/rest';
 import {
   cancelRestTimerBackgroundAlertsAsync,
   playRestTimerCompletionCueAsync,
@@ -15,6 +16,7 @@ import {
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
 import { WorkoutSessionInsightsSheet } from './workout-session-insights-sheet';
+import { WorkoutSessionNotesSheet } from './workout-session-notes-sheet';
 import { WorkoutSessionStatusStrip } from './workout-session-status-strip';
 import { styles } from './workout-surface.styles';
 import type {
@@ -52,6 +54,8 @@ type EndedSessionSummary = {
   }>;
   sessionId: Id<'liveSessions'>;
   startedAt: number;
+  userNotes: string;
+  userNotesUpdatedAt: number | null;
 };
 
 type QuickLogActivity = {
@@ -108,6 +112,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const resumeLiveCardio = useMutation(api.liveSessions.resumeLiveCardio);
   const adjustLiveCardioMetric = useMutation(api.liveSessions.adjustLiveCardioMetric);
   const finishLiveCardio = useMutation(api.liveSessions.finishLiveCardio);
+  const updateSessionNotes = useMutation(api.liveSessions.updateSessionNotes);
   const toggleFavorite = useMutation(api.exerciseCatalog.toggleFavorite);
 
   const [isWorking, setIsWorking] = useState(false);
@@ -126,10 +131,12 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [isSessionNotesOpen, setIsSessionNotesOpen] = useState(false);
+  const [isSavingSessionNotes, setIsSavingSessionNotes] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
   const [statusStripHeight, setStatusStripHeight] = useState(60);
   const previousRestRemainingRef = useRef<number | null>(null);
-  const currentRestRemainingRef = useRef(restRemaining);
+  const restEndsAtRef = useRef<number | null>(null);
   const timelineMutationPendingRef = useRef(false);
   const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
   const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
@@ -150,7 +157,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       logs: dayLogs,
     }));
   }, [quickLogActivity]);
-  currentRestRemainingRef.current = restRemaining;
   const activeSetEditor = useMemo(() => {
     if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
       return null;
@@ -197,6 +203,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   useEffect(() => {
     if (!restRuntime) {
+      restEndsAtRef.current = null;
       setRestRemaining(0);
       setRestRunning(false);
       return;
@@ -204,12 +211,16 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
     setIsPickerInteracting(false);
     setEditingSet(null);
-    const currentRemaining = currentRestRemainingRef.current;
-    const isServerEchoWithinTick =
-      restRuntime.isRunning && Math.abs(restRuntime.remainingSeconds - currentRemaining) <= 1;
-    if (!isServerEchoWithinTick) {
+
+    if (restRuntime.isRunning) {
+      const restEndsAt = Date.now() + restRuntime.remainingSeconds * 1000;
+      restEndsAtRef.current = restEndsAt;
+      setRestRemaining(getRemainingSecondsUntil(restEndsAt));
+    } else {
+      restEndsAtRef.current = null;
       setRestRemaining(restRuntime.remainingSeconds);
     }
+
     setRestRunning(restRuntime.isRunning);
     setErrorMessage(null);
   }, [restRuntime?.isRunning, restRuntime?.nextSetNumber, restRuntime?.remainingSeconds, restRuntime?.sessionExerciseId]);
@@ -250,11 +261,25 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
 
     const timeout = setTimeout(() => {
-      setRestRemaining(current => Math.max(0, current - 1));
+      const restEndsAt = restEndsAtRef.current;
+      setRestRemaining(restEndsAt === null ? 0 : getRemainingSecondsUntil(restEndsAt));
     }, 1000);
 
     return () => clearTimeout(timeout);
   }, [restRemaining, restRunning]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextState => {
+      if (nextState !== 'active' || !restRunning) {
+        return;
+      }
+
+      const restEndsAt = restEndsAtRef.current;
+      setRestRemaining(restEndsAt === null ? 0 : getRemainingSecondsUntil(restEndsAt));
+    });
+
+    return () => subscription.remove();
+  }, [restRunning]);
 
   useEffect(() => {
     if (!liveCardioCard) {
@@ -378,6 +403,20 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return null;
     } finally {
       setIsWorking(false);
+    }
+  }
+
+  async function handleSaveSessionNotes(sessionId: Id<'liveSessions'>, notes: string) {
+    setIsSavingSessionNotes(true);
+    setErrorMessage(null);
+
+    try {
+      await updateSessionNotes({ notes, sessionId });
+      setIsSessionNotesOpen(false);
+    } catch (error) {
+      setErrorMessage(getErrorMessage(error));
+    } finally {
+      setIsSavingSessionNotes(false);
     }
   }
 
@@ -705,6 +744,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             contentTopInset={statusStripHeight}
             elapsedLabel={formatEndedDuration(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt)}
             errorMessage={null}
+            hasNotes={Boolean(endedSessionTimeline.userNotes?.trim())}
             isConfirmingFinishSession={false}
             isReadOnly
             isWorking={false}
@@ -713,6 +753,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             onDeleteSet={() => { }}
             onFinishSession={() => { }}
             onOpenExercise={() => { }}
+            onOpenNotes={() => setIsSessionNotesOpen(true)}
             onOpenSet={() => { }}
             onReorderTimeline={async () => false}
             onRemoveExercise={() => { }}
@@ -723,17 +764,32 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         ),
         onBack: () => {
           setIsEndedInsightsOpen(false);
+          setIsSessionNotesOpen(false);
           setSelectedEndedSessionId(null);
         },
         onOpenInsights: () => setIsEndedInsightsOpen(true),
-        overlays: endedSessionInsights ? (
-          <WorkoutSessionInsightsSheet
-            fullInsights={endedSessionInsights.fullInsights as LiveSessionFullInsights}
-            isOpen={isEndedInsightsOpen}
-            onClose={() => setIsEndedInsightsOpen(false)}
-            summary={endedSessionInsights.summary as LiveSessionSummary}
-          />
-        ) : null,
+        overlays: (
+          <>
+            {endedSessionInsights ? (
+              <WorkoutSessionInsightsSheet
+                fullInsights={endedSessionInsights.fullInsights as LiveSessionFullInsights}
+                isOpen={isEndedInsightsOpen}
+                onClose={() => setIsEndedInsightsOpen(false)}
+                summary={endedSessionInsights.summary as LiveSessionSummary}
+              />
+            ) : null}
+
+            {endedSessionTimeline && selectedEndedSessionId ? (
+              <WorkoutSessionNotesSheet
+                initialNotes={endedSessionTimeline.userNotes ?? ''}
+                isOpen={isSessionNotesOpen}
+                isSaving={isSavingSessionNotes}
+                onClose={() => setIsSessionNotesOpen(false)}
+                onSave={notes => handleSaveSessionNotes(selectedEndedSessionId, notes)}
+              />
+            ) : null}
+          </>
+        ),
         status: endedStatus,
       });
     }
@@ -1012,6 +1068,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         contentTopInset={statusStripHeight}
         elapsedLabel={elapsedLabel}
         errorMessage={errorMessage}
+        hasNotes={Boolean(session.session.userNotes?.trim())}
         isConfirmingFinishSession={isConfirmingFinishSession}
         isWorking={isTimelineMutationPending}
         onAddExercise={() => {
@@ -1022,6 +1079,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         onDeleteSet={handleDeleteSet}
         onFinishSession={handleFinishSession}
         onOpenExercise={handleSelectExercise}
+        onOpenNotes={() => setIsSessionNotesOpen(true)}
         onOpenSet={handleOpenSet}
         onReorderTimeline={handleReorderTimeline}
         onRemoveExercise={handleRemoveExercise}
@@ -1123,6 +1181,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             summary={sessionInsights.summary as LiveSessionSummary}
           />
         ) : null}
+
+        <WorkoutSessionNotesSheet
+          initialNotes={session.session.userNotes ?? ''}
+          isOpen={isSessionNotesOpen}
+          isSaving={isSavingSessionNotes}
+          onClose={() => setIsSessionNotesOpen(false)}
+          onSave={notes => handleSaveSessionNotes(session.session.sessionId, notes)}
+        />
       </>
     ),
     status: insightsStatus,

@@ -30,6 +30,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   android: {
     package: androidPackage,
+    permissions: ['android.permission.SCHEDULE_EXACT_ALARM'],
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#000000',
@@ -80,8 +81,9 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'expo-notifications',
       {
         color: '#2455e6',
-        defaultChannel: 'rest-timer-alerts-v2',
+        defaultChannel: 'rest-timer-alerts-v3',
         icon: './assets/images/notification-icon.png',
+        sounds: ['./assets/sounds/rest-timer-complete.wav'],
       },
     ],
   ],

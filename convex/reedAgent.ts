@@ -50,12 +50,17 @@ export const runAssistant = internalAction({
       context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
 
       const contextBlocks = await buildContextBlocks(ctx, context);
-      const response = await invokeChatModel(buildChatPrompt(context, contextBlocks));
+      const coachingMemory = await ctx.runQuery(internal.reedCoachingMemory.loadPromptMemory, { profileId: context.profile._id });
+      const result = await invokeChatModel(
+        buildChatPrompt(context, contextBlocks, coachingMemory),
+        context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [],
+      );
 
       await ctx.runMutation(internal.reed.completeAssistantMessage, {
         threadId: context.thread._id,
         assistantMessageId: context.assistantMessage._id,
-        content: response,
+        agendaItems: result.agenda,
+        content: result.response,
         completedAt: Date.now(),
         reentryState: context.reentryState,
       });
@@ -270,9 +275,34 @@ function mergeContextToolCalls(calls: ReedContextToolCall[]) {
   return merged.slice(0, 6);
 }
 
-function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, contextBlocks: ReedContextBlock[]) {
+type ReedPromptMemory = {
+  journeys: Array<{
+    confidence: number;
+    slug: string;
+    status: 'active' | 'background' | 'dormant' | 'archived';
+    strength: number;
+    summary: string;
+    title: string;
+    updatedAt: number;
+  }>;
+  mentalModel: string | null;
+};
+
+function buildChatPrompt(
+  context: Awaited<ReturnType<typeof loadContextType>>,
+  contextBlocks: ReedContextBlock[],
+  coachingMemory: ReedPromptMemory,
+) {
   const lines = [
     context.prompt.content,
+    '',
+    'Required output format:',
+    '- Return strict JSON only: {"agenda":["short private checklist item"],"response":"user-facing reply"}.',
+    '- response: the exact text shown to the user.',
+    '- agenda: Reed’s private coaching checklist for the next turn. It is not hidden facts; it is the current plan of action.',
+    '- agenda may have 0 to 4 items. Each item must be short. Delete items that are already done. Revise the list every turn.',
+    '- Example agenda item style: "Ask pain severity before suggesting lower-body work."',
+    '- Never reveal or mention the agenda in response.',
     '',
     'Current time:',
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
@@ -288,12 +318,14 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     '',
     'Journey context:',
     context.journeySummary ?? 'No journey snapshot is available yet.',
+    ...buildCoachingMemoryLines(coachingMemory),
     ...buildImageObservationLines(context.imageObservations),
     ...buildContextBlockLines(contextBlocks),
     '',
     'Compacted Reed memory:',
     context.memorySummary ?? 'No compacted chat memory yet.',
     ...buildCoachStatePromptLines(context.coachState?.content ?? null),
+    ...buildAgendaLines(context),
     '',
     recentSegmentHeading(context),
     ...context.recentMessages.map((message: { role: string; content: string; createdAt: number }) => formatMessageLine(message, context.clientNow, context.clientTimeZone)),
@@ -304,6 +336,50 @@ function buildChatPrompt(context: Awaited<ReturnType<typeof loadContextType>>, c
     system: lines.join('\n'),
     user: context.userMessage.content,
   };
+}
+
+function buildCoachingMemoryLines(memory: ReedPromptMemory) {
+  const lines = [
+    '',
+    'Private coaching memory:',
+    'Coach mental model:',
+    memory.mentalModel?.trim() || 'No private coach mental model is available yet.',
+    '',
+    'Private coaching journeys:',
+  ];
+  const included = memory.journeys
+    .filter(journey => journey.status !== 'archived' && journey.strength >= 0.45)
+    .sort((left, right) => (right.strength - left.strength) || (right.updatedAt - left.updatedAt))
+    .slice(0, 8);
+
+  if (included.length === 0) {
+    lines.push('- No private coaching journeys are active yet.');
+    return lines;
+  }
+
+  for (const journey of included) {
+    lines.push(`- ${journey.title} (${journey.status}, strength ${journey.strength.toFixed(2)}, confidence ${journey.confidence.toFixed(2)}): ${journey.summary}`);
+  }
+
+  lines.push('- Use this memory to keep a broad working model of the athlete. Do not dump it into the answer.');
+  return lines;
+}
+
+function buildAgendaLines(context: Awaited<ReturnType<typeof loadContextType>>) {
+  const agenda = context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [];
+  if (agenda.length === 0) {
+    return [
+      '',
+      'Private session agenda:',
+      '- No active agenda. Create one only if the current turn needs follow-up across turns.',
+    ];
+  }
+  return [
+    '',
+    'Private session agenda:',
+    '- This is Reed’s current checklist. Complete, delete, or revise items as the conversation moves.',
+    ...agenda.slice(0, 4).map((item, index) => `${index + 1}. ${item}`),
+  ];
 }
 
 function buildAppTimelineLines(context: Awaited<ReturnType<typeof loadContextType>>) {
@@ -451,9 +527,14 @@ function formatElapsed(ageMs: number) {
   return months < 2 ? 'about a month' : `about ${months} months`;
 }
 
-async function invokeChatModel(prompt: { system: string; user: string }) {
+type ReedChatResult = {
+  agenda: string[];
+  response: string;
+};
+
+async function invokeChatModel(prompt: { system: string; user: string }, fallbackAgenda: string[]): Promise<ReedChatResult> {
   if (!process.env.XAI_API_KEY) {
-    return fallbackAssistantReply(prompt.user);
+    return { agenda: fallbackAgenda, response: fallbackAssistantReply(prompt.user) };
   }
 
   console.log('\n================ LLM REQUEST ================');
@@ -477,7 +558,7 @@ async function invokeChatModel(prompt: { system: string; user: string }) {
   console.log(responseText);
   console.log('=============================================\n');
 
-  return responseText;
+  return parseChatResult(responseText, fallbackAgenda);
 }
 
 async function invokeChatModelOnce(prompt: { system: string; user: string }, signal?: AbortSignal) {
@@ -501,6 +582,39 @@ async function invokeChatModelOnce(prompt: { system: string; user: string }, sig
     { recursionLimit: 4, signal } as { recursionLimit: number; signal?: AbortSignal },
   );
   return extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
+}
+
+function parseChatResult(text: string, fallbackAgenda: string[]): ReedChatResult {
+  const fallback = { agenda: fallbackAgenda, response: text.trim() || fallbackAssistantReply('') };
+  try {
+    const value = JSON.parse(extractJsonObject(text));
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
+    const record = value as Record<string, unknown>;
+    const response = typeof record.response === 'string' && record.response.trim()
+      ? record.response.trim()
+      : fallback.response;
+    const agenda = Array.isArray(record.agenda)
+      ? record.agenda
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(Boolean)
+        .map(item => item.slice(0, 160))
+        .slice(0, 4)
+      : [];
+    return { agenda, response };
+  } catch {
+    return fallback;
+  }
+}
+
+function extractJsonObject(text: string) {
+  const trimmed = text.trim();
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fenced) return fenced[1].trim();
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+  return trimmed;
 }
 
 async function invokeCoachStateModel(prompt: string) {
@@ -723,10 +837,10 @@ declare function loadContextType(): Promise<{
   clientTimeZone?: string;
   priorLastMessageAt: number | null;
   reentryState: 'hot' | 'warm' | 'cold';
-  thread: { _id: string };
+  thread: { _id: Id<'reedThreads'>; agendaItems?: string[] };
   profile: { _id: Id<'profiles'>; displayName?: string };
-  assistantMessage: { _id: string };
-  userMessage: { content: string; createdAt: number };
+  assistantMessage: { _id: Id<'reedMessages'> };
+  userMessage: { _id: Id<'reedMessages'>; content: string; createdAt: number };
   prompt: { _id: string | null; content: string; contentHash: string };
   coachState: { content: string } | null;
   imageObservations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
@@ -734,5 +848,5 @@ declare function loadContextType(): Promise<{
   currentAppState: string;
   journeySummary: string | null;
   memorySummary: string | null;
-  recentMessages: Array<{ role: string; content: string; createdAt: number }>;
+  recentMessages: Array<{ _id: Id<'reedMessages'>; role: string; content: string; createdAt: number }>;
 }>;

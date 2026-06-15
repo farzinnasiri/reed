@@ -182,6 +182,30 @@ Cross-cutting service and persona. Read/write access to user data. Phased rollou
 
 First-class modality. User speaks natural language from any surface.
 
+### Private Coaching Memory
+
+Reed should move from reactive answer generation to session-based coaching. It should maintain private coaching memory that helps it understand the user as an athlete/client, not just as a set of workout logs.
+
+Core private memory concepts:
+
+| Concept | Definition |
+|:--------|:-----------|
+| **Coach Mental Model** | Reed's compact working model of who the user is as an athlete/client: identity, preferences, friction points, coaching relationship, and broad priorities. |
+| **Coaching Journey** | A durable coaching vector where the user is trying, explicitly or repeatedly, to become different over time. |
+| **Session Agenda** | Reed's own short turn-to-turn coaching checklist for the active conversation: questions to ask, checks to complete, decisions to make, or actions to drop once done. |
+
+Private coaching journeys are not UI chat threads. They are internal vectors such as wakeboarding skill, calisthenics body control, strength base, endurance for hiking/snow sports, nutrition/body composition, or other durable directions of change.
+
+Rules:
+
+- Broad working model first, relevance second. Reed should keep the whole athlete in view, not only the current keyword.
+- Journeys are private for now, but should be product-grade enough to expose later if needed.
+- Strong and recent journeys can influence a session even when not directly named, because training vectors affect each other.
+- Weak or stale journeys should decay out of prompt retrieval and archive rather than keep leaking into unrelated chats.
+- A temporary injury, one-off emotion, or passing curiosity is not automatically a journey. It can be an event or signal inside a journey.
+- Session agenda items are not durable facts. Reed revises them every turn, deletes completed items, and can leave the list empty.
+- Coach state is posture: warmth, pressure, trust repair, directness, certainty, and depth. It should not carry all durable memory responsibilities.
+
 ---
 
 ## Notifications

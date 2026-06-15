@@ -1,7 +1,7 @@
 export type ComposerSource = 'quick-action' | 'typed' | 'voice';
 export type CoachItemStatus = 'open' | 'resolved';
 export type MessageStatus = 'failed' | 'pending' | 'sent';
-export type VoiceComposerStatus = 'idle' | 'listening' | 'ready';
+export type VoiceComposerStatus = 'failed' | 'idle' | 'listening' | 'ready' | 'transcribing';
 
 export type ReedSurfaceProps = {
   displayName: string;
@@ -55,6 +55,8 @@ export type ReedMessage = {
 };
 
 export type VoiceComposerState = {
+  error?: string | null;
   status: VoiceComposerStatus;
   transcript: string;
+  voiceLevel: number;
 };

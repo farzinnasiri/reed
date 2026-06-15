@@ -32,6 +32,7 @@ type TimelinePageProps = {
   isReadOnly?: boolean;
   isConfirmingFinishSession: boolean;
   isWorking: boolean;
+  hasNotes?: boolean;
   onAddExercise: () => void;
   onBack?: () => void;
   onClearFinishSessionConfirm: () => void;
@@ -39,6 +40,7 @@ type TimelinePageProps = {
   onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
   onOpenInsights?: () => void;
+  onOpenNotes?: () => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;
   onReorderTimeline: (orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) => Promise<boolean>;
   onRemoveExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
@@ -76,6 +78,7 @@ export function TimelinePage({
   elapsedLabel,
   errorMessage,
   headerSubtitle,
+  hasNotes = false,
   isReadOnly = false,
   isConfirmingFinishSession,
   isWorking,
@@ -86,6 +89,7 @@ export function TimelinePage({
   onFinishSession,
   onOpenExercise,
   onOpenInsights,
+  onOpenNotes,
   onOpenSet,
   onReorderTimeline,
   onRemoveExercise,
@@ -600,7 +604,8 @@ export function TimelinePage({
         )}
       </ScrollView>
 
-      {isReadOnly ? null : <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
+      {!isReadOnly || onOpenNotes ? (
+      <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
         <View
           style={[
             styles.timelineBottomDockPanel,
@@ -611,50 +616,83 @@ export function TimelinePage({
           ]}
         >
           <View style={styles.timelineBottomDockContent}>
-            <Pressable
-              accessibilityLabel="Finish workout"
-              disabled={isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)}
-              onPress={onToggleFinishSessionConfirm}
-              style={({ pressed }) => [
-                styles.timelineBottomPrimaryPressable,
-                getTapScaleStyle(pressed, displayTimeline.length === 0 || Boolean(draggingExerciseId)),
-              ]}
-            >
-              <View
-                style={[
-                  styles.timelineBottomPrimaryGradient,
-                  { backgroundColor: theme.colors.accentPrimary },
+            {isReadOnly ? null : (
+              <Pressable
+                accessibilityLabel="Finish workout"
+                disabled={isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)}
+                onPress={onToggleFinishSessionConfirm}
+                style={({ pressed }) => [
+                  styles.timelineBottomPrimaryPressable,
+                  getTapScaleStyle(pressed, displayTimeline.length === 0 || Boolean(draggingExerciseId)),
                 ]}
               >
-                <Ionicons color={String(theme.colors.accentPrimaryText)} name="flag-outline" size={16} />
-                <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                  Finish workout
-                </ReedText>
-              </View>
-            </Pressable>
+                <View
+                  style={[
+                    styles.timelineBottomPrimaryGradient,
+                    { backgroundColor: theme.colors.accentPrimary },
+                  ]}
+                >
+                  <Ionicons color={String(theme.colors.accentPrimaryText)} name="flag-outline" size={16} />
+                  <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
+                    Finish workout
+                  </ReedText>
+                </View>
+              </Pressable>
+            )}
 
-            <Pressable
-              accessibilityLabel="Add exercise"
-              disabled={isWorking || Boolean(draggingExerciseId)}
-              onPress={() => {
-                onClearFinishSessionConfirm();
-                onAddExercise();
-              }}
-              style={({ pressed }) => [
-                styles.timelineBottomSecondaryButton,
-                {
-                  backgroundColor: theme.colors.controlActiveFill,
-                  borderColor: theme.colors.controlActiveBorder,
-                  ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
-                },
-              ]}
-            >
-              <Ionicons color={String(theme.colors.textPrimary)} name="add" size={18} />
-              <ReedText variant="bodyStrong">Add exercise</ReedText>
-            </Pressable>
+            <View style={styles.timelineBottomSecondaryRow}>
+              {isReadOnly ? null : (
+                <Pressable
+                  accessibilityLabel="Add exercise"
+                  disabled={isWorking || Boolean(draggingExerciseId)}
+                  onPress={() => {
+                    onClearFinishSessionConfirm();
+                    onAddExercise();
+                  }}
+                  style={({ pressed }) => [
+                    styles.timelineBottomSecondaryButton,
+                    {
+                      backgroundColor: theme.colors.controlActiveFill,
+                      borderColor: theme.colors.controlActiveBorder,
+                      ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
+                    },
+                  ]}
+                >
+                  <Ionicons color={String(theme.colors.textPrimary)} name="add" size={18} />
+                  <ReedText variant="bodyStrong">Add exercise</ReedText>
+                </Pressable>
+              )}
+
+              {onOpenNotes ? (
+                <Pressable
+                  accessibilityLabel={hasNotes ? 'Edit session notes' : 'Add session notes'}
+                  disabled={isWorking || Boolean(draggingExerciseId)}
+                  onPress={() => {
+                    onClearFinishSessionConfirm();
+                    onOpenNotes();
+                  }}
+                  style={({ pressed }) => [
+                    isReadOnly ? styles.timelineBottomSecondaryButton : styles.timelineBottomNotesButton,
+                    {
+                      backgroundColor: hasNotes ? theme.colors.controlActiveFill : theme.colors.controlFill,
+                      borderColor: theme.colors.controlBorder,
+                      ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    color={String(theme.colors.textPrimary)}
+                    name={hasNotes ? 'document-text' : 'document-text-outline'}
+                    size={17}
+                  />
+                  <ReedText variant="bodyStrong">Notes</ReedText>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         </View>
-      </View>}
+      </View>
+      ) : null}
 
       {!isReadOnly && isConfirmingFinishSession ? (
         <View

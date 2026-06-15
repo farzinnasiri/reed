@@ -5,9 +5,11 @@ import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion, shouldUseNativeDriver } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { VOICE_WAVEFORM_BARS } from './reed.presenter';
 import { styles } from './reed.styles';
 import type { ReedDraftAttachment, ReedQuickAction, VoiceComposerState } from './reed.types';
+
+const COMPOSER_INPUT_MIN_HEIGHT = 22;
+const COMPOSER_INPUT_MAX_HEIGHT = 96;
 
 export function ReedComposer({
   attachments,
@@ -22,6 +24,7 @@ export function ReedComposer({
   onPickLibrary,
   onQuickAction,
   onRemoveAttachment,
+  onRetryVoice,
   onSendTyped,
   onSendVoiceDraft,
   onStartVoice,
@@ -42,6 +45,7 @@ export function ReedComposer({
   onPickLibrary: () => void;
   onQuickAction: (prompt: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onRetryVoice: () => void;
   onSendTyped: (text: string) => void;
   onSendVoiceDraft: (text: string) => void;
   onStartVoice: () => void;
@@ -83,6 +87,7 @@ export function ReedComposer({
         onPickFiles={onPickFiles}
         onPickLibrary={onPickLibrary}
         onRemoveAttachment={onRemoveAttachment}
+        onRetryVoice={onRetryVoice}
         onSend={() => {
           if (voiceState.status === 'ready') {
             onSendVoiceDraft(voiceState.transcript);
@@ -143,6 +148,7 @@ function ComposerCard({
   onPickFiles,
   onPickLibrary,
   onRemoveAttachment,
+  onRetryVoice,
   onSend,
   onVoice,
   text,
@@ -159,6 +165,7 @@ function ComposerCard({
   onPickFiles: () => void;
   onPickLibrary: () => void;
   onRemoveAttachment: (attachmentId: string) => void;
+  onRetryVoice: () => void;
   onSend: () => void;
   onVoice: () => void;
   text: string;
@@ -169,14 +176,16 @@ function ComposerCard({
   const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
   const attachmentPickerProgress = useRef(new Animated.Value(0)).current;
   const isVoiceActive = voiceState.status !== 'idle';
-  const draftText = isVoiceActive ? voiceState.transcript : text;
+  const isVoiceBusy = voiceState.status === 'listening' || voiceState.status === 'transcribing';
+  const shouldShowVoiceStatus = voiceState.status === 'transcribing' || voiceState.status === 'failed';
+  const draftText = shouldShowVoiceStatus ? voiceState.transcript : text;
   const hasReadyAttachments = attachments.some(attachment => attachment.status === 'ready');
-  const canSend = (isVoiceActive ? voiceState.status === 'ready' && voiceState.transcript.trim().length > 0 : text.trim().length > 0 || hasReadyAttachments) && !disabled && !isPreparingAttachments;
-  const inputHeight = Math.min(96, Math.max(22, Math.ceil(inputContentHeight)));
+  const canSend = (!isVoiceActive && (text.trim().length > 0 || hasReadyAttachments)) && !disabled && !isPreparingAttachments;
+  const inputHeight = Math.min(COMPOSER_INPUT_MAX_HEIGHT, Math.max(COMPOSER_INPUT_MIN_HEIGHT, Math.ceil(inputContentHeight)));
 
   useEffect(() => {
     if (draftText.length === 0) {
-      setInputContentHeight(22);
+      setInputContentHeight(COMPOSER_INPUT_MIN_HEIGHT);
     }
   }, [draftText.length]);
 
@@ -236,9 +245,17 @@ function ComposerCard({
       ) : null}
 
       <View style={styles.composerInputRow}>
-        <View style={[styles.composerInputFrame, { height: isVoiceActive ? 44 : Math.max(44, inputHeight) }]}> 
-          {voiceState.status === 'listening' ? (
-            <VoiceComposerWaveform />
+        <View style={[styles.composerInputFrame, { height: shouldShowVoiceStatus ? 44 : Math.max(44, inputHeight) }]}>
+          {shouldShowVoiceStatus ? (
+            <View style={styles.voiceStatusInline}>
+              <ReedText
+                numberOfLines={1}
+                tone={voiceState.status === 'failed' ? 'danger' : 'muted'}
+                variant="caption"
+              >
+                {voiceState.status === 'failed' ? voiceState.error ?? 'Could not transcribe audio.' : 'Transcribing voice...'}
+              </ReedText>
+            </View>
           ) : (
             <TextInput
               accessibilityHint={
@@ -253,7 +270,7 @@ function ComposerCard({
               numberOfLines={1}
               onChangeText={nextText => {
                 if (nextText.length === 0) {
-                  setInputContentHeight(22);
+                  setInputContentHeight(COMPOSER_INPUT_MIN_HEIGHT);
                 }
                 onChangeText(nextText);
               }}
@@ -262,13 +279,13 @@ function ComposerCard({
               }}
               placeholder={disabled ? 'Reed is thinking' : 'Message Reed'}
               placeholderTextColor={String(theme.colors.textMuted)}
-              scrollEnabled={false}
+              scrollEnabled={inputContentHeight > COMPOSER_INPUT_MAX_HEIGHT}
               style={[
                 styles.composerInput,
                 {
                   color: String(theme.colors.textPrimary),
                   fontFamily: theme.typography.body.fontFamily,
-                  height: isVoiceActive ? 22 : inputHeight,
+                  height: inputHeight,
                 },
               ]}
               value={draftText}
@@ -298,19 +315,29 @@ function ComposerCard({
           </Pressable>
 
           <Pressable
-            accessibilityHint={isVoiceActive ? 'Stops voice input and keeps the current draft.' : 'Starts a voice input draft.'}
-            accessibilityLabel={isVoiceActive ? 'Stop voice mode' : 'Start voice mode'}
+            accessibilityHint={voiceState.status === 'failed' ? 'Retries the last voice transcription.' : isVoiceActive ? 'Stops voice input.' : 'Starts voice input.'}
+            accessibilityLabel={voiceState.status === 'failed' ? 'Retry voice transcription' : isVoiceActive ? 'Stop voice mode' : 'Start voice mode'}
             accessibilityRole="button"
-            accessibilityState={{ disabled }}
-            disabled={disabled}
-            onPress={isVoiceActive ? onCancelVoice : onVoice}
+            accessibilityState={{ busy: isVoiceBusy, disabled: disabled || voiceState.status === 'transcribing' }}
+            disabled={disabled || voiceState.status === 'transcribing'}
+            onPress={voiceState.status === 'failed' ? onRetryVoice : isVoiceActive ? onCancelVoice : onVoice}
             style={({ pressed }) => [
               styles.composerIconButton,
+              voiceState.status === 'listening' ? styles.composerVoiceButtonActive : null,
               { backgroundColor: isVoiceActive ? theme.colors.controlFill : 'transparent' },
-              getTapScaleStyle(pressed, disabled),
+              getTapScaleStyle(pressed, disabled || voiceState.status === 'transcribing'),
             ]}
           >
-            <Ionicons color={String(theme.colors.textPrimary)} name={isVoiceActive ? 'stop' : 'mic-outline'} size={18} />
+            <View style={styles.voiceButtonContent}>
+              <Ionicons
+                color={String(voiceState.status === 'failed' ? theme.colors.dangerText : theme.colors.textPrimary)}
+                name={voiceState.status === 'failed' ? 'refresh' : isVoiceActive ? 'stop' : 'mic-outline'}
+                size={18}
+              />
+              {voiceState.status === 'listening' ? (
+                <VoiceButtonMeter level={voiceState.voiceLevel} />
+              ) : null}
+            </View>
           </Pressable>
 
           <Pressable
@@ -471,46 +498,25 @@ function AttachmentTray({
   );
 }
 
-function VoiceComposerWaveform() {
+function VoiceButtonMeter({ level }: { level: number }) {
   const { theme } = useReedTheme();
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        createTiming(progress, 1, reedMotion.durations.mode, reedEasing.easeInOut, shouldUseNativeDriver),
-        createTiming(progress, 0, reedMotion.durations.mode, reedEasing.easeInOut, shouldUseNativeDriver),
-      ]),
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-    };
-  }, [progress]);
+  const bars = [0.45, 0.8, 0.6].map(weight => 5 + Math.round(level * weight * 12));
 
   return (
-    <View accessibilityLabel="Listening" accessibilityRole="progressbar" style={styles.voiceWaveformRow}>
-      {VOICE_WAVEFORM_BARS.map((bar, index) => {
-        const scaleY = progress.interpolate({
-          inputRange: [0, 0.5, 1],
-          outputRange: [bar.low, bar.high, bar.low],
-        });
-
-        return (
-          <Animated.View
-            key={`${bar.high}-${index}`}
-            style={[
-              styles.voiceWaveformBar,
-              {
-                backgroundColor: index % 3 === 1 ? theme.colors.accentPrimary : theme.colors.textMuted,
-                opacity: index % 3 === 1 ? 0.92 : 0.58,
-                transform: [{ scaleY }],
-              },
-            ]}
-          />
-        );
-      })}
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.voiceButtonMeter}>
+      {bars.map((height, index) => (
+        <View
+          key={`${index}-${height}`}
+          style={[
+            styles.voiceButtonMeterBar,
+            {
+              backgroundColor: theme.colors.accentPrimary,
+              height,
+              opacity: level > 0.04 ? 0.42 + (level * 0.5) : 0.22,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 }

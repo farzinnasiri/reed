@@ -228,18 +228,11 @@ export const styles = StyleSheet.create({
     right: 0,
     zIndex: 20,
   },
-  voiceWaveformRow: {
+  voiceStatusInline: {
     alignItems: 'center',
     alignSelf: 'stretch',
     flexDirection: 'row',
-    gap: 4,
     height: 28,
-    justifyContent: 'center',
-  },
-  voiceWaveformBar: {
-    borderRadius: reedRadii.pill,
-    height: 16,
-    width: 3,
   },
   composerCard: {
     borderRadius: reedRadii.xl,
@@ -320,6 +313,25 @@ export const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     width: 44,
+  },
+  composerVoiceButtonActive: {
+    paddingHorizontal: 10,
+    width: 62,
+  },
+  voiceButtonContent: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 5,
+  },
+  voiceButtonMeter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 3,
+    height: 18,
+  },
+  voiceButtonMeterBar: {
+    borderRadius: reedRadii.pill,
+    width: 2,
   },
   composerInput: {
     alignSelf: 'stretch',
