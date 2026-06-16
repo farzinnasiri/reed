@@ -149,6 +149,28 @@ export const styles = StyleSheet.create({
     minHeight: 104,
     paddingVertical: 16,
   },
+  ongoingSessionRow: {
+    alignItems: 'flex-start',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: 14,
+    minHeight: 88,
+    paddingVertical: 12,
+  },
+  ongoingSessionMark: {
+    alignItems: 'center',
+    borderRadius: reedRadii.lg,
+    borderWidth: 1,
+    height: 50,
+    justifyContent: 'center',
+    marginTop: 2,
+    width: 50,
+  },
+  ongoingSessionPulse: {
+    borderRadius: 5,
+    height: 10,
+    width: 10,
+  },
   sessionSummaryCopy: {
     flex: 1,
     gap: 7,

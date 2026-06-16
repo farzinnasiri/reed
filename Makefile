@@ -85,6 +85,11 @@ convex-env-push: env-check
 	if [ -n "$$REED_PROFILE_INSIGHT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROFILE_INSIGHT_MODEL "$$REED_PROFILE_INSIGHT_MODEL"; fi; \
 	if [ -n "$$REED_STT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_STT_MODEL "$$REED_STT_MODEL"; fi; \
 	if [ -n "$$REED_NOTE_POLISH_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_NOTE_POLISH_MODEL "$$REED_NOTE_POLISH_MODEL"; fi; \
+	if [ -n "$$LANGFUSE_SECRET_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" LANGFUSE_SECRET_KEY "$$LANGFUSE_SECRET_KEY"; fi; \
+	if [ -n "$$LANGFUSE_PUBLIC_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" LANGFUSE_PUBLIC_KEY "$$LANGFUSE_PUBLIC_KEY"; fi; \
+	if [ -n "$$LANGFUSE_BASE_URL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" LANGFUSE_BASE_URL "$$LANGFUSE_BASE_URL"; fi; \
+	if [ -n "$$POSTHOG_PROJECT_TOKEN" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" POSTHOG_PROJECT_TOKEN "$$POSTHOG_PROJECT_TOKEN"; fi; \
+	if [ -n "$$POSTHOG_HOST" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" POSTHOG_HOST "$$POSTHOG_HOST"; fi; \
 	if [ -n "$$REED_CONTROL_PANEL_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTROL_PANEL_SECRET "$$REED_CONTROL_PANEL_SECRET"; fi
 
 eas-env-sync: env-check

@@ -231,6 +231,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
+    minWidth: 0,
   },
   sessionInsightsBreakdownControlsRow: {
     alignItems: 'center',
@@ -238,12 +239,14 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sessionInsightsBreakdownControl: {
-    minWidth: 330,
+    minWidth: 0,
+    width: '100%',
   },
   sessionInsightsBreakdownChart: {
     alignItems: 'center',
+    flexShrink: 0,
     justifyContent: 'center',
-    minWidth: 128,
+    minWidth: 0,
   },
   sessionInsightsBreakdownDonutWrap: {
     alignItems: 'center',
@@ -273,11 +276,13 @@ export const styles = StyleSheet.create({
   sessionInsightsBreakdownLegend: {
     flex: 1,
     gap: 6,
+    minWidth: 0,
   },
   sessionInsightsBreakdownLegendRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 6,
+    minWidth: 0,
   },
   sessionInsightsBreakdownLegendDot: {
     borderRadius: reedRadii.pill,
@@ -288,6 +293,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   sessionInsightsBreakdownLegendValue: {
+    flexShrink: 1,
     minWidth: 36,
     textAlign: 'right',
   },
@@ -419,6 +425,7 @@ export const styles = StyleSheet.create({
     width: undefined,
   },
   sessionInsightsBreakdownRowCompact: {
+    alignItems: 'stretch',
     flexDirection: 'column',
   },
 });

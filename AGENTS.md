@@ -72,6 +72,13 @@ These skills do not auto-trigger. Use them explicitly when the situation matches
 3. Keep `convex/_generated/` out of git; it is deployment-generated state.
 4. **Frontend / design work:** Read `DESIGN.md` before implementing or modifying any UI component, screen layout, animation, or colour. It is the single source of truth for tokens, glassmorphism, motion, and component contracts.
 
+## Observability
+
+1. Product analytics belong in `lib/analytics.ts`; do not call PostHog directly from feature UI unless extending that wrapper.
+2. Frontend operational/debug telemetry belongs in `lib/client-observability.ts` as one safe wide event per user operation, with stable `exception.slug` values and no raw messages, image URIs, tokens, emails, names, prompts, or health text.
+3. Backend AI/LLM tracing belongs in `convex/langfuseTracing.ts`; keep Langfuse setup centralized and pass compact model/input/output metadata from Convex actions.
+4. For future backend operational monitoring, add a small `convex/observability.ts` wide-event wrapper before instrumenting individual functions; keep product analytics, operational telemetry, and Langfuse traces separate.
+
 ## Known Confusion Points
 
 1. The root TypeScript config excludes `convex/` because Convex auth plumbing references generated types that are only available after codegen. Do not treat this as permission to ignore backend correctness; run Convex codegen before finalizing backend work.

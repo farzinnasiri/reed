@@ -1,4 +1,4 @@
-import { View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Svg, { Circle, G } from 'react-native-svg';
 import { ReedText } from './reed-text';
 
@@ -48,6 +48,7 @@ export function AnalyticsDonut({
               visibleSegments.map(segment => {
                 const ratio = Math.max(0, segment.percent / 100);
                 const dashLength = circumference * ratio;
+                const visibleDashLength = Math.min(circumference, dashLength + 0.75);
                 const dashGap = circumference - dashLength;
                 const circle = (
                   <Circle
@@ -57,7 +58,7 @@ export function AnalyticsDonut({
                     key={segment.id}
                     r={radius}
                     stroke={segment.color}
-                    strokeDasharray={`${dashLength} ${dashGap}`}
+                    strokeDasharray={`${visibleDashLength} ${dashGap}`}
                     strokeDashoffset={-offsetCursor}
                     strokeLinecap="butt"
                     strokeWidth={strokeWidth}
@@ -96,7 +97,7 @@ const defaultStyles = {
   center: {
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'absolute',
+    ...StyleSheet.absoluteFill,
   } satisfies ViewStyle,
   container: {
     alignItems: 'center',

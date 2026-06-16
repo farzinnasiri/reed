@@ -5,6 +5,7 @@ type AppShellContextValue = {
   dockReservedSpace: number;
   hasActiveWorkoutSession: boolean;
   setIsEditingSettingsProfile: (isEditing: boolean) => void;
+  setIsWorkoutSessionFullscreen: (isFullscreen: boolean) => void;
 };
 
 export const AppShellContext = createContext<AppShellContextValue | null>(null);

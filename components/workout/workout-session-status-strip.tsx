@@ -10,7 +10,7 @@ import type { LiveSessionStatusStrip } from './workout-surface.types';
 
 type WorkoutSessionStatusStripProps = {
   onBack: () => void;
-  onOpenInsights: () => void;
+  onOpenInsights?: () => void;
   status: LiveSessionStatusStrip;
 };
 
@@ -93,13 +93,17 @@ export function WorkoutSessionStatusStrip({
           </View>
         </View>
 
-        <Pressable
-          accessibilityLabel="Open live session insights"
-          onPress={onOpenInsights}
-          style={({ pressed }) => [styles.navButton, styles.statusStripNavButton, getTapScaleStyle(pressed)]}
-        >
-          <Ionicons color={String(theme.colors.textPrimary)} name="ellipsis-vertical" size={16} />
-        </Pressable>
+        {onOpenInsights ? (
+          <Pressable
+            accessibilityLabel="Open live session insights"
+            onPress={onOpenInsights}
+            style={({ pressed }) => [styles.navButton, styles.statusStripNavButton, getTapScaleStyle(pressed)]}
+          >
+            <Ionicons color={String(theme.colors.textPrimary)} name="ellipsis-vertical" size={16} />
+          </Pressable>
+        ) : (
+          <View style={[styles.navButton, styles.statusStripNavButton]} />
+        )}
       </View>
     </GlassSurface>
   );

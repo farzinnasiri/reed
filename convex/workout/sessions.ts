@@ -408,7 +408,7 @@ export const addExercise = mutation({
   args: { exerciseCatalogId: v.id('exerciseCatalog') },
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
-    const session = await requireActiveSession(ctx, profile._id);
+    const session = await getOrCreateActiveSession(ctx, profile._id);
     const existingEntries = await ctx.db
       .query('liveSessionExercises')
       .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
@@ -437,7 +437,7 @@ export const addExercises = mutation({
     }
 
     const profile = await requireViewerProfile(ctx);
-    const session = await requireActiveSession(ctx, profile._id);
+    const session = await getOrCreateActiveSession(ctx, profile._id);
     const existingEntries = await ctx.db
       .query('liveSessionExercises')
       .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
@@ -968,6 +968,28 @@ async function requireActiveSession(ctx: MutationCtx | QueryCtx, profileId: Id<'
   }
 
   return session;
+}
+
+async function getOrCreateActiveSession(ctx: MutationCtx, profileId: Id<'profiles'>) {
+  const existing = await getActiveSession(ctx, profileId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const sessionId = await ctx.db.insert('liveSessions', {
+    activeProcess: null,
+    profileId,
+    startedAt: Date.now(),
+    status: 'active',
+  });
+  const session = await ctx.db.get(sessionId);
+
+  if (!session || session.status !== 'active') {
+    throw new ConvexError('Could not create a session.');
+  }
+
+  return session as ActiveSession;
 }
 
 async function requireSessionExercise(

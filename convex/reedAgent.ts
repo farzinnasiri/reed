@@ -13,6 +13,7 @@ import { v } from 'convex/values';
 import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
 import { formatReedTimelineTime } from './reedContextTime';
+import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
 const CHAT_MODEL_PROVIDER = 'xai';
 const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
@@ -41,28 +42,48 @@ export const runAssistant = internalAction({
     try {
       let context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
 
-      if (context.reentryState === 'cold') {
-        await compactThreadHandler(ctx, { threadId: context.thread._id, beforeMessageId: context.userMessage._id });
+      await withLangfuseTrace({
+        input: {
+          message: traceText(context.userMessage.content),
+          reentryState: context.reentryState,
+        },
+        metadata: {
+          assistantMessageId: context.assistantMessage._id,
+          reentryState: context.reentryState,
+          threadId: context.thread._id,
+          userMessageId: context.userMessage._id,
+        },
+        name: 'reed.chat.response',
+        sessionId: context.thread._id,
+        tags: ['reed', 'chat'],
+        userId: context.profile._id,
+        version: CHAT_MODEL_NAME,
+      }, async () => {
+        if (context.reentryState === 'cold') {
+          await compactThreadHandler(ctx, { threadId: context.thread._id, beforeMessageId: context.userMessage._id });
+          context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
+        }
+
+        await analyzePendingImageAttachments(ctx, context.userMessage._id);
         context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
-      }
 
-      await analyzePendingImageAttachments(ctx, context.userMessage._id);
-      context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
+        const contextBlocks = await buildContextBlocks(ctx, context);
+        const coachingMemory = await ctx.runQuery(internal.reedCoachingMemory.loadPromptMemory, { profileId: context.profile._id });
+        const result = await invokeChatModel(
+          buildChatPrompt(context, contextBlocks, coachingMemory),
+          context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [],
+        );
 
-      const contextBlocks = await buildContextBlocks(ctx, context);
-      const coachingMemory = await ctx.runQuery(internal.reedCoachingMemory.loadPromptMemory, { profileId: context.profile._id });
-      const result = await invokeChatModel(
-        buildChatPrompt(context, contextBlocks, coachingMemory),
-        context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [],
-      );
+        await ctx.runMutation(internal.reed.completeAssistantMessage, {
+          threadId: context.thread._id,
+          assistantMessageId: context.assistantMessage._id,
+          agendaItems: result.agenda,
+          content: result.response,
+          completedAt: Date.now(),
+          reentryState: context.reentryState,
+        });
 
-      await ctx.runMutation(internal.reed.completeAssistantMessage, {
-        threadId: context.thread._id,
-        assistantMessageId: context.assistantMessage._id,
-        agendaItems: result.agenda,
-        content: result.response,
-        completedAt: Date.now(),
-        reentryState: context.reentryState,
+        return result;
       });
     } catch (error) {
       console.error('[REED_ASSISTANT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -90,26 +111,43 @@ export const refreshCoachState = internalAction({
       const context = await ctx.runQuery(internal.reed.loadCoachStateRefreshContext, args);
       if (!context) return null;
 
-      const prompt = await renderCoachStatePrompt({
-        template: context.prompt.content,
-        previousCoachState: context.previousState?.content ?? null,
-        rollingSummary: context.activeSummary?.content ?? null,
-        journeyContext: context.journeySummary,
-        recentMessages: context.recentMessages.map((message: { role: string; content: string }) => ({
-          role: message.role,
-          content: message.content,
-        })),
-      });
-      const content = await invokeCoachStateModel(prompt);
+      await withLangfuseTrace({
+        input: {
+          sourceThroughMessageId: args.sourceThroughMessageId,
+        },
+        metadata: {
+          promptHash: context.prompt.contentHash,
+          threadId: context.thread._id,
+        },
+        name: 'reed.coach_state.refresh',
+        sessionId: context.thread._id,
+        tags: ['reed', 'coach_state'],
+        userId: context.profile._id,
+        version: COACH_STATE_MODEL_NAME,
+      }, async () => {
+        const prompt = await renderCoachStatePrompt({
+          template: context.prompt.content,
+          previousCoachState: context.previousState?.content ?? null,
+          rollingSummary: context.activeSummary?.content ?? null,
+          journeyContext: context.journeySummary,
+          recentMessages: context.recentMessages.map((message: { role: string; content: string }) => ({
+            role: message.role,
+            content: message.content,
+          })),
+        });
+        const content = await invokeCoachStateModel(prompt);
 
-      await ctx.runMutation(internal.reed.saveCoachState, {
-        threadId: context.thread._id,
-        content,
-        modelProvider: COACH_STATE_MODEL_PROVIDER,
-        modelName: COACH_STATE_MODEL_NAME,
-        promptHash: context.prompt.contentHash,
-        sourceFromMessageId: context.sourceFromMessage._id,
-        updatedThroughMessageId: context.sourceThroughMessage._id,
+        await ctx.runMutation(internal.reed.saveCoachState, {
+          threadId: context.thread._id,
+          content,
+          modelProvider: COACH_STATE_MODEL_PROVIDER,
+          modelName: COACH_STATE_MODEL_NAME,
+          promptHash: context.prompt.contentHash,
+          sourceFromMessageId: context.sourceFromMessage._id,
+          updatedThroughMessageId: context.sourceThroughMessage._id,
+        });
+
+        return { content };
       });
     } catch (error) {
       console.error('[REED_COACH_STATE_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -124,23 +162,39 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
   const messages = context.messages;
   if (messages.length === 0) return null;
 
-  const sourceThroughMessage = messages[messages.length - 1];
-  const sourceFromMessage = messages[0];
-  const prompt = await buildSummaryPrompt({
-    systemPrompt: context.prompt.content,
-    priorSummary: context.activeSummary?.content ?? null,
-    messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
-  });
+  await withLangfuseTrace({
+    input: { messageCount: messages.length },
+    metadata: {
+      messageCount: messages.length,
+      promptHash: context.prompt.contentHash,
+      threadId: args.threadId,
+    },
+    name: 'reed.memory_summary.compact',
+    sessionId: args.threadId,
+    tags: ['reed', 'summary'],
+    userId: context.profile._id,
+    version: SUMMARY_MODEL_NAME,
+  }, async () => {
+    const sourceThroughMessage = messages[messages.length - 1];
+    const sourceFromMessage = messages[0];
+    const prompt = await buildSummaryPrompt({
+      systemPrompt: context.prompt.content,
+      priorSummary: context.activeSummary?.content ?? null,
+      messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
+    });
 
-  const content = await invokeSummaryModel(prompt);
-  await ctx.runMutation(internal.reed.saveMemorySummary, {
-    threadId: args.threadId,
-    content,
-    modelProvider: providerForModel(SUMMARY_MODEL_NAME),
-    modelName: SUMMARY_MODEL_NAME,
-    promptHash: context.prompt.contentHash,
-    sourceFromMessageId: sourceFromMessage._id,
-    sourceThroughMessageId: sourceThroughMessage._id,
+    const content = await invokeSummaryModel(prompt);
+    await ctx.runMutation(internal.reed.saveMemorySummary, {
+      threadId: args.threadId,
+      content,
+      modelProvider: providerForModel(SUMMARY_MODEL_NAME),
+      modelName: SUMMARY_MODEL_NAME,
+      promptHash: context.prompt.contentHash,
+      sourceFromMessageId: sourceFromMessage._id,
+      sourceThroughMessageId: sourceThroughMessage._id,
+    });
+
+    return { content };
   });
 
   return null;
@@ -537,14 +591,24 @@ async function invokeChatModel(prompt: { system: string; user: string }, fallbac
     return { agenda: fallbackAgenda, response: fallbackAssistantReply(prompt.user) };
   }
 
-  console.log('\n================ LLM REQUEST ================');
-  console.log('--- SYSTEM PROMPT ---');
-  console.log(prompt.system);
-  console.log('--- USER MESSAGE ---');
-  console.log(prompt.user);
-  console.log('=============================================\n');
+  console.log('[REED_CHAT_MODEL_REQUEST]', {
+    model: CHAT_MODEL_NAME,
+    systemChars: prompt.system.length,
+    userChars: prompt.user.length,
+  });
 
-  const responseText = await retryModelCall(
+  const responseText = await withLangfuseGeneration({
+    input: {
+      system: traceText(prompt.system),
+      user: traceText(prompt.user),
+    },
+    model: CHAT_MODEL_NAME,
+    modelParameters: {
+      reasoningEffort: CHAT_REASONING_MODE,
+      temperature: 0.45,
+    },
+    name: 'reed.chat.model',
+  }, async () => retryModelCall(
     () => invokeChatModelOnce(prompt),
     {
       attempts: CHAT_MODEL_ATTEMPTS,
@@ -552,11 +616,12 @@ async function invokeChatModel(prompt: { system: string; user: string }, fallbac
       retryDelayMs: CHAT_MODEL_RETRY_DELAY_MS,
       timeoutMs: CHAT_MODEL_TIMEOUT_MS,
     },
-  );
+  ));
 
-  console.log('\n================ LLM RESPONSE ===============');
-  console.log(responseText);
-  console.log('=============================================\n');
+  console.log('[REED_CHAT_MODEL_RESPONSE]', {
+    model: CHAT_MODEL_NAME,
+    responseChars: responseText.length,
+  });
 
   return parseChatResult(responseText, fallbackAgenda);
 }
@@ -628,10 +693,18 @@ async function invokeCoachStateModel(prompt: string) {
     maxRetries: 1,
     reasoning: { effort: COACH_STATE_REASONING_EFFORT },
   } as ConstructorParameters<typeof ChatOpenAI>[0] & { reasoning?: { effort: string } });
-  const result = await model.invoke([
+  const result = await withLangfuseGeneration({
+    input: {
+      prompt: traceText(prompt),
+      task: 'Write only the updated private coach state.',
+    },
+    model: COACH_STATE_MODEL_NAME,
+    modelParameters: { reasoningEffort: COACH_STATE_REASONING_EFFORT },
+    name: 'reed.coach_state.model',
+  }, async () => model.invoke([
     new SystemMessage(prompt),
     new HumanMessage('Write only the updated private coach state.'),
-  ]);
+  ]));
   return (textFromContent(result.content) || deterministicCoachState(prompt)).slice(0, 2400);
 }
 
@@ -646,7 +719,15 @@ async function invokeSummaryModel(prompt: string) {
     maxRetries: 1,
   });
   try {
-    const result = await model.invoke([new SystemMessage('Summarize Reed coaching continuity. Be compact and factual.'), new HumanMessage(prompt)]);
+    const result = await withLangfuseGeneration({
+      input: {
+        prompt: traceText(prompt),
+        system: 'Summarize Reed coaching continuity. Be compact and factual.',
+      },
+      model: SUMMARY_MODEL_NAME,
+      modelParameters: { temperature: 0.1 },
+      name: 'reed.summary.model',
+    }, async () => model.invoke([new SystemMessage('Summarize Reed coaching continuity. Be compact and factual.'), new HumanMessage(prompt)]));
     return textFromContent(result.content) || deterministicSummary(prompt);
   } catch (error) {
     console.error('[REED_SUMMARY_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -675,7 +756,16 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
     maxRetries: 1,
   });
 
-  const result = await model.invoke([
+  const result = await withLangfuseGeneration({
+    input: {
+      imageBytes: imageBytes.byteLength,
+      sortOrder: input.sortOrder,
+      storageId: input.storageId,
+    },
+    model: IMAGE_ANALYSIS_MODEL_NAME,
+    modelParameters: { temperature: 0.2 },
+    name: 'reed.image_analysis.model',
+  }, async () => model.invoke([
     new SystemMessage([
       'You are Reed\'s fast visual analysis pass for a fitness coaching chat.',
       'Look at the attached JPEG like an experienced coach.',
@@ -696,7 +786,7 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
         },
       ],
     }),
-  ]);
+  ]));
 
   const narrative = textFromContent(result.content);
   if (!narrative) throw new Error('Gemini returned an empty image observation.');

@@ -6,6 +6,7 @@ import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
+import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
 const MODEL_NAME = process.env.REED_PROFILE_INSIGHT_MODEL ?? 'gemini-2.5-flash-lite';
 
@@ -20,14 +21,32 @@ export const generate = internalAction({
   handler: async (ctx, args) => {
     try {
       const snapshot = await loadSnapshot(ctx, args.profileId, args.reason);
-      const fallback = deterministicInsight(snapshot);
-      const content = await writeInsight(snapshot, fallback);
-      await ctx.runMutation(internal.profileInsight.saveGenerated, {
-        profileId: args.profileId,
-        content,
-        modelName: MODEL_NAME,
-        sourceChangedAt: snapshot.sourceChangedAt,
-        sourceFingerprint: snapshot.fingerprint,
+      await withLangfuseTrace({
+        input: {
+          reason: args.reason,
+          sourceFingerprint: snapshot.fingerprint,
+        },
+        metadata: {
+          profileId: args.profileId,
+          reason: args.reason,
+          sourceFingerprint: snapshot.fingerprint,
+        },
+        name: 'reed.profile_insight.generate',
+        sessionId: `profile:${args.profileId}`,
+        tags: ['reed', 'profile_insight'],
+        userId: args.profileId,
+        version: MODEL_NAME,
+      }, async () => {
+        const fallback = deterministicInsight(snapshot);
+        const content = await writeInsight(snapshot, fallback);
+        await ctx.runMutation(internal.profileInsight.saveGenerated, {
+          profileId: args.profileId,
+          content,
+          modelName: MODEL_NAME,
+          sourceChangedAt: snapshot.sourceChangedAt,
+          sourceFingerprint: snapshot.fingerprint,
+        });
+        return { content };
       });
     } catch (error) {
       console.error('[PROFILE_INSIGHT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -57,7 +76,14 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
     temperature: 0.35,
     maxRetries: 1,
   });
-  const result = await model.invoke([
+  const result = await withLangfuseGeneration({
+    input: {
+      snapshot: traceText(JSON.stringify(snapshot), 4_000),
+    },
+    model: MODEL_NAME,
+    modelParameters: { temperature: 0.35 },
+    name: 'reed.profile_insight.model',
+  }, async () => model.invoke([
     new SystemMessage([
       'You are Reed, a precise training coach inside a serious fitness app.',
       'You help the user understand training, body status, consistency, recovery, and next focus from their own data.',
@@ -72,7 +98,7 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
       'Do not mention internal data structures.',
     ].join('\n')),
     new HumanMessage(JSON.stringify(snapshot)),
-  ]);
+  ]));
   const text = textFromContent(result.content);
   return text || fallback;
 }

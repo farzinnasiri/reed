@@ -31,15 +31,16 @@ export function AppShell({ children, displayName }: AppShellProps) {
   const hasActiveWorkoutSession = currentWorkoutSession !== null && currentWorkoutSession !== undefined;
   const [dockHeight, setDockHeight] = useState(TAB_PILL_MIN_HEIGHT);
   const [isEditingSettingsProfile, setIsEditingSettingsProfile] = useState(false);
+  const [isWorkoutSessionFullscreen, setIsWorkoutSessionFullscreen] = useState(false);
 
-  const showDock = !(activeMode === 'workout' && hasActiveWorkoutSession) && !isEditingSettingsProfile;
-  const isFullscreenWorkout = activeMode === 'workout' && hasActiveWorkoutSession;
+  const showDock = !isEditingSettingsProfile && !isWorkoutSessionFullscreen;
   const shellTopInset = activeMode === 'chat' ? 0 : insets.top;
   const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
   const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
 
   const tabItems: Array<{
     accessibilityLabel: string;
+    hasIndicator?: boolean;
     icon: ReactNode;
     id: AppMode;
     isActive: boolean;
@@ -65,6 +66,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
           size={22}
         />
       ),
+      hasIndicator: hasActiveWorkoutSession,
       id: 'workout',
       isActive: activeMode === 'workout',
     },
@@ -110,6 +112,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
         dockReservedSpace,
         hasActiveWorkoutSession,
         setIsEditingSettingsProfile,
+        setIsWorkoutSessionFullscreen,
       }}
     >
       <View

@@ -160,16 +160,23 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
   const metric = metricOptions.find(option => option.kind === metricKind) ?? metricOptions[1];
   const selectedExercise = exercises.find(exercise => exercise._id === exerciseId) ?? null;
   const preview = buildPreview({ cadence, days, exerciseName: selectedExercise?.name, metric, periodCount, threshold });
-  const canSave = Number(threshold) > 0 && Number(days) > 0 && (!metric.requiresExercise || exerciseId);
+  const isPeriodicGoal = cadence === 'daily' || cadence === 'weekly';
+  const canSave =
+    Number(threshold) > 0 &&
+    (isPeriodicGoal ? Number(periodCount) > 0 : Number(days) > 0) &&
+    (!metric.requiresExercise || exerciseId);
 
   async function save() {
     if (!canSave) return;
     const now = Date.now();
     const durationDays = Math.max(1, Math.round(Number(days)));
     const periods = Math.max(1, Math.round(Number(periodCount)));
+    const effectiveDurationDays = isPeriodicGoal
+      ? periods * (cadence === 'weekly' ? 7 : 1)
+      : durationDays;
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     await createTarget({
-      endsAt: now + durationDays * 24 * 60 * 60 * 1000,
+      endsAt: now + effectiveDurationDays * 24 * 60 * 60 * 1000,
       notes: notes.trim() || undefined,
       previewText: preview,
       rule: {
@@ -254,7 +261,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
             <ReedText variant="bodyStrong">Time rule</ReedText>
             <View style={styles.optionWrap}>{(['once', 'total', 'daily', 'weekly'] as Cadence[]).map(item => <Choice key={item} active={cadence === item} label={cadenceLabel(item)} onPress={() => setCadence(item)} />)}</View>
             {(cadence === 'daily' || cadence === 'weekly') ? <ReedInput keyboardType="numeric" label={cadence === 'daily' ? 'Days' : 'Weeks'} onChangeText={setPeriodCount} value={periodCount} /> : null}
-            <ReedInput keyboardType="numeric" label="Deadline window, days from today" onChangeText={setDays} value={days} />
+            {!isPeriodicGoal ? <ReedInput keyboardType="numeric" label="Deadline window, days from today" onChangeText={setDays} value={days} /> : null}
             <ReedInput
               blurOnSubmit
               label="Notes (optional)"

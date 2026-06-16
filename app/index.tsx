@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { authClient } from '@/lib/auth-client';
+import { analytics } from '@/lib/analytics';
 import { api } from '@/convex/_generated/api';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { AuthEntry } from '@/components/home/auth-entry';
@@ -99,6 +100,7 @@ export default function HomeScreen() {
         throw result.error;
       }
 
+      analytics.userSignedUp();
       setFeedback('Account created.');
       setPassword('');
     });
@@ -123,6 +125,7 @@ export default function HomeScreen() {
         throw result.error;
       }
 
+      analytics.userSignedIn({ method: 'email' });
       setFeedback('Signed in.');
       setPassword('');
     });
@@ -146,6 +149,7 @@ export default function HomeScreen() {
         throw result.error;
       }
 
+      analytics.userSignedIn({ method: 'google' });
       setFeedback('Google sign-in started in the system browser.');
     });
   }
@@ -166,10 +170,12 @@ export default function HomeScreen() {
       ) : session && needsOnboarding ? (
         <OnboardingFlow
           onComplete={async draft => {
+            analytics.onboardingCompleted({ rankedGoalCount: draft.rankedGoals.length });
             setHasCompletedOnboardingLocally(true);
             setWelcomeName(draft.displayName);
           }}
           onDecline={async () => {
+            analytics.onboardingDeclined();
             setHasDismissedOnboarding(true);
           }}
         />

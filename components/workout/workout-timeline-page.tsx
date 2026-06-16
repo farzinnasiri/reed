@@ -117,6 +117,8 @@ export function TimelinePage({
   const dragTranslationY = useRef(new Animated.Value(0)).current;
   const previousExerciseIdsRef = useRef<string[]>([]);
   const previousSetCountsRef = useRef<Record<string, number>>({});
+  const isEmptySession = displayTimeline.length === 0;
+  const isFinishActionDisabled = isWorking || Boolean(draggingExerciseId);
   const draggingRowHeight = useMemo(() => {
     if (!draggingExerciseId) {
       return 0;
@@ -618,12 +620,12 @@ export function TimelinePage({
           <View style={styles.timelineBottomDockContent}>
             {isReadOnly ? null : (
               <Pressable
-                accessibilityLabel="Finish workout"
-                disabled={isWorking || displayTimeline.length === 0 || Boolean(draggingExerciseId)}
+                accessibilityLabel={isEmptySession ? 'Close session' : 'Finish workout'}
+                disabled={isFinishActionDisabled}
                 onPress={onToggleFinishSessionConfirm}
                 style={({ pressed }) => [
                   styles.timelineBottomPrimaryPressable,
-                  getTapScaleStyle(pressed, displayTimeline.length === 0 || Boolean(draggingExerciseId)),
+                  getTapScaleStyle(pressed, isFinishActionDisabled),
                 ]}
               >
                 <View
@@ -634,7 +636,7 @@ export function TimelinePage({
                 >
                   <Ionicons color={String(theme.colors.accentPrimaryText)} name="flag-outline" size={16} />
                   <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                    Finish workout
+                    {isEmptySession ? 'Close session' : 'Finish workout'}
                   </ReedText>
                 </View>
               </Pressable>
@@ -717,10 +719,10 @@ export function TimelinePage({
           </Pressable>
           <GlassSurface contentStyle={styles.timelineFinishModalCardContent} style={styles.timelineFinishModalCard}>
             <ReedText style={styles.timelineFinishModalTitle} variant="section">
-              Finish workout?
+              {isEmptySession ? 'Close session?' : 'Finish workout?'}
             </ReedText>
             <ReedText style={styles.timelineFinishModalSummary} tone="muted" variant="body">
-              {getFinishSummaryLabel(displayTimeline.length, elapsedLabel)}
+              {isEmptySession ? 'No exercises logged. Nothing will be saved.' : getFinishSummaryLabel(displayTimeline.length, elapsedLabel)}
             </ReedText>
             <View style={styles.timelineFinishModalActions}>
               <Pressable
@@ -749,7 +751,7 @@ export function TimelinePage({
                 ]}
               >
                 <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                  Finish
+                  {isEmptySession ? 'Close' : 'Finish'}
                 </ReedText>
               </Pressable>
             </View>

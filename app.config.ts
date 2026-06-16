@@ -96,5 +96,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     },
     convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL ?? '',
     convexSiteUrl: process.env.EXPO_PUBLIC_CONVEX_SITE_URL ?? '',
+    posthogProjectToken: process.env.POSTHOG_PROJECT_TOKEN,
+    posthogHost: process.env.POSTHOG_HOST,
   },
 });

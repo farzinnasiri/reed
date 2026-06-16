@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -71,6 +72,9 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
       if (result.error) {
         throw result.error;
       }
+
+      analytics.accountSignedOut();
+      analytics.reset();
     });
   }
 

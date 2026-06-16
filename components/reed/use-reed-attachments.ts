@@ -9,6 +9,7 @@ import { Platform } from 'react-native';
 import { useMutation } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { sizeBucket, startClientWideEvent } from '@/lib/client-observability';
 import type { ReedDraftAttachment } from './reed.types';
 
 const MAX_ATTACHMENTS = 5;
@@ -146,6 +147,19 @@ export function useReedAttachments() {
 
   const prepareAndUpload = useCallback(async (image: PendingImage) => {
     const id = createDraftId();
+    const event = startClientWideEvent('reed.image_upload', {
+      'file.mime_type': image.mimeType ?? 'unknown',
+      'file.source_uri_scheme': image.uri.split(':')[0] ?? 'unknown',
+      'image.height': image.height ?? null,
+      'image.width': image.width ?? null,
+      'screen.name': 'reed',
+      'upload.step': 'queued',
+    });
+    let uploadStep = 'queued';
+    const setUploadStep = (step: string) => {
+      uploadStep = step;
+      event.set({ 'upload.step': step });
+    };
     setLastError(null);
     setAttachments(current => {
       if (current.length >= MAX_ATTACHMENTS) return current;
@@ -160,7 +174,12 @@ export function useReedAttachments() {
     try {
       let compressed: ImageManipulator.ImageResult;
       try {
+        setUploadStep('manipulation');
         compressed = await compressToJpeg(image);
+        event.set({
+          'image.compressed.height': compressed.height,
+          'image.compressed.width': compressed.width,
+        });
       } catch (error) {
         logAttachmentStepError('manipulation', error, {
           sourceMimeType: image.mimeType ?? 'unknown',
@@ -181,7 +200,12 @@ export function useReedAttachments() {
 
       let file: UploadableJpeg;
       try {
+        setUploadStep('local_file_read');
         file = await getReadableJpeg(compressed.uri);
+        event.set({
+          'file.size_bucket': sizeBucket(uploadableSize(file)),
+          'file.type': uploadableType(file),
+        });
       } catch (error) {
         logAttachmentStepError('local-file-read', error, { compressedUriScheme: compressed.uri.split(':')[0] });
         throw new Error(toUserAttachmentError('local-file-read'));
@@ -189,6 +213,7 @@ export function useReedAttachments() {
 
       let uploadUrl: string;
       try {
+        setUploadStep('upload_url');
         uploadUrl = await generateImageUploadUrl({});
       } catch (error) {
         logAttachmentStepError('upload-url', error);
@@ -197,6 +222,7 @@ export function useReedAttachments() {
 
       let uploaded: { storageId: Id<'_storage'> };
       try {
+        setUploadStep('storage_upload');
         uploaded = await uploadJpeg(uploadUrl, file);
       } catch (error) {
         logAttachmentStepError('storage-upload', error, { fileSize: uploadableSize(file), mimeType: uploadableType(file) });
@@ -205,8 +231,10 @@ export function useReedAttachments() {
       setAttachments(current => current.map(attachment => attachment.id === id
         ? { ...attachment, status: 'ready', storageId: uploaded.storageId }
         : attachment));
+      event.end({ 'upload.step': 'ready' });
       if (Platform.OS === 'ios') void Haptics.selectionAsync();
     } catch (error) {
+      event.fail(error, `reed-image-upload-${uploadStep.replace(/_/g, '-')}-failed`);
       setAttachments(current => current.map(attachment => attachment.id === id
         ? {
             ...attachment,

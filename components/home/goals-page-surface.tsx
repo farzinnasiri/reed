@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -22,10 +22,21 @@ type SortOrder = 'due' | 'most' | 'newest';
 export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
   const { theme } = useReedTheme();
   const targets = useQuery(api.trainingTargets.list, { includeArchived: true });
+  const refreshActiveTargets = useMutation(api.trainingTargets.refreshActive);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
   const [sortOrder, setSortOrder] = useState<SortOrder>('due');
   const [isCreating, setIsCreating] = useState(false);
+  const hasRequestedRefresh = useRef(false);
   const visibleTargets = useMemo(() => sortTargets((targets ?? []).filter(target => target.status === statusFilter), sortOrder), [sortOrder, statusFilter, targets]);
+
+  useEffect(() => {
+    if (targets === undefined || hasRequestedRefresh.current) {
+      return;
+    }
+
+    hasRequestedRefresh.current = true;
+    void refreshActiveTargets({});
+  }, [refreshActiveTargets, targets]);
 
   function openCreateGoal() {
     blurActiveElementOnWeb();

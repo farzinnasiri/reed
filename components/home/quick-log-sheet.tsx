@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { analytics } from '@/lib/analytics';
 import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -232,6 +233,10 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
         durationSeconds: parseOptionalDurationSeconds(durationMinutes),
         presetId: selectedPreset._id,
         reps: parseOptionalInteger(reps),
+      });
+      analytics.quickLogSubmitted({
+        exerciseGroup: selectedPreset.group,
+        inputKind: selectedPreset.inputKind,
       });
       onClose();
     } catch (error) {

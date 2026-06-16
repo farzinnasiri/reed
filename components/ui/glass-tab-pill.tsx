@@ -14,6 +14,7 @@ import { reedRadii } from '@/design/system';
 
 type GlassTabPillItem<T extends string> = {
   accessibilityLabel: string;
+  hasIndicator?: boolean;
   icon: ReactNode;
   id: T;
   isActive: boolean;
@@ -84,6 +85,7 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
         {items.map(item => (
           <GlassTabPillButton
             accessibilityLabel={item.accessibilityLabel}
+            hasIndicator={item.hasIndicator}
             icon={item.icon}
             index={items.findIndex(candidate => candidate.id === item.id)}
             isActive={item.isActive}
@@ -99,6 +101,7 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
 
 function GlassTabPillButton({
   accessibilityLabel,
+  hasIndicator = false,
   icon,
   index,
   isActive,
@@ -106,12 +109,14 @@ function GlassTabPillButton({
   progress,
 }: {
   accessibilityLabel: string;
+  hasIndicator?: boolean;
   icon: ReactNode;
   index: number;
   isActive: boolean;
   onPress: () => void;
   progress: Animated.Value;
 }) {
+  const { theme } = useReedTheme();
   const iconScale = progress.interpolate({
     extrapolate: 'clamp',
     inputRange: [index - 1, index, index + 1],
@@ -126,7 +131,12 @@ function GlassTabPillButton({
       onPress={onPress}
       style={({ pressed }) => [styles.item, getTapScaleStyle(pressed)]}
     >
-      <Animated.View style={{ transform: [{ scale: iconScale }] }}>{icon}</Animated.View>
+      <Animated.View style={[styles.iconWrap, { transform: [{ scale: iconScale }] }]}>
+        {icon}
+        {hasIndicator ? (
+          <View style={[styles.indicatorDot, { backgroundColor: theme.colors.accentSecondary }]} />
+        ) : null}
+      </Animated.View>
     </Pressable>
   );
 }
@@ -161,5 +171,16 @@ const styles = StyleSheet.create({
     height: 50,
     justifyContent: 'center',
     zIndex: 1,
+  },
+  iconWrap: {
+    position: 'relative',
+  },
+  indicatorDot: {
+    borderRadius: 3,
+    height: 6,
+    position: 'absolute',
+    right: -4,
+    top: -3,
+    width: 6,
   },
 });

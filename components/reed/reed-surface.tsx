@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { analytics } from '@/lib/analytics';
 import { Platform, View, type ScrollView as ScrollViewType } from 'react-native';
 import { useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
@@ -199,12 +200,20 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
 
   function sendTyped(text: string) {
     if (sendPrompt(text, 'typed', readyAttachmentIds)) {
+      analytics.reedMessageSent({
+        source: 'typed',
+        hasAttachments: readyAttachmentIds.length > 0,
+      });
       clearComposerState();
     }
   }
 
   function sendVoiceDraft(text: string) {
     if (sendPrompt(text, 'voice', readyAttachmentIds)) {
+      analytics.reedMessageSent({
+        source: 'voice',
+        hasAttachments: false,
+      });
       clearComposerState();
     }
   }
@@ -273,6 +282,10 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
           onPickLibrary={() => void attachFromLibrary()}
           onQuickAction={prompt => {
             if (sendPrompt(prompt, 'quick-action', readyAttachmentIds)) {
+              analytics.reedMessageSent({
+                source: 'quick-action',
+                hasAttachments: readyAttachmentIds.length > 0,
+              });
               clearComposerState();
             }
           }}

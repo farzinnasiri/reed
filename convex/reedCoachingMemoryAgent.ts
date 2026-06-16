@@ -6,6 +6,7 @@ import { internalAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
+import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
 const COACHING_MEMORY_MODEL = process.env.REED_COACHING_MEMORY_MODEL ?? 'gpt-5.4-mini-2026-03-17';
 const COACHING_MEMORY_PROMPT_KEY = 'reed_coaching_memory_system';
@@ -52,17 +53,41 @@ async function reconcileProfile(ctx: ActionCtx, profileId: Id<'profiles'>, now: 
   const prompt = await ctx.runQuery(internal.reed.loadPromptByKey, { key: COACHING_MEMORY_PROMPT_KEY });
 
   try {
-    const result = await invokeMemoryModel(context, prompt?.content ?? null);
-    await ctx.runMutation(internal.reedCoachingMemory.saveReconciliationResult, {
-      completedAt: Date.now(),
-      journeys: result.journeys,
-      mentalModel: result.mentalModel,
-      modelName: COACHING_MEMORY_MODEL,
-      modelProvider: providerForModel(COACHING_MEMORY_MODEL),
-      profileId,
-      promptHash: prompt?.contentHash ?? 'missing',
-      sourceFingerprint,
-      sourceThroughAt: context.sourceThroughAt,
+    await withLangfuseTrace({
+      input: {
+        messageCount: context.messages.length,
+        sessionCount: context.sessions.length,
+        sourceThroughAt: context.sourceThroughAt,
+      },
+      metadata: {
+        messageCount: context.messages.length,
+        profileId,
+        promptHash: prompt?.contentHash ?? 'missing',
+        sessionCount: context.sessions.length,
+      },
+      name: 'reed.coaching_memory.reconcile',
+      sessionId: `profile:${profileId}`,
+      tags: ['reed', 'coaching_memory'],
+      userId: profileId,
+      version: COACHING_MEMORY_MODEL,
+    }, async () => {
+      const result = await invokeMemoryModel(context, prompt?.content ?? null);
+      await ctx.runMutation(internal.reedCoachingMemory.saveReconciliationResult, {
+        completedAt: Date.now(),
+        journeys: result.journeys,
+        mentalModel: result.mentalModel,
+        modelName: COACHING_MEMORY_MODEL,
+        modelProvider: providerForModel(COACHING_MEMORY_MODEL),
+        profileId,
+        promptHash: prompt?.contentHash ?? 'missing',
+        sourceFingerprint,
+        sourceThroughAt: context.sourceThroughAt,
+      });
+
+      return {
+        journeyCount: result.journeys.length,
+        mentalModel: result.mentalModel,
+      };
     });
   } catch (error) {
     await ctx.runMutation(internal.reedCoachingMemory.saveReconciliationFailure, {
@@ -83,10 +108,18 @@ async function invokeMemoryModel(context: unknown, systemPrompt: string | null):
     temperature: 0.1,
     maxRetries: 1,
   });
-  const result = await model.invoke([
+  const result = await withLangfuseGeneration({
+    input: {
+      context: traceText(JSON.stringify(context), 4_000),
+      system: systemPrompt ? traceText(systemPrompt) : null,
+    },
+    model: COACHING_MEMORY_MODEL,
+    modelParameters: { temperature: 0.1 },
+    name: 'reed.coaching_memory.model',
+  }, async () => model.invoke([
     new SystemMessage(systemPrompt),
     new HumanMessage(JSON.stringify(context, null, 2)),
-  ]);
+  ]));
   return normalizeMemoryResult(parseJson(textFromContent(result.content)));
 }
 

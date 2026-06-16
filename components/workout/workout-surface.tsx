@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, AppState, Pressable, ScrollView, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
+import { useAppShell } from '@/components/home/app-shell-context';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
@@ -73,6 +75,7 @@ type QuickLogDayGroup = {
 
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
+  const { setIsWorkoutSessionFullscreen } = useAppShell();
   const session = useQuery(api.liveSessions.getCurrent, {});
   const sessionInsights = useQuery(api.liveSessionInsights.getCurrent, {});
   const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
@@ -95,7 +98,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     api.liveSessions.getEndedTimeline,
     selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
   );
-  const startSession = useMutation(api.liveSessions.start);
   const addExercise = useMutation(api.liveSessions.addExercise);
   const addExercises = useMutation(api.liveSessions.addExercises);
   const reorderExercises = useMutation(api.liveSessions.reorderExercises);
@@ -117,6 +119,8 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   const [isWorking, setIsWorking] = useState(false);
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [isActiveSessionOpen, setIsActiveSessionOpen] = useState(false);
+  const [isDraftSessionOpen, setIsDraftSessionOpen] = useState(false);
   const [warmup, setWarmup] = useState(false);
   const [metricValues, setMetricValues] = useState<MetricValues>({});
   const [setOutcomeDetails, setSetOutcomeDetails] = useState<SetOutcomeDetails>({});
@@ -143,6 +147,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const restRuntime =
     ((session as { restRuntime?: RestCard | null } | null | undefined)?.restRuntime ?? null) as RestCard | null;
   const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
+  const isSessionFullscreen = isDraftSessionOpen || Boolean(session && isActiveSessionOpen);
   const quickLogDayGroups = useMemo(() => {
     const groups = new Map<string, QuickLogActivity[]>();
 
@@ -230,14 +235,22 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       setPage('timeline');
       setEditingSet(null);
       setIsInsightsOpen(false);
+      setIsActiveSessionOpen(false);
       return;
     }
 
+    setIsDraftSessionOpen(false);
     const hasTimelineRows = session.timeline.length > 0;
     if (page === 'exercise' && !captureCard && !restCard && !liveCardioCard && !hasTimelineRows) {
       setPage('timeline');
     }
   }, [captureCard, liveCardioCard, page, restCard, session]);
+
+  useEffect(() => {
+    setIsWorkoutSessionFullscreen(isSessionFullscreen);
+
+    return () => setIsWorkoutSessionFullscreen(false);
+  }, [isSessionFullscreen, setIsWorkoutSessionFullscreen]);
 
   useEffect(() => {
     if (!session || !editingSet) {
@@ -441,9 +454,8 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleStartSession() {
-    await runMutation(async () => {
-      await startSession({});
-    });
+    setErrorMessage(null);
+    setIsDraftSessionOpen(true);
   }
 
   async function handleSelectExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
@@ -474,10 +486,16 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleAddExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
+    const shouldTrackSessionStarted = !session;
     setIsConfirmingFinishSession(false);
     closeAddSheet();
     await runTimelineMutation(async () => {
       await addExercise({ exerciseCatalogId });
+      if (shouldTrackSessionStarted) {
+        analytics.workoutSessionStarted();
+      }
+      analytics.exerciseAdded();
+      setIsActiveSessionOpen(true);
     });
   }
 
@@ -486,10 +504,19 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       return;
     }
 
+    const shouldTrackSessionStarted = !session;
     setIsConfirmingFinishSession(false);
     closeAddSheet();
     await runTimelineMutation(async () => {
       await addExercises({ exerciseCatalogIds });
+      if (shouldTrackSessionStarted) {
+        analytics.workoutSessionStarted();
+      }
+      analytics.exerciseAdded({
+        addMode: 'bulk',
+        exerciseCount: exerciseCatalogIds.length,
+      });
+      setIsActiveSessionOpen(true);
     });
   }
 
@@ -539,6 +566,10 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         metrics: metricValues,
         sessionExerciseId: captureCard.sessionExerciseId,
         setOutcomeDetails,
+        warmup,
+      });
+      analytics.workoutSetLogged({
+        setNumber: captureCard.currentSetNumber,
         warmup,
       });
     });
@@ -616,11 +647,31 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function handleFinishSession() {
-    await runMutation(async () => {
-      await cancelRestTimerBackgroundAlertsAsync();
-      await finishSession({});
+    if (!session) {
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
+      setIsAddSheetOpen(false);
+      setIsDraftSessionOpen(false);
+      setIsActiveSessionOpen(false);
+      setPage('timeline');
+      return;
+    }
+
+    await runMutation(async () => {
+      await cancelRestTimerBackgroundAlertsAsync();
+      const result = await finishSession({});
+      const totalSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
+      const exerciseCount = session?.timeline.length ?? 0;
+      if (!result.deletedEmptySession) {
+        analytics.workoutSessionFinished({
+          exerciseCount,
+          totalSets,
+        });
+      }
+      setIsConfirmingFinishSession(false);
+      setEditingSet(null);
+      setIsDraftSessionOpen(false);
+      setIsActiveSessionOpen(false);
       setPage('timeline');
     });
   }
@@ -680,7 +731,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }: {
     children: ReactNode;
     onBack: () => void;
-    onOpenInsights: () => void;
+    onOpenInsights?: () => void;
     overlays?: ReactNode;
     status: LiveSessionStatusStrip;
   }) {
@@ -712,8 +763,66 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     );
   }
 
-  if (session === null) {
+  if (session === null && isDraftSessionOpen) {
+    const draftStatus: LiveSessionStatusStrip = {
+      completedSetsLabel: '0 sets',
+      durationLabel: '0m',
+      microLineTokens: [],
+      workSlotKind: 'active',
+      workSlotLabel: 'Open',
+    };
+
+    return renderSessionChrome({
+      children: (
+        <TimelinePage
+          activeRestAfterSetNumber={null}
+          activeRestExerciseId={null}
+          activeRestSeconds={null}
+          contentTopInset={statusStripHeight}
+          elapsedLabel={null}
+          errorMessage={errorMessage}
+          isConfirmingFinishSession={isConfirmingFinishSession}
+          isWorking={isTimelineMutationPending}
+          onAddExercise={() => {
+            setIsConfirmingFinishSession(false);
+            setIsAddSheetOpen(true);
+          }}
+          onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
+          onDeleteSet={() => { }}
+          onFinishSession={handleFinishSession}
+          onOpenExercise={() => { }}
+          onOpenSet={() => { }}
+          onReorderTimeline={async () => false}
+          onRemoveExercise={() => { }}
+          onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
+          showHeader={false}
+          timeline={[]}
+        />
+      ),
+      onBack: () => {
+        setIsConfirmingFinishSession(false);
+        setIsAddSheetOpen(false);
+        setIsDraftSessionOpen(false);
+      },
+      overlays: (
+        <AddExerciseSheet
+          isOpen={isAddSheetOpen}
+          isWorking={isWorking || isTimelineMutationPending}
+          onAddBulk={handleAddExercisesBulk}
+          onAddSingle={handleAddExercise}
+          onClose={closeAddSheet}
+          onToggleFavorite={handleToggleFavorite}
+        />
+      ),
+      status: draftStatus,
+    });
+  }
+
+  if (session === null || !isActiveSessionOpen) {
     const completedExercises = latestEndedSummary?.exercises ?? [];
+    const hasActiveSession = Boolean(session);
+    const activeSessionStartedAt = session?.session.startedAt ?? null;
+    const activeSessionSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
 
     if (selectedEndedSessionId) {
       const endedStatus = endedSessionTimeline
@@ -807,12 +916,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         <GlassSurface contentStyle={styles.startHeroContent} style={styles.startHeroSurface}>
           <View style={styles.startHeroTopRow}>
             <View style={styles.startCopy}>
-              <ReedText variant="section">Start session</ReedText>
-              <ReedText tone="muted">Start empty. Add exercises as you train.</ReedText>
+              <ReedText variant="section">{hasActiveSession ? 'Resume session' : 'Start session'}</ReedText>
+              <ReedText tone="muted">
+                {hasActiveSession ? 'A workout is already open.' : 'Start empty. Add exercises as you train.'}
+              </ReedText>
             </View>
             <Pressable
-              accessibilityLabel="Start a live workout session"
-              onPress={handleStartSession}
+              accessibilityLabel={hasActiveSession ? 'Resume active workout session' : 'Start a live workout session'}
+              onPress={hasActiveSession ? () => setIsActiveSessionOpen(true) : handleStartSession}
               style={({ pressed }) => [
                 styles.startHeroButton,
                 {
@@ -825,6 +936,77 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
             </Pressable>
           </View>
         </GlassSurface>
+
+        {session && activeSessionStartedAt ? (
+          <View style={styles.startHistory}>
+            <Pressable
+              accessibilityLabel="Resume ongoing workout session"
+              onPress={() => setIsActiveSessionOpen(true)}
+              style={({ pressed }) => [
+                styles.ongoingSessionRow,
+                {
+                  borderBottomColor: theme.colors.borderSoft,
+                },
+                getTapScaleStyle(pressed),
+              ]}
+            >
+              <View
+                style={[
+                  styles.ongoingSessionMark,
+                  {
+                    backgroundColor: theme.colors.accentPrimary,
+                    borderColor: theme.colors.accentPrimary,
+                  },
+                ]}
+              >
+                <View style={[styles.ongoingSessionPulse, { backgroundColor: theme.colors.accentPrimaryText }]} />
+              </View>
+              <View style={styles.sessionSummaryCopy}>
+                <View style={styles.sessionSummaryHeader}>
+                  <ReedText numberOfLines={1} style={styles.quickLogDayTitle} variant="bodyStrong">
+                    Ongoing session
+                  </ReedText>
+                </View>
+                <ReedText numberOfLines={1} style={styles.sessionExercisePreview} tone="muted" variant="caption">
+                  {formatSessionDate(activeSessionStartedAt)} · {formatElapsedCompact(activeSessionStartedAt, elapsedNow)}
+                </ReedText>
+                <View style={styles.sessionMetricRow}>
+                  <View
+                    style={[
+                      styles.sessionMetricChip,
+                      {
+                        backgroundColor: theme.colors.controlFill,
+                        borderColor: theme.colors.controlBorder,
+                      },
+                    ]}
+                  >
+                    <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={12} />
+                    <ReedText numberOfLines={1} tone="muted" variant="caption">
+                      {session.timeline.length} {session.timeline.length === 1 ? 'exercise' : 'exercises'}
+                    </ReedText>
+                  </View>
+                  <View
+                    style={[
+                      styles.sessionMetricChip,
+                      {
+                        backgroundColor: theme.colors.controlFill,
+                        borderColor: theme.colors.controlBorder,
+                      },
+                    ]}
+                  >
+                    <Ionicons color={String(theme.colors.textMuted)} name="checkmark" size={12} />
+                    <ReedText numberOfLines={1} tone="muted" variant="caption">
+                      {activeSessionSets} {activeSessionSets === 1 ? 'set' : 'sets'}
+                    </ReedText>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.sessionOpenIcon}>
+                <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={17} />
+              </View>
+            </Pressable>
+          </View>
+        ) : null}
 
         <View style={styles.startHistory}>
           <View style={styles.startHistoryHeader}>
@@ -1146,10 +1328,13 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     );
 
   function handleStatusStripBack() {
-    // Two-level workout stack: timeline back exits the workout, while nested
-    // exercise/rest/live-cardio surfaces return to the timeline first.
+    // Workout has a local landing level plus the active session level.
+    // Nested exercise/rest/live-cardio surfaces return to the session timeline first.
     if (page === 'timeline') {
-      onExitWorkout();
+      setIsActiveSessionOpen(false);
+      setIsConfirmingFinishSession(false);
+      setIsInsightsOpen(false);
+      setIsSessionNotesOpen(false);
       return;
     }
 

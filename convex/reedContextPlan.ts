@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
 import type { ReedContextToolCall, ReedTimeRange } from './reedContextTypes';
 import { formatReedTimelineTime } from './reedContextTime';
+import { traceText, withLangfuseGeneration } from './langfuseTracing';
 
 const CONTEXT_PLANNER_MODEL_NAME = process.env.REED_CONTEXT_PLANNER_MODEL ?? 'gemini-2.5-flash-lite';
 
@@ -54,10 +55,24 @@ export async function planReedContext(args: {
     maxRetries: 1,
   }).bindTools(contextTools);
 
-  const result = await model.invoke([
-    new SystemMessage(buildPlannerSystemPrompt(args)),
+  const systemPrompt = buildPlannerSystemPrompt(args);
+  const result = await withLangfuseGeneration({
+    input: {
+      recentMessages: args.recentMessages.slice(-6).map(message => ({
+        createdAt: message.createdAt,
+        role: message.role,
+        content: traceText(message.content, 500),
+      })),
+      system: traceText(systemPrompt),
+      userMessage: traceText(args.userMessage),
+    },
+    model: CONTEXT_PLANNER_MODEL_NAME,
+    modelParameters: { temperature: 0 },
+    name: 'reed.context_planner.model',
+  }, async () => model.invoke([
+    new SystemMessage(systemPrompt),
     new HumanMessage(args.userMessage),
-  ]);
+  ]));
 
   return parseToolCalls(result.tool_calls).slice(0, 6);
 }

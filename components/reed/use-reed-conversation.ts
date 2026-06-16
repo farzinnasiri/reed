@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { startClientWideEvent } from '@/lib/client-observability';
 import { summarizeCoachItemTitle } from './reed.presenter';
 import type { CoachItem, ComposerSource, ReedMessage } from './reed.types';
 
@@ -224,6 +225,14 @@ export function useReedConversation({
 
     const now = Date.now();
     const nonce = `${now}-${Math.random().toString(36).slice(2)}`;
+    const event = startClientWideEvent('reed.message_send', {
+      'attachment.count': attachments.length,
+      'message.has_attachments': attachments.length > 0,
+      'message.has_text': text.length > 0,
+      'message.source': source,
+      'screen.name': 'reed',
+      'send.step': 'optimistic',
+    });
     setPendingSendNonce(nonce);
     const nextOptimisticMessages: ReedMessage[] = [
       {
@@ -248,6 +257,7 @@ export function useReedConversation({
     setOptimisticMessages(current => current.concat(nextOptimisticMessages));
     markOnline();
 
+    event.set({ 'send.step': 'convex_mutation' });
     void sendReedMessage({
       clientNonce: nonce,
       clientNow: now,
@@ -257,9 +267,11 @@ export function useReedConversation({
       source,
     })
       .then(() => {
+        event.end({ 'send.step': 'saved' });
         markOnline();
       })
-      .catch(() => {
+      .catch(error => {
+        event.fail(error, 'reed-message-send-convex-mutation-failed', { 'send.step': 'failed' });
         setPendingSendNonce(current => (current === nonce ? null : current));
         setOptimisticMessages(current => current.concat({
           createdAt: Date.now(),

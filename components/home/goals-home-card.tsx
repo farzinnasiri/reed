@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
@@ -19,9 +19,20 @@ type GoalsHomeCardProps = {
 export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
   const { theme } = useReedTheme();
   const targets = useQuery(api.trainingTargets.list, { includeArchived: false });
+  const refreshActiveTargets = useMutation(api.trainingTargets.refreshActive);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const hasRequestedRefresh = useRef(false);
   const summary = useMemo(() => summarizeTargets(targets ?? []), [targets]);
+
+  useEffect(() => {
+    if (targets === undefined || hasRequestedRefresh.current) {
+      return;
+    }
+
+    hasRequestedRefresh.current = true;
+    void refreshActiveTargets({});
+  }, [refreshActiveTargets, targets]);
 
   function toggleExpanded() {
     runReedLayoutAnimation();

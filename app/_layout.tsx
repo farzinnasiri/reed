@@ -6,15 +6,18 @@ import {
   useFonts,
 } from '@expo-google-fonts/outfit';
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
-import { Stack } from 'expo-router';
+import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ConvexProvider } from 'convex/react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useQuery } from 'convex/react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
+import { PostHogErrorBoundary, PostHogProvider } from 'posthog-react-native';
+import { posthog } from '@/lib/posthog';
+import { analytics } from '@/lib/analytics';
 import { authClient } from '@/lib/auth-client';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
@@ -38,6 +41,15 @@ export default function RootLayout() {
     Outfit_800ExtraBold,
     Outfit_900Black,
   });
+  const pathname = usePathname();
+  const previousPathname = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    if (previousPathname.current !== pathname) {
+      analytics.screen(pathname, previousPathname.current);
+      previousPathname.current = pathname;
+    }
+  }, [pathname]);
 
   if (!fontsLoaded && !fontLoadError) {
     return null;
@@ -47,10 +59,50 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ReedThemeProvider>
         <GestureHandlerRootView style={styles.gestureRoot}>
-          <RootApp />
+          <PostHogProvider
+            client={posthog}
+            autocapture={{
+              captureScreens: false,
+              captureTouches: true,
+              propsToCapture: ['testID'],
+              maxElementsCaptured: 20,
+            }}
+          >
+            <PostHogErrorBoundary
+              additionalProperties={() => ({
+                'error.boundary': 'root',
+                'event.kind': 'operational',
+                'screen.name': pathname,
+              })}
+              fallback={RootErrorFallback}
+            >
+              <RootApp />
+            </PostHogErrorBoundary>
+          </PostHogProvider>
         </GestureHandlerRootView>
       </ReedThemeProvider>
     </SafeAreaProvider>
+  );
+}
+
+function RootErrorFallback() {
+  const { theme } = useReedTheme();
+
+  return (
+    <>
+      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+      <ScreenBackdrop>
+        <SafeAreaView style={styles.safeArea}>
+          <View style={styles.screen}>
+            <GlassSurface>
+              <ReedText variant="brand">Reed</ReedText>
+              <ReedText variant="display">Something went wrong.</ReedText>
+              <ReedText tone="muted">Close and reopen the app.</ReedText>
+            </GlassSurface>
+          </View>
+        </SafeAreaView>
+      </ScreenBackdrop>
+    </>
   );
 }
 
@@ -131,6 +183,12 @@ function RootNavigator() {
       SplashScreen.hideAsync().catch(() => {});
     }
   }, [isRoutingPending]);
+
+  useEffect(() => {
+    if (viewer) {
+      analytics.identifyProfile(viewer);
+    }
+  }, [viewer]);
 
   useEffect(() => {
     if (!isAppReady) {
