@@ -83,7 +83,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         color: '#2455e6',
         defaultChannel: 'rest-timer-alerts-v3',
         icon: './assets/images/notification-icon.png',
-        sounds: ['./assets/sounds/rest-timer-complete.wav'],
+        sounds: ['./assets/sounds/rest_timer_complete.wav'],
       },
     ],
   ],

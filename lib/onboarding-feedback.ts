@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const SWIPE_COMMIT_CUE = require('../assets/sounds/rest-timer-complete.wav');
+const SWIPE_COMMIT_CUE = require('../assets/sounds/rest_timer_complete.wav');
 
 type AudioPlayer = {
   play: () => void;
