@@ -27,6 +27,7 @@ const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
 const DEFAULT_COACH_STATE_PROMPT_KEY = 'reed_coach_state_system';
 const COACHING_MEMORY_PROMPT_KEY = 'reed_coaching_memory_system';
 const CONTEXT_AGENT_PROMPT_KEY = 'reed_context_agent_system';
+const CHECKED_IN_CHAT_PROMPT_HASH = 'he064728b';
 const CHECKED_IN_COACH_STATE_PROMPT_HASH = 'h7a119f49';
 const CHECKED_IN_COACHING_MEMORY_PROMPT_HASH = 'hda6c67d4';
 const CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH = 'h923c95d';
@@ -833,6 +834,7 @@ async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; conten
 }
 
 function checkedInPromptHash(key: string) {
+  if (key === DEFAULT_PROMPT_KEY) return CHECKED_IN_CHAT_PROMPT_HASH;
   if (key === DEFAULT_COACH_STATE_PROMPT_KEY) return CHECKED_IN_COACH_STATE_PROMPT_HASH;
   if (key === COACHING_MEMORY_PROMPT_KEY) return CHECKED_IN_COACHING_MEMORY_PROMPT_HASH;
   if (key === CONTEXT_AGENT_PROMPT_KEY) return CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH;
