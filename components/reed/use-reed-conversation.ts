@@ -87,6 +87,10 @@ export function useReedConversation({
       if (message.role === 'user') {
         lastUserNonce = message.clientNonce ?? null;
       }
+      const renderId = getRenderMessageId(message, lastUserNonce);
+      if (message.role === 'assistant') {
+        lastUserNonce = null;
+      }
 
       return {
         createdAt: message.createdAt,
@@ -96,7 +100,7 @@ export function useReedConversation({
           status: attachment.status,
           url: attachment.url,
         })),
-        id: getRenderMessageId(message, lastUserNonce),
+        id: renderId,
         role: message.role,
         serverId: message._id,
         source: message.source === 'system' ? 'typed' : message.source,

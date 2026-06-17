@@ -5,6 +5,7 @@ import { internalMutation, internalQuery, mutation, query } from './_generated/s
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
+import { contextAgentGateDecision, pickAgentThinkingMessage } from './reedContextGate';
 
 const DEFAULT_REED_SYSTEM_PROMPT = `You are Reed, a precise training coach inside a fitness app.
 You are warm, direct, and concise. You help the user understand training, momentum, recovery, and next focus.
@@ -25,8 +26,10 @@ const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
 const DEFAULT_COACH_STATE_PROMPT_KEY = 'reed_coach_state_system';
 const COACHING_MEMORY_PROMPT_KEY = 'reed_coaching_memory_system';
+const CONTEXT_AGENT_PROMPT_KEY = 'reed_context_agent_system';
 const CHECKED_IN_COACH_STATE_PROMPT_HASH = 'h7a119f49';
 const CHECKED_IN_COACHING_MEMORY_PROMPT_HASH = 'hda6c67d4';
+const CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH = 'h923c95d';
 const DEFAULT_REED_SUMMARY_PROMPT = `You update Reed's compact memory of an ongoing coaching conversation.
 
 This memory is objective continuity for a coach. It is not a transcript, not a psychological profile, not a private coaching strategy, and not an analysis of the user's personality.
@@ -308,6 +311,20 @@ export const sendMessage = mutation({
       });
     }
 
+    const shouldShowAgentThinkingMessage = contextAgentGateDecision(userMessageContent).run;
+    if (shouldShowAgentThinkingMessage) {
+      await ctx.db.insert('reedMessages', {
+        threadId: thread._id,
+        profileId: profile._id,
+        role: 'assistant',
+        content: pickAgentThinkingMessage(`${args.clientNonce ?? ''}:${userMessageContent}:${now}`),
+        source: 'system',
+        status: 'sent',
+        createdAt: now + 1,
+        completedAt: now + 1,
+      });
+    }
+
     const assistantMessageId = await ctx.db.insert('reedMessages', {
       threadId: thread._id,
       profileId: profile._id,
@@ -315,7 +332,7 @@ export const sendMessage = mutation({
       content: '',
       source: 'system',
       status: 'pending',
-      createdAt: now + 1,
+      createdAt: shouldShowAgentThinkingMessage ? now + 2 : now + 1,
     });
     await ctx.db.patch(thread._id, { updatedAt: now, lastMessageAt: now });
 
@@ -818,6 +835,7 @@ async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; conten
 function checkedInPromptHash(key: string) {
   if (key === DEFAULT_COACH_STATE_PROMPT_KEY) return CHECKED_IN_COACH_STATE_PROMPT_HASH;
   if (key === COACHING_MEMORY_PROMPT_KEY) return CHECKED_IN_COACHING_MEMORY_PROMPT_HASH;
+  if (key === CONTEXT_AGENT_PROMPT_KEY) return CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH;
   return null;
 }
 

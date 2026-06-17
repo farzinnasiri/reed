@@ -8,6 +8,7 @@ const KNOWN_PROMPT_KEYS = [
   'reed_memory_summary_system',
   'reed_coach_state_system',
   'reed_coaching_memory_system',
+  'reed_context_agent_system',
 ];
 const MAX_PROMPT_VERSIONS = 50;
 

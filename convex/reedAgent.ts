@@ -6,14 +6,15 @@ import { ChatOpenAI } from '@langchain/openai';
 import { ChatXAI } from '@langchain/xai';
 import { createAgent } from 'langchain';
 import { internalAction, type ActionCtx } from './_generated/server';
-import { planReedContext } from './reedContextPlan';
-import type { ReedContextBlock, ReedContextToolCall } from './reedContextTypes';
+import type { ReedContextBlock } from './reedContextTypes';
+import { runReedContextGraph } from './reedContextGraph';
 import { internal } from './_generated/api';
 import { v } from 'convex/values';
-import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
+import { createChatModel, hasApiKeyForModel, providerForModel, supportedModelSettings } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
 import { formatReedTimelineTime } from './reedContextTime';
-import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
+import { traceText, withLangfuseGeneration, withLangfuseObservation, withLangfuseTrace } from './langfuseTracing';
+import { contextAgentGateDecision } from './reedContextGate';
 
 const CHAT_MODEL_PROVIDER = 'xai';
 const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
@@ -202,35 +203,56 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
 
 async function buildContextBlocks(ctx: ActionCtx, context: Awaited<ReturnType<typeof loadContextType>>): Promise<ReedContextBlock[]> {
   try {
-    const plannedCalls = await planReedContext({
-      clientNow: context.clientNow,
-      clientTimeZone: context.clientTimeZone,
-      recentMessages: context.recentMessages,
-      userMessage: context.userMessage.content,
-    });
-    const contextCalls = mergeContextToolCalls([
-      ...deterministicContextCalls(context),
-      ...plannedCalls,
-    ]);
+    const gateDecision = contextAgentGateDecision(context.userMessage.content);
+    if (!gateDecision.run) {
+      await withLangfuseObservation({
+        input: { user: traceText(context.userMessage.content) },
+        metadata: {
+          reason: gateDecision.reason,
+          userMessageId: context.userMessage._id,
+        },
+        name: 'reed.context_agent.gate',
+        output: { decision: 'skip', reason: gateDecision.reason },
+        type: 'span',
+      }, async () => null);
 
-    console.log('\n================ REED CONTEXT PLAN ================');
-    console.log(JSON.stringify({ deterministic: deterministicContextCalls(context), planned: plannedCalls, selected: contextCalls }, null, 2));
-    console.log('===================================================\n');
+      console.log('\n================ REED CONTEXT PLAN ================');
+      console.log(JSON.stringify({
+        gate: 'skip',
+        reason: gateDecision.reason,
+        selected: [],
+        stopReason: 'no_agent_needed',
+      }, null, 2));
+      console.log('===================================================\n');
 
-    if (contextCalls.length === 0) return [];
+      return [];
+    }
 
-    const blocks: ReedContextBlock[] = await ctx.runQuery(internal.reedContextTools.runContextTools, {
-      calls: contextCalls,
+    const packet = await runReedContextGraph(ctx, {
       clientNow: context.clientNow,
       clientTimeZone: context.clientTimeZone,
       profileId: context.profile._id,
+      recentMessages: context.recentMessages,
+      userMessage: context.userMessage.content,
     });
 
-    console.log('\n================ REED CONTEXT BLOCKS ==============');
-    console.log(JSON.stringify(blocks, null, 2));
+    console.log('\n================ REED CONTEXT PLAN ================');
+    console.log(JSON.stringify({
+      gate: 'run',
+      reason: gateDecision.reason,
+      model: packet.metadata.modelName,
+      promptHash: packet.metadata.promptHash,
+      provider: packet.metadata.modelProvider,
+      selected: packet.metadata.toolCalls,
+      stopReason: packet.metadata.stopReason,
+    }, null, 2));
     console.log('===================================================\n');
 
-    return blocks;
+    console.log('\n================ REED CONTEXT BLOCKS ==============');
+    console.log(JSON.stringify(packet.blocks, null, 2));
+    console.log('===================================================\n');
+
+    return packet.blocks;
   } catch (error) {
     console.error('[REED_CONTEXT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
     return [];
@@ -267,66 +289,6 @@ async function analyzePendingImageAttachments(ctx: ActionCtx, messageId: Id<'ree
       });
     }
   }));
-}
-
-function deterministicContextCalls(context: Awaited<ReturnType<typeof loadContextType>>): ReedContextToolCall[] {
-  const currentText = context.userMessage.content.toLowerCase();
-  const calls: ReedContextToolCall[] = [];
-
-  const asksProgress = /\b(progress|progressing|improving|stronger|weaker|plateau|stalled|trend|compare|working|results?|changed|pr\b|personal record)\b/.test(currentText);
-  const asksHistory = /\b(today|yesterday|this week|last week|recent|last session|last workout|what did i do|how did .* go|logged|finished|hit)\b/.test(currentText);
-  const asksPlan = /\b(what should i (train|do|focus)|build .*session|make .*program|plan|routine|split|workout should|next focus|exercise should i choose|which exercise)\b/.test(currentText);
-  const asksRecovery = /\b(tired|fatigue|sore|recovery|rest|sleep|overtraining|overtrain|can i train|should i train|deload|ache|pain|hurts?)\b/.test(currentText);
-  const asksBodyweight = /\b(weight|bodyweight|body weight|fat loss|lose fat|cutting|bulk|gaining|measurements?)\b/.test(currentText);
-  const exerciseQuery = extractExerciseQuery(currentText);
-
-  if (/\b(this week|week|weekly)\b/.test(currentText)) {
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'this_week' } } });
-  }
-
-  if (asksProgress) {
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 30 } } });
-  }
-
-  if (asksHistory && !asksProgress) {
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'today' } } });
-  }
-
-  if (asksPlan) {
-    calls.push({ name: 'get_training_goals', args: { status: 'active', limit: 5 } });
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 14 } } });
-  }
-
-  if (asksRecovery) {
-    calls.push({ name: 'summarize_training_window', args: { range: { preset: 'last_n_days', days: 14 } } });
-  }
-
-  if (asksBodyweight) {
-    calls.push({ name: 'get_bodyweight_trend', args: { range: { preset: 'last_n_days', days: 30 } } });
-  }
-
-  if (exerciseQuery && (asksProgress || /\b(form|technique|grip|variation|which|choose|weak|strong)\b/.test(currentText))) {
-    calls.push({ name: 'get_exercise_performance_history', args: { exerciseQuery, range: { preset: 'last_n_days', days: 90 } } });
-  }
-
-  return calls;
-}
-
-function extractExerciseQuery(text: string) {
-  const match = text.match(/\b(bench(?: press)?|squat|deadlift|press|row|pull[- ]?up|chin[- ]?up|dip|curl|run|running|cardio|stair climber|muscle[- ]?up|push[- ]?up)\b/i);
-  return match?.[0]?.replace(/-/g, ' ') ?? null;
-}
-
-function mergeContextToolCalls(calls: ReedContextToolCall[]) {
-  const seen = new Set<string>();
-  const merged: ReedContextToolCall[] = [];
-  for (const call of calls) {
-    const key = JSON.stringify(call);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    merged.push(call);
-  }
-  return merged.slice(0, 6);
 }
 
 type ReedPromptMemory = {
@@ -713,9 +675,10 @@ async function invokeSummaryModel(prompt: string) {
     return deterministicSummary(prompt);
   }
 
+  const modelSettings = supportedModelSettings({ modelName: SUMMARY_MODEL_NAME, temperature: 0.1 });
   const model = createChatModel({
     modelName: SUMMARY_MODEL_NAME,
-    temperature: 0.1,
+    temperature: modelSettings.temperature,
     maxRetries: 1,
   });
   try {
@@ -725,7 +688,7 @@ async function invokeSummaryModel(prompt: string) {
         system: 'Summarize Reed coaching continuity. Be compact and factual.',
       },
       model: SUMMARY_MODEL_NAME,
-      modelParameters: { temperature: 0.1 },
+      modelParameters: modelSettings,
       name: 'reed.summary.model',
     }, async () => model.invoke([new SystemMessage('Summarize Reed coaching continuity. Be compact and factual.'), new HumanMessage(prompt)]));
     return textFromContent(result.content) || deterministicSummary(prompt);
@@ -750,9 +713,10 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
 
   const imageBytes = await response.arrayBuffer();
   const base64Image = Buffer.from(imageBytes).toString('base64');
+  const modelSettings = supportedModelSettings({ modelName: IMAGE_ANALYSIS_MODEL_NAME, temperature: 0.2 });
   const model = createChatModel({
     modelName: IMAGE_ANALYSIS_MODEL_NAME,
-    temperature: 0.2,
+    temperature: modelSettings.temperature,
     maxRetries: 1,
   });
 
@@ -763,7 +727,7 @@ async function invokeImageAnalysisModel(ctx: ActionCtx, input: { storageId: Id<'
       storageId: input.storageId,
     },
     model: IMAGE_ANALYSIS_MODEL_NAME,
-    modelParameters: { temperature: 0.2 },
+    modelParameters: modelSettings,
     name: 'reed.image_analysis.model',
   }, async () => model.invoke([
     new SystemMessage([

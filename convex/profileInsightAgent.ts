@@ -4,7 +4,7 @@ import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
-import { createChatModel, hasApiKeyForModel } from './aiModelProvider';
+import { createChatModel, hasApiKeyForModel, supportedModelSettings } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
 import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
@@ -71,9 +71,10 @@ async function loadSnapshot(ctx: ActionCtx, profileId: Id<'profiles'>, reason: s
 
 async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
   if (!hasApiKeyForModel(MODEL_NAME)) return fallback;
+  const modelSettings = supportedModelSettings({ modelName: MODEL_NAME, temperature: 0.35 });
   const model = createChatModel({
     modelName: MODEL_NAME,
-    temperature: 0.35,
+    temperature: modelSettings.temperature,
     maxRetries: 1,
   });
   const result = await withLangfuseGeneration({
@@ -81,7 +82,7 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
       snapshot: traceText(JSON.stringify(snapshot), 4_000),
     },
     model: MODEL_NAME,
-    modelParameters: { temperature: 0.35 },
+    modelParameters: modelSettings,
     name: 'reed.profile_insight.model',
   }, async () => model.invoke([
     new SystemMessage([

@@ -5,7 +5,7 @@ import { v } from 'convex/values';
 import { internalAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { createChatModel, hasApiKeyForModel, providerForModel } from './aiModelProvider';
+import { createChatModel, hasApiKeyForModel, providerForModel, supportedModelSettings } from './aiModelProvider';
 import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
 const COACHING_MEMORY_MODEL = process.env.REED_COACHING_MEMORY_MODEL ?? 'gpt-5.4-mini-2026-03-17';
@@ -103,9 +103,10 @@ async function reconcileProfile(ctx: ActionCtx, profileId: Id<'profiles'>, now: 
 async function invokeMemoryModel(context: unknown, systemPrompt: string | null): Promise<MemoryResult> {
   if (!systemPrompt || !hasApiKeyForModel(COACHING_MEMORY_MODEL)) return deterministicMemory(context);
 
+  const modelSettings = supportedModelSettings({ modelName: COACHING_MEMORY_MODEL, temperature: 0.1 });
   const model = createChatModel({
     modelName: COACHING_MEMORY_MODEL,
-    temperature: 0.1,
+    temperature: modelSettings.temperature,
     maxRetries: 1,
   });
   const result = await withLangfuseGeneration({
@@ -114,7 +115,7 @@ async function invokeMemoryModel(context: unknown, systemPrompt: string | null):
       system: systemPrompt ? traceText(systemPrompt) : null,
     },
     model: COACHING_MEMORY_MODEL,
-    modelParameters: { temperature: 0.1 },
+    modelParameters: modelSettings,
     name: 'reed.coaching_memory.model',
   }, async () => model.invoke([
     new SystemMessage(systemPrompt),

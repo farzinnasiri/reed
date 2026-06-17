@@ -79,7 +79,8 @@ convex-env-push: env-check
 	if [ -n "$$REED_COACH_STATE_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_MODEL "$$REED_COACH_STATE_MODEL"; fi; \
 	if [ -n "$$REED_COACH_STATE_REASONING_EFFORT" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_REASONING_EFFORT "$$REED_COACH_STATE_REASONING_EFFORT"; fi; \
 	if [ -n "$$REED_SUMMARY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_SUMMARY_MODEL "$$REED_SUMMARY_MODEL"; fi; \
-	if [ -n "$$REED_CONTEXT_PLANNER_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTEXT_PLANNER_MODEL "$$REED_CONTEXT_PLANNER_MODEL"; fi; \
+	if [ -n "$$REED_CONTEXT_AGENT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTEXT_AGENT_MODEL "$$REED_CONTEXT_AGENT_MODEL"; fi; \
+	if [ -n "$$REED_CONTEXT_AGENT_REASONING_EFFORT" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTEXT_AGENT_REASONING_EFFORT "$$REED_CONTEXT_AGENT_REASONING_EFFORT"; fi; \
 	if [ -n "$$REED_COACHING_MEMORY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACHING_MEMORY_MODEL "$$REED_COACHING_MEMORY_MODEL"; fi; \
 	if [ -n "$$REED_IMAGE_ANALYSIS_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_IMAGE_ANALYSIS_MODEL "$$REED_IMAGE_ANALYSIS_MODEL"; fi; \
 	if [ -n "$$REED_PROFILE_INSIGHT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_PROFILE_INSIGHT_MODEL "$$REED_PROFILE_INSIGHT_MODEL"; fi; \

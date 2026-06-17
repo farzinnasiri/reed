@@ -16,19 +16,37 @@ export function hasApiKeyForModel(modelName: string) {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
+export function modelSupportsTemperature(modelName: string) {
+  const normalized = modelName.trim().toLowerCase();
+  return !(providerForModel(modelName) === 'openai' && normalized.startsWith('gpt-5'));
+}
+
+export function supportedModelSettings(args: {
+  modelName: string;
+  reasoningEffort?: string;
+  temperature?: number;
+}) {
+  return {
+    reasoningEffort: args.reasoningEffort,
+    temperature: modelSupportsTemperature(args.modelName) ? args.temperature : undefined,
+  };
+}
+
 export function createChatModel(args: {
   maxRetries?: number;
   modelName: string;
+  reasoningEffort?: string;
   temperature?: number;
 }) {
   const provider = providerForModel(args.modelName);
+  const settings = supportedModelSettings(args);
   if (provider === 'google') {
     const apiKey = process.env.GOOGLE_API_KEY ?? process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error(`Google API key is not configured for ${args.modelName}.`);
     return new ChatGoogleGenerativeAI({
       apiKey,
       model: args.modelName,
-      temperature: args.temperature,
+      temperature: settings.temperature,
       maxRetries: args.maxRetries ?? 1,
     });
   }
@@ -37,7 +55,8 @@ export function createChatModel(args: {
   return new ChatOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     model: args.modelName,
-    temperature: args.temperature,
+    temperature: settings.temperature,
     maxRetries: args.maxRetries ?? 1,
-  });
+    reasoning: settings.reasoningEffort ? { effort: settings.reasoningEffort } : undefined,
+  } as ConstructorParameters<typeof ChatOpenAI>[0] & { reasoning?: { effort: string } });
 }
