@@ -44,17 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
-    [
-      'expo-font',
-      {
-        fonts: [
-          './assets/fonts/Outfit_400Regular.ttf',
-          './assets/fonts/Outfit_600SemiBold.ttf',
-          './assets/fonts/Outfit_800ExtraBold.ttf',
-          './assets/fonts/Outfit_900Black.ttf',
-        ],
-      },
-    ],
+    'expo-font',
     [
       'expo-splash-screen',
       {

@@ -1,3 +1,10 @@
+import {
+  Outfit_400Regular,
+  Outfit_600SemiBold,
+  Outfit_800ExtraBold,
+  Outfit_900Black,
+  useFonts,
+} from '@expo-google-fonts/outfit';
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -39,6 +46,12 @@ export {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
+  const [fontsLoaded, fontLoadError] = useFonts({
+    Outfit_400Regular,
+    Outfit_600SemiBold,
+    Outfit_800ExtraBold,
+    Outfit_900Black,
+  });
   const pathname = usePathname();
   const previousPathname = useRef<string | undefined>(undefined);
 
@@ -50,8 +63,16 @@ export default function RootLayout() {
   }, [pathname]);
 
   useEffect(() => {
-    markStartupFontsReady(false);
-  }, []);
+    if (!fontsLoaded && !fontLoadError) {
+      return;
+    }
+
+    markStartupFontsReady(Boolean(fontLoadError));
+  }, [fontLoadError, fontsLoaded]);
+
+  if (!fontsLoaded && !fontLoadError) {
+    return null;
+  }
 
   return (
     <SafeAreaProvider>

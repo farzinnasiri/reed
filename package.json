@@ -20,6 +20,7 @@
   "dependencies": {
     "@better-auth/expo": "^1.6.11",
     "@convex-dev/better-auth": "^0.12.2",
+    "@expo-google-fonts/outfit": "^0.4.3",
     "@expo/vector-icons": "^15.0.2",
     "@langchain/core": "^1.1.48",
     "@langchain/google-genai": "^2.1.31",
