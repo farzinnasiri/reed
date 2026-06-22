@@ -133,8 +133,8 @@ export function SegmentedControl<T extends string>({
             onPress={() => onChange(option.value)}
             style={({ pressed }) => [
               styles.item,
-              compact ? styles.itemCompact : null,
               variant !== 'default' ? styles.pillItem : null,
+              compact ? styles.itemCompact : null,
               shouldStackItems ? styles.itemStacked : null,
               getTapScaleStyle(pressed),
             ]}
@@ -235,7 +235,6 @@ const styles = StyleSheet.create({
   },
   pillItem: {
     borderRadius: reedRadii.pill,
-    minHeight: 44,
     paddingHorizontal: 10,
   },
   itemStacked: {

@@ -10,6 +10,7 @@ import {
   type ExpoPushTicket,
 } from './notificationTypes';
 import type { Id } from './_generated/dataModel';
+import { captureBackendEvent } from './backendTelemetry';
 
 export const recordSendResults = internalMutation({
   args: {
@@ -127,10 +128,12 @@ export const sendDueIntents = internalAction({
   handler: async ctx => {
     const now = Date.now();
     const intents: ClaimedNotificationIntent[] = await ctx.runMutation(internal.notificationIntents.claimDueIntents, { now });
+    await captureBackendEvent('notification_worker_run', { claimed_count: intents.length });
 
     for (const intent of intents) {
       try {
         const tickets = await sendExpoPushBatch(intent);
+        const okCount = tickets.filter(ticket => ticket?.status === 'ok').length;
         await ctx.runMutation(internal.notificationDelivery.recordSendResults, {
           intentId: intent.intentId,
           results: intent.devices.map((device, index) => {
@@ -153,11 +156,21 @@ export const sendDueIntents = internalAction({
           }),
           sentAt: Date.now(),
         });
+        await captureBackendEvent('notification_send_completed', {
+          device_count: intent.devices.length,
+          intent_id: intent.intentId,
+          ok_count: okCount,
+          ticket_error_count: intent.devices.length - okCount,
+        });
       } catch (error) {
         await ctx.runMutation(internal.notificationIntents.failIntentSend, {
           error: error instanceof Error ? error.message : 'push_send_failed',
           intentId: intent.intentId,
           now: Date.now(),
+        });
+        await captureBackendEvent('notification_send_failed', {
+          error: error instanceof Error ? error.message : 'push_send_failed',
+          intent_id: intent.intentId,
         });
       }
     }
@@ -175,19 +188,19 @@ export const checkReceipts = internalAction({
       internal.notificationDelivery.dueReceipts,
       { now },
     );
+    await captureBackendEvent('notification_receipt_worker_run', { due_count: due.length });
     if (due.length === 0) return null;
 
-    const response = await fetch(EXPO_PUSH_RECEIPTS_URL, {
-      body: JSON.stringify({ ids: due.map(row => row.expoTicketId) }),
-      headers: { 'Content-Type': 'application/json' },
-      method: 'POST',
-    });
-    if (!response.ok) throw new Error(`Expo receipt check failed with ${response.status}`);
+    try {
+      const response = await fetch(EXPO_PUSH_RECEIPTS_URL, {
+        body: JSON.stringify({ ids: due.map(row => row.expoTicketId) }),
+        headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+      });
+      if (!response.ok) throw new Error(`Expo receipt check failed with ${response.status}`);
 
-    const json = await response.json() as { data?: Record<string, ExpoPushReceipt> };
-    await ctx.runMutation(internal.notificationDelivery.recordReceipts, {
-      now: Date.now(),
-      receipts: due.map(row => {
+      const json = await response.json() as { data?: Record<string, ExpoPushReceipt> };
+      const receipts = due.map(row => {
         const receipt = json.data?.[row.expoTicketId];
         if (!receipt || receipt.status === 'error') {
           return {
@@ -201,8 +214,21 @@ export const checkReceipts = internalAction({
           deliveryId: row.deliveryId,
           status: 'receipt_ok' as const,
         };
-      }),
-    });
+      });
+      await ctx.runMutation(internal.notificationDelivery.recordReceipts, {
+        now: Date.now(),
+        receipts,
+      });
+      await captureBackendEvent('notification_receipts_recorded', {
+        error_count: receipts.filter(receipt => receipt.status === 'receipt_error').length,
+        receipt_count: receipts.length,
+      });
+    } catch (error) {
+      await captureBackendEvent('notification_receipt_check_failed', {
+        error: error instanceof Error ? error.message : 'push_receipt_check_failed',
+      });
+      throw error;
+    }
 
     return null;
   },

@@ -79,6 +79,9 @@ export function useReedConversation({
   const lastSeenAssistantMessageIdRef = useRef<string | null>(null);
   const hasEstablishedAssistantBaselineRef = useRef(false);
 
+  const [revealedAgentThinkingIds, setRevealedAgentThinkingIds] = useState<Set<string>>(() => new Set());
+  const agentThinkingTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
   const persistedMessages = useMemo<ReedMessage[]>(() => {
     if (!effectiveFetchedMessages) return [];
 
@@ -92,6 +95,13 @@ export function useReedConversation({
         lastUserNonce = null;
       }
 
+      const rawSource = message.source;
+      const isAgentThinkingMessage =
+        rawSource === 'system' &&
+        message.role === 'assistant' &&
+        message.status === 'sent' &&
+        Boolean(message.content && message.content.trim().length > 0);
+
       return {
         createdAt: message.createdAt,
         attachments: message.attachments?.map(attachment => ({
@@ -101,9 +111,10 @@ export function useReedConversation({
           url: attachment.url,
         })),
         id: renderId,
+        isAgentThinkingMessage,
         role: message.role,
         serverId: message._id,
-        source: message.source === 'system' || message.source === 'background_coach' ? 'typed' : message.source,
+        source: rawSource === 'system' || rawSource === 'background_coach' ? 'typed' : (rawSource as ComposerSource),
         status: message.status,
         text: message.content || (message.status === 'pending' ? '' : message.error ?? ''),
       };
@@ -133,6 +144,87 @@ export function useReedConversation({
     return pending?.id ?? pendingSendNonce;
   }, [messages, pendingSendNonce]);
 
+  const AGENT_THINKING_PRELUDE_DELAY_MS = 820;
+
+  const visibleMessages = useMemo(() => {
+    const result: ReedMessage[] = [];
+    for (let i = 0; i < messages.length; i += 1) {
+      const m = messages[i];
+      const isPrelude = Boolean(m.isAgentThinkingMessage);
+      const revealed = isPrelude && revealedAgentThinkingIds.has(m.id);
+
+      if (isPrelude && !revealed) {
+        // Display as thinking bubble using the usual pending UI
+        result.push({ ...m, status: 'pending' as const, text: '' });
+        // Suppress the immediately following real pending assistant to avoid stacked thinking bubbles
+        if (i + 1 < messages.length) {
+          const next = messages[i + 1];
+          if (next.role === 'assistant' && next.status === 'pending') {
+            i += 1;
+          }
+        }
+        continue;
+      }
+      result.push(m);
+    }
+    return result;
+  }, [messages, revealedAgentThinkingIds]);
+
+  // Schedule a brief "thinking" delay before revealing agent prelude templates (e.g. "on it.", "give me a sec.").
+  // Purely UX layer: backend still sends immediately. We show the standard typing bubble first,
+  // then the phrase, then the agentic work continues (its own pending bubble).
+  useEffect(() => {
+    const nowTs = Date.now();
+
+    messages.forEach((m) => {
+      if (!m.isAgentThinkingMessage) return;
+      if (revealedAgentThinkingIds.has(m.id)) return;
+
+      const age = nowTs - (m.createdAt ?? nowTs);
+      const isRecent = age < 15000;
+
+      if (!isRecent) {
+        // Loaded from history: reveal immediately, avoid stuck dots on old messages.
+        setRevealedAgentThinkingIds((prev) => {
+          if (prev.has(m.id)) return prev;
+          const next = new Set(prev);
+          next.add(m.id);
+          return next;
+        });
+        return;
+      }
+
+      if (agentThinkingTimersRef.current[m.id]) return;
+
+      const timer = setTimeout(() => {
+        setRevealedAgentThinkingIds((prev) => {
+          const next = new Set(prev);
+          next.add(m.id);
+          return next;
+        });
+        delete agentThinkingTimersRef.current[m.id];
+      }, AGENT_THINKING_PRELUDE_DELAY_MS);
+
+      agentThinkingTimersRef.current[m.id] = timer;
+    });
+
+    // Prune timers belonging to messages no longer present
+    const liveIds = new Set(messages.map((m) => m.id));
+    Object.keys(agentThinkingTimersRef.current).forEach((id) => {
+      if (!liveIds.has(id)) {
+        clearTimeout(agentThinkingTimersRef.current[id]);
+        delete agentThinkingTimersRef.current[id];
+      }
+    });
+  }, [messages, revealedAgentThinkingIds]);
+
+  // Cleanup any pending reveal timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(agentThinkingTimersRef.current).forEach((t) => clearTimeout(t));
+      agentThinkingTimersRef.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -324,7 +416,7 @@ export function useReedConversation({
     isLoadingInitialMessages: messagesPage.status === 'LoadingFirstPage',
     isMessageSaved,
     loadOlderMessages,
-    messages,
+    messages: visibleMessages,
     pendingRunId,
     resolveCoachItem,
     saveCoachItem,

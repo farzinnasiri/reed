@@ -137,7 +137,8 @@ function MessageRow({
   const isAssistant = message.role === 'assistant';
   const isFailedAssistant = isAssistant && message.status === 'failed';
   const isPendingAssistant = isAssistant && message.status === 'pending';
-  const showActionBar = isAssistant && (message.status === 'sent' || message.status === 'failed') && (message.text?.trim().length ?? 0) > 0;
+  const isAgentThinkingMessage = Boolean((message as any).isAgentThinkingMessage);
+  const showActionBar = isAssistant && (message.status === 'sent' || message.status === 'failed') && (message.text?.trim().length ?? 0) > 0 && !isAgentThinkingMessage;
   const messageText = message.text ?? '';
   const bubbleCornerStyle = isAssistant ? styles.messageBubbleLeft : styles.messageBubbleRight;
   const messageTextColor = String(isAssistant ? theme.colors.textPrimary : theme.colors.accentPrimaryText);

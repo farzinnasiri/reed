@@ -1,5 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import { mutation } from './_generated/server';
+import { internal } from './_generated/api';
 import { requireViewerProfile } from './profiles';
 
 export const registerDevice = mutation({
@@ -53,6 +54,7 @@ export const registerDevice = mutation({
 
     if (existingForInstall) {
       await ctx.db.patch(existingForInstall._id, patch);
+      await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: profile._id });
       return null;
     }
 
@@ -61,6 +63,7 @@ export const registerDevice = mutation({
       clientInstallId: args.clientInstallId,
       profileId: profile._id,
     });
+    await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: profile._id });
     return null;
   },
 });

@@ -215,6 +215,7 @@ export function WorkoutExerciseCaptureView({
               { label: 'Right', value: 'right' },
             ]}
             value={activeSide}
+            variant="pill"
           />
         </View>
       ) : null}

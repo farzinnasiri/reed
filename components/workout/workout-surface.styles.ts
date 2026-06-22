@@ -637,9 +637,8 @@ export const styles = StyleSheet.create({
   unilateralSwitchRow: {
     alignSelf: 'center',
     marginBottom: 8,
-    width: '48%',
-    minWidth: 170,
-    maxWidth: 230,
+    maxWidth: 210,
+    minWidth: 160,
   },
   liveCardShell: {
     borderRadius: reedRadii.xl,
@@ -1241,6 +1240,9 @@ export const styles = StyleSheet.create({
   sheetContent: {
     gap: 16,
     paddingBottom: 8,
+  },
+  exerciseListTabs: {
+    paddingTop: 4,
   },
   catalogSection: {
     gap: 12,

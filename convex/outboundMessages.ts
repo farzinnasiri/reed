@@ -2,6 +2,8 @@ import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalAction, internalMutation } from './_generated/server';
 import type { Id } from './_generated/dataModel';
+import { notificationKindValidator, type NotificationKind } from './notificationTypes';
+import { captureBackendEvent } from './backendTelemetry';
 
 const MAX_OUTBOUND_BATCH_SIZE = 20;
 
@@ -23,6 +25,7 @@ type ClaimedOutboundMessage = {
   data: Record<string, string>;
   id: Id<'outboundMessages'>;
   kind: string;
+  notificationKind?: NotificationKind;
   notificationIntentId?: Id<'notificationIntents'>;
   priority: 'high' | 'low' | 'normal';
   profileId: Id<'profiles'>;
@@ -41,6 +44,7 @@ export const enqueue = internalMutation({
     dedupeKey: v.string(),
     expiresAt: v.optional(v.number()),
     kind: v.string(),
+    notificationKind: v.optional(notificationKindValidator),
     priority: outboundPriorityValidator,
     profileId: v.id('profiles'),
     scheduledFor: v.number(),
@@ -68,6 +72,7 @@ export const enqueue = internalMutation({
       expiresAt: args.expiresAt,
       failureReason: undefined,
       kind: args.kind.trim(),
+      notificationKind: args.notificationKind,
       notificationIntentId: undefined,
       priority: args.priority,
       reedMessageId: undefined,
@@ -83,13 +88,14 @@ export const enqueue = internalMutation({
       return existing._id;
     }
 
-    return await ctx.db.insert('outboundMessages', {
+    const outboundMessageId = await ctx.db.insert('outboundMessages', {
       ...patch,
       cancelledAt: undefined,
       createdAt: now,
       dedupeKey: args.dedupeKey,
       profileId: args.profileId,
     });
+    return outboundMessageId;
   },
 });
 
@@ -131,6 +137,7 @@ export const claimDue = internalMutation({
     data: outboundDataValidator,
     id: v.id('outboundMessages'),
     kind: v.string(),
+    notificationKind: v.optional(notificationKindValidator),
     notificationIntentId: v.optional(v.id('notificationIntents')),
     priority: outboundPriorityValidator,
     profileId: v.id('profiles'),
@@ -181,6 +188,7 @@ export const claimDue = internalMutation({
         data: row.data,
         id: row._id,
         kind: row.kind,
+        notificationKind: row.notificationKind,
         notificationIntentId: row.notificationIntentId,
         priority: row.priority,
         profileId: row.profileId,
@@ -272,6 +280,7 @@ export const sendDue = internalAction({
     const due: ClaimedOutboundMessage[] = await ctx.runMutation(internal.outboundMessages.claimDue, {
       now: Date.now(),
     });
+    await captureBackendEvent('outbound_worker_run', { claimed_count: due.length });
 
     for (const message of due) {
       try {
@@ -298,6 +307,7 @@ export const sendDue = internalAction({
         if (message.channels.push) {
           if (!notificationIntentId) {
             if (!message.title || !message.body) throw new Error('outbound_push_content_missing');
+            if (!message.notificationKind) throw new Error('outbound_push_kind_missing');
             const data = {
               ...message.data,
               outboundMessageId: message.id,
@@ -309,7 +319,7 @@ export const sendDue = internalAction({
               createdBy: `outbound:${message.source}`,
               data,
               dedupeKey: `outbound:${message.id}`,
-              kind: notificationKindForOutbound(message.kind),
+              kind: message.notificationKind,
               priority: message.priority,
               profileId: message.profileId,
               scheduledFor: Date.now(),
@@ -329,12 +339,25 @@ export const sendDue = internalAction({
           outboundMessageId: message.id,
           reedMessageId,
         });
+        await captureBackendEvent('outbound_message_sent', {
+          kind: message.kind,
+          notification_intent_created: Boolean(notificationIntentId),
+          outbound_message_id: message.id,
+          reed_message_created: Boolean(reedMessageId),
+          source: message.source,
+        }, message.profileId);
       } catch (error) {
         await ctx.runMutation(internal.outboundMessages.markFailed, {
           error: error instanceof Error ? error.message : 'outbound_send_failed',
           failedAt: Date.now(),
           outboundMessageId: message.id,
         });
+        await captureBackendEvent('outbound_message_failed', {
+          error: error instanceof Error ? error.message : 'outbound_send_failed',
+          kind: message.kind,
+          outbound_message_id: message.id,
+          source: message.source,
+        }, message.profileId);
       }
     }
 
@@ -349,6 +372,7 @@ function assertOutboundMessage(args: {
   dedupeKey: string;
   expiresAt?: number;
   kind: string;
+  notificationKind?: NotificationKind;
   scheduledFor: number;
   source: string;
   title?: string;
@@ -366,16 +390,8 @@ function assertOutboundMessage(args: {
     throw new ConvexError('Reed chat outbound messages need chat text.');
   }
   if (args.channels.push) {
+    if (!args.notificationKind) throw new ConvexError('Push outbound messages need a notification kind.');
     if (!args.title?.trim()) throw new ConvexError('Push outbound messages need a title.');
     if (!args.body?.trim()) throw new ConvexError('Push outbound messages need a body.');
   }
-}
-
-function notificationKindForOutbound(kind: string) {
-  if (kind === 'absence_check_in') return 'coach_catchup' as const;
-  if (kind === 'goal_drift') return 'coach_catchup' as const;
-  if (kind === 'weekly_reflection') return 'digest' as const;
-  if (kind === 'scheduled_reminder') return 'reminder' as const;
-  if (kind === 'reward') return 'reward' as const;
-  return 'system' as const;
 }

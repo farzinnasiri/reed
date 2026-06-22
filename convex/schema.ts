@@ -597,6 +597,13 @@ export default defineSchema({
     expiresAt: v.optional(v.number()),
     failureReason: v.optional(v.string()),
     kind: v.string(),
+    notificationKind: v.optional(v.union(
+      v.literal('coach_catchup'),
+      v.literal('digest'),
+      v.literal('reminder'),
+      v.literal('reward'),
+      v.literal('system'),
+    )),
     notificationIntentId: v.optional(v.id('notificationIntents')),
     priority: v.union(v.literal('high'), v.literal('low'), v.literal('normal')),
     profileId: v.id('profiles'),
@@ -617,4 +624,16 @@ export default defineSchema({
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
     .index('by_profile_id_and_dedupe_key', ['profileId', 'dedupeKey'])
     .index('by_status_and_scheduled_for', ['status', 'scheduledFor']),
+  outreachStates: defineTable({
+    claimedAt: v.optional(v.number()),
+    error: v.optional(v.string()),
+    lastOutreachAt: v.optional(v.number()),
+    lastReviewedAt: v.optional(v.number()),
+    nextReviewAt: v.number(),
+    profileId: v.id('profiles'),
+    status: v.union(v.literal('active'), v.literal('processing'), v.literal('paused')),
+    updatedAt: v.number(),
+  })
+    .index('by_next_review_at', ['status', 'nextReviewAt'])
+    .index('by_profile_id', ['profileId']),
 });

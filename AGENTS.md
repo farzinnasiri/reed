@@ -71,6 +71,11 @@ These skills do not auto-trigger. Use them explicitly when the situation matches
 2. Never commit secrets or env files (`.env`, `.env.local`, `.env.convex.local`), never read them, only ask the user.
 3. Keep `convex/_generated/` out of git; it is deployment-generated state.
 4. **Frontend / design work:** Read `DESIGN.md` before implementing or modifying any UI component, screen layout, animation, or colour. It is the single source of truth for tokens, glassmorphism, motion, and component contracts.
+5. Android build variants are intentionally distinct:
+   - `make android-arm-dev` builds the installable dev-backend APK. It uses `.env.dev`/EAS `development`, is named `Reed Dev`, and uses package `com.farzinnasiri.reed.dev`.
+   - `make android-arm-prod` builds the installable production APK. It uses `.env.prod`/EAS `production`, is named `Reed`, and uses package `com.farzinnasiri.reed`.
+   - `make android-dev-client` builds the Expo development-client APK. It uses `.env.dev`/EAS `development`, is named `Reed Development`, and uses package `com.farzinnasiri.reed.development`.
+   - If the user asks for an Android build that points to the development backend, use `make android-arm-dev`, not `make android-dev-client`, unless they explicitly ask for an Expo development client.
 
 ## Observability
 
@@ -85,6 +90,7 @@ These skills do not auto-trigger. Use them explicitly when the situation matches
 2. The auth shell supports simple email/password in Expo Go without email verification, but Google OAuth still requires a development build.
 3. Google auth for Expo uses the Convex site URL callback path, not the Expo app URL, for the OAuth redirect URI on the provider side.
 4. React Native Web in this project warns on deprecated `pointerEvents` props and `shadow*` style props. Use `style.pointerEvents` and `boxShadow` on web-facing style helpers instead of emitting legacy paths.
+5. "Development backend build" and "Expo development build/client" are not the same thing. The former is a normal installable app pointed at Convex dev (`android-arm-dev`); the latter is a dev-client for local Expo development (`android-dev-client`).
 
 ## Required Validation Before Finalizing
 

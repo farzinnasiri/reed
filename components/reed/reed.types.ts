@@ -47,6 +47,7 @@ export type ReedMessage = {
   }>;
   createdAt: number;
   id: string;
+  isAgentThinkingMessage?: boolean;
   role: 'assistant' | 'user';
   serverId?: string;
   source: ComposerSource;

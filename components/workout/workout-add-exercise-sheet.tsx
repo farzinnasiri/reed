@@ -83,6 +83,12 @@ export function AddExerciseSheet({
   const [draftEquipment, setDraftEquipment] = useState<string[]>([]);
   const [expandedBodyAreas, setExpandedBodyAreas] = useState<string[]>([]);
   const [favoriteOverrides, setFavoriteOverrides] = useState<Partial<Record<Id<'exerciseCatalog'>, boolean>>>({});
+  const [exerciseListTab, setExerciseListTab] = useState<'favorites' | 'recents'>('favorites');
+  useEffect(() => {
+    if (!isOpen) {
+      setExerciseListTab('favorites');
+    }
+  }, [isOpen]);
   const draftFilterCount = draftFocusAreas.length + draftTargetAreas.length + draftEquipment.length;
   const draftFilterSectionOptions = useMemo(
     () => [
@@ -295,22 +301,37 @@ export function AddExerciseSheet({
                   />
                 ) : (
                   <>
-                    <CatalogSection
-                      items={applyFavoriteOverrides(effectiveData?.recents ?? [])}
-                      onAddSingle={onAddSingle}
-                      onToggleFavorite={handleToggleFavorite}
-                      onToggleSelected={toggleSelectedExercise}
-                      selectedExerciseIds={selectedExerciseIdsSet}
-                      title="Recents"
-                    />
-                    <CatalogSection
-                      items={applyFavoriteOverrides(effectiveData?.favorites ?? [])}
-                      onAddSingle={onAddSingle}
-                      onToggleFavorite={handleToggleFavorite}
-                      onToggleSelected={toggleSelectedExercise}
-                      selectedExerciseIds={selectedExerciseIdsSet}
-                      title="Favorites"
-                    />
+                    {((effectiveData?.favorites?.length ?? 0) > 0 || (effectiveData?.recents?.length ?? 0) > 0) ? (
+                      <View style={styles.exerciseListTabs}>
+                        <SegmentedControl<'favorites' | 'recents'>
+                          compact
+                          onChange={setExerciseListTab}
+                          options={[
+                            { label: 'Favorites', value: 'favorites' },
+                            { label: 'Recents', value: 'recents' },
+                          ]}
+                          value={exerciseListTab}
+                          variant="pill"
+                        />
+                      </View>
+                    ) : null}
+                    {exerciseListTab === 'favorites' ? (
+                      <CatalogSection
+                        items={applyFavoriteOverrides(effectiveData?.favorites ?? [])}
+                        onAddSingle={onAddSingle}
+                        onToggleFavorite={handleToggleFavorite}
+                        onToggleSelected={toggleSelectedExercise}
+                        selectedExerciseIds={selectedExerciseIdsSet}
+                      />
+                    ) : (
+                      <CatalogSection
+                        items={applyFavoriteOverrides(effectiveData?.recents ?? [])}
+                        onAddSingle={onAddSingle}
+                        onToggleFavorite={handleToggleFavorite}
+                        onToggleSelected={toggleSelectedExercise}
+                        selectedExerciseIds={selectedExerciseIdsSet}
+                      />
+                    )}
                     <CatalogSection
                       items={applyFavoriteOverrides(effectiveData?.suggested ?? [])}
                       onAddSingle={onAddSingle}
@@ -581,7 +602,7 @@ function CatalogSection({
   onToggleSelected: (exerciseCatalogId: Id<'exerciseCatalog'>) => void;
   onToggleFavorite: (exerciseCatalogId: Id<'exerciseCatalog'>, nextIsFavorite: boolean) => void;
   selectedExerciseIds: Set<Id<'exerciseCatalog'>>;
-  title: string;
+  title?: string;
 }) {
   const { theme } = useReedTheme();
 
@@ -591,9 +612,11 @@ function CatalogSection({
 
   return (
     <View style={styles.catalogSection}>
-      <ReedText tone="muted" variant="caption">
-        {title}
-      </ReedText>
+      {title ? (
+        <ReedText tone="muted" variant="caption">
+          {title}
+        </ReedText>
+      ) : null}
       <View style={styles.catalogList}>
         {items.map((item, index) => {
           const isSelected = selectedExerciseIds.has(item._id);

@@ -399,6 +399,9 @@ export const finishSession = mutation({
       profileId: profile._id,
       reason: 'session_ended',
     });
+    await ctx.scheduler.runAfter(2 * 60 * 1000, internal.sessionFeedbackAgent.reviewEndedSession, {
+      sessionId: session._id,
+    });
 
     return { deletedEmptySession: false };
   },
