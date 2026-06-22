@@ -28,7 +28,7 @@ type ServerReedMessage = {
   createdAt: number;
   error?: string;
   role: 'assistant' | 'user';
-  source: 'quick-action' | 'typed' | 'voice' | 'system';
+  source: 'background_coach' | 'quick-action' | 'typed' | 'voice' | 'system';
   status: 'failed' | 'pending' | 'sent';
 };
 
@@ -103,7 +103,7 @@ export function useReedConversation({
         id: renderId,
         role: message.role,
         serverId: message._id,
-        source: message.source === 'system' ? 'typed' : message.source,
+        source: message.source === 'system' || message.source === 'background_coach' ? 'typed' : message.source,
         status: message.status,
         text: message.content || (message.status === 'pending' ? '' : message.error ?? ''),
       };

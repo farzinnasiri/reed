@@ -44,7 +44,17 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     'expo-router',
-    'expo-font',
+    [
+      'expo-font',
+      {
+        fonts: [
+          './assets/fonts/Outfit_400Regular.ttf',
+          './assets/fonts/Outfit_600SemiBold.ttf',
+          './assets/fonts/Outfit_800ExtraBold.ttf',
+          './assets/fonts/Outfit_900Black.ttf',
+        ],
+      },
+    ],
     [
       'expo-splash-screen',
       {
@@ -73,8 +83,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-audio',
       {
-        microphonePermission: false,
-        recordAudioAndroid: false,
+        microphonePermission: 'Allow Reed to record voice notes you choose to transcribe.',
+        recordAudioAndroid: true,
       },
     ],
     [

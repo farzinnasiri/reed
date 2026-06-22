@@ -49,7 +49,6 @@ export function startClientWideEvent(name: string, initialAttrs: ClientWideEvent
         ...finalAttrs,
         'duration_ms': Date.now() - startedAt,
         'error': true,
-        'exception.message': errorMessage(error),
         'exception.slug': slug,
         'exception.type': errorType(error),
       };
@@ -85,7 +84,7 @@ function captureClientWideEvent(attrs: ClientWideEventAttrs) {
 function reportClientError(error: unknown, attrs: ClientWideEventAttrs) {
   const safe: Record<string, string | number | boolean | null> = {};
   for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined || key === 'exception.message') continue;
+    if (value === undefined) continue;
     safe[key] = sanitizeValue(value);
   }
   safe.handled = true;
@@ -95,10 +94,6 @@ function reportClientError(error: unknown, attrs: ClientWideEventAttrs) {
 function sanitizeValue(value: Exclude<ClientWideEventValue, undefined>) {
   if (typeof value !== 'string') return value;
   return value.length <= MAX_STRING_LENGTH ? value : `${value.slice(0, MAX_STRING_LENGTH)}...[truncated]`;
-}
-
-function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function errorType(error: unknown) {

@@ -226,7 +226,13 @@ export default defineSchema({
     profileId: v.id('profiles'),
     role: v.union(v.literal('user'), v.literal('assistant')),
     content: v.string(),
-    source: v.union(v.literal('quick-action'), v.literal('typed'), v.literal('voice'), v.literal('system')),
+    source: v.union(
+      v.literal('background_coach'),
+      v.literal('quick-action'),
+      v.literal('system'),
+      v.literal('typed'),
+      v.literal('voice'),
+    ),
     status: v.union(v.literal('pending'), v.literal('sent'), v.literal('failed')),
     createdAt: v.number(),
     completedAt: v.optional(v.number()),
@@ -483,4 +489,132 @@ export default defineSchema({
     renderedContext: v.string(),
   })
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt']),
+  notificationDevices: defineTable({
+    appVersion: v.optional(v.string()),
+    authUserId: v.string(),
+    clientInstallId: v.string(),
+    disabledAt: v.optional(v.number()),
+    disableReason: v.optional(v.union(
+      v.literal('device_not_registered'),
+      v.literal('logout'),
+      v.literal('permission_denied'),
+      v.literal('replaced'),
+    )),
+    enabled: v.boolean(),
+    expoPushToken: v.string(),
+    lastRegisteredAt: v.number(),
+    lastSeenAt: v.number(),
+    platform: v.union(v.literal('android'), v.literal('ios')),
+    profileId: v.id('profiles'),
+  })
+    .index('by_expo_push_token', ['expoPushToken'])
+    .index('by_profile_id', ['profileId'])
+    .index('by_profile_id_and_enabled', ['profileId', 'enabled'])
+    .index('by_profile_id_and_client_install_id', ['profileId', 'clientInstallId']),
+  notificationPreferences: defineTable({
+    coachCatchups: v.boolean(),
+    digests: v.boolean(),
+    enabled: v.boolean(),
+    maxPerDay: v.number(),
+    minGapMinutes: v.number(),
+    profileId: v.id('profiles'),
+    quietHoursEnd: v.optional(v.string()),
+    quietHoursStart: v.optional(v.string()),
+    reminders: v.boolean(),
+    rewards: v.boolean(),
+    timeZone: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index('by_profile_id', ['profileId']),
+  notificationIntents: defineTable({
+    attemptCount: v.number(),
+    body: v.string(),
+    createdAt: v.number(),
+    createdBy: v.string(),
+    data: v.record(v.string(), v.string()),
+    dedupeKey: v.string(),
+    expiresAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    kind: v.union(
+      v.literal('coach_catchup'),
+      v.literal('digest'),
+      v.literal('reminder'),
+      v.literal('reward'),
+      v.literal('system'),
+    ),
+    lastAttemptAt: v.optional(v.number()),
+    priority: v.union(v.literal('high'), v.literal('low'), v.literal('normal')),
+    profileId: v.id('profiles'),
+    scheduledFor: v.number(),
+    skipReason: v.optional(v.string()),
+    status: v.union(
+      v.literal('cancelled'),
+      v.literal('failed'),
+      v.literal('pending'),
+      v.literal('sending'),
+      v.literal('sent'),
+      v.literal('skipped'),
+    ),
+    title: v.string(),
+    updatedAt: v.number(),
+  })
+    .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
+    .index('by_profile_id_and_dedupe_key', ['profileId', 'dedupeKey'])
+    .index('by_status_and_scheduled_for', ['status', 'scheduledFor']),
+  notificationDeliveries: defineTable({
+    deviceId: v.id('notificationDevices'),
+    error: v.optional(v.string()),
+    expoPushToken: v.string(),
+    expoTicketId: v.optional(v.string()),
+    intentId: v.id('notificationIntents'),
+    profileId: v.id('profiles'),
+    receiptCheckedAt: v.optional(v.number()),
+    sentAt: v.number(),
+    status: v.union(
+      v.literal('receipt_error'),
+      v.literal('receipt_ok'),
+      v.literal('ticket_error'),
+      v.literal('ticket_ok'),
+    ),
+  })
+    .index('by_expo_ticket_id', ['expoTicketId'])
+    .index('by_intent_id', ['intentId'])
+    .index('by_profile_id_and_status_and_sent_at', ['profileId', 'status', 'sentAt'])
+    .index('by_status_and_sent_at', ['status', 'sentAt']),
+  outboundMessages: defineTable({
+    body: v.optional(v.string()),
+    cancelledAt: v.optional(v.number()),
+    channels: v.object({
+      push: v.boolean(),
+      reedChat: v.boolean(),
+    }),
+    chatMessageText: v.optional(v.string()),
+    claimedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    data: v.record(v.string(), v.string()),
+    dedupeKey: v.string(),
+    expiresAt: v.optional(v.number()),
+    failureReason: v.optional(v.string()),
+    kind: v.string(),
+    notificationIntentId: v.optional(v.id('notificationIntents')),
+    priority: v.union(v.literal('high'), v.literal('low'), v.literal('normal')),
+    profileId: v.id('profiles'),
+    reedMessageId: v.optional(v.id('reedMessages')),
+    scheduledFor: v.number(),
+    source: v.string(),
+    status: v.union(
+      v.literal('cancelled'),
+      v.literal('failed'),
+      v.literal('pending'),
+      v.literal('sending'),
+      v.literal('sent'),
+      v.literal('skipped'),
+    ),
+    title: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
+    .index('by_profile_id_and_dedupe_key', ['profileId', 'dedupeKey'])
+    .index('by_status_and_scheduled_for', ['status', 'scheduledFor']),
 });

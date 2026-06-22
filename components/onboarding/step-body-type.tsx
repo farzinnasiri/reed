@@ -3,7 +3,7 @@
 // The stored value is the visual preset, not the old coarse physique bucket.
 // ---------------------------------------------------------------------------
 
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,

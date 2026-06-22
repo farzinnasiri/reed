@@ -523,6 +523,47 @@ export const completeAssistantMessage = internalMutation({
   },
 });
 
+export const createBackgroundMessage = internalMutation({
+  args: {
+    clientNonce: v.optional(v.string()),
+    content: v.string(),
+    createdAt: v.number(),
+    profileId: v.id('profiles'),
+  },
+  returns: v.object({
+    messageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+  }),
+  handler: async (ctx, args) => {
+    const content = args.content.trim();
+    if (!content) throw new ConvexError('Background Reed message cannot be empty.');
+    if (content.length > 8000) throw new ConvexError('Background Reed message is too long.');
+
+    const profile = await ctx.db.get(args.profileId);
+    if (!profile) throw new ConvexError('Profile not found.');
+
+    const thread = await getOrCreateActiveThread(ctx, args.profileId, args.createdAt);
+    const messageId = await ctx.db.insert('reedMessages', {
+      threadId: thread._id,
+      profileId: args.profileId,
+      role: 'assistant',
+      content,
+      source: 'background_coach',
+      status: 'sent',
+      createdAt: args.createdAt,
+      completedAt: args.createdAt,
+      clientNonce: args.clientNonce,
+    });
+
+    await ctx.db.patch(thread._id, {
+      lastMessageAt: args.createdAt,
+      updatedAt: args.createdAt,
+    });
+
+    return { messageId, threadId: thread._id };
+  },
+});
+
 export const failAssistantMessage = internalMutation({
   args: {
     assistantMessageId: v.id('reedMessages'),

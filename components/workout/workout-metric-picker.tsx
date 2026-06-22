@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, PanResponder, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import { isDurationField, type RecipeFieldDefinition } from '@/domains/workout/recipes';

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { analytics } from '@/lib/analytics';
 import { Platform, View, type ScrollView as ScrollViewType } from 'react-native';
 import { useQuery } from 'convex/react';
@@ -6,6 +6,7 @@ import { api } from '@/convex/_generated/api';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
+import { ReedText } from '@/components/ui/reed-text';
 import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
@@ -30,6 +31,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isThreadReady, setIsThreadReady] = useState(false);
+  const [voiceToastMessage, setVoiceToastMessage] = useState<string | null>(null);
   const {
     attachFromCamera,
     attachFromFiles,
@@ -68,6 +70,9 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     runtime,
     shouldDelayAssistantStart,
   });
+  const showVoiceToast = useCallback((message: string) => {
+    setVoiceToastMessage(message);
+  }, []);
   const {
     reset: resetVoice,
     retry: retryVoice,
@@ -76,7 +81,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     stop: stopVoice,
   } = useSpeechDraft('chat', transcript => {
     setComposerText(current => current.trim() ? `${current.trimEnd()} ${transcript}` : transcript);
-  });
+  }, { onError: showVoiceToast });
   const voiceState = useMemo(() => ({
     error: speechState.error,
     status: speechState.status,
@@ -173,6 +178,13 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   }, [composerDockHeight]);
 
   useEffect(() => {
+    if (!voiceToastMessage) return;
+
+    const timeout = setTimeout(() => setVoiceToastMessage(null), 3400);
+    return () => clearTimeout(timeout);
+  }, [voiceToastMessage]);
+
+  useEffect(() => {
     if (!isThreadReady) return;
     if (!hasInitialScrollSettledRef.current) return;
     if (keyboardLift <= 0 && voiceState.status === 'idle') return;
@@ -253,6 +265,14 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         scrollRef={scrollRef}
       />
 
+      {voiceToastMessage ? (
+        <VoiceToast
+          message={voiceToastMessage}
+          onDismiss={() => setVoiceToastMessage(null)}
+          top={insets.top + theme.spacing.sm}
+        />
+      ) : null}
+
       <View
         onLayout={event => {
           const nextHeight = Math.round(event.nativeEvent.layout.height);
@@ -307,6 +327,45 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         onUseImage={uploadEditedImage}
         visible={Boolean(editingImage)}
       />
+    </View>
+  );
+}
+
+function VoiceToast({
+  message,
+  onDismiss,
+  top,
+}: {
+  message: string;
+  onDismiss: () => void;
+  top: number;
+}) {
+  const { theme } = useReedTheme();
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={[
+        styles.voiceToastContainer,
+        {
+          paddingHorizontal: theme.spacing.sm,
+          top,
+        },
+      ]}
+    >
+      <View
+        accessibilityRole="alert"
+        onTouchEnd={onDismiss}
+        style={[
+          styles.voiceToast,
+          {
+            backgroundColor: theme.colors.dangerFill,
+            borderColor: theme.colors.dangerBorder,
+          },
+        ]}
+      >
+        <ReedText tone="danger" variant="caption">{message}</ReedText>
+      </View>
     </View>
   );
 }

@@ -21,7 +21,12 @@ const SPEECH_RECORDING_OPTIONS = {
   isMeteringEnabled: true,
 };
 
-export function useSpeechDraft(actor: SpeechTranscriptionActor, onText: (text: string) => void) {
+export function useSpeechDraft(
+  actor: SpeechTranscriptionActor,
+  onText: (text: string) => void,
+  options: { onError?: (message: string) => void } = {},
+) {
+  const { onError } = options;
   const recorder = useAudioRecorder(SPEECH_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 80);
   const recordingStartedAtRef = useRef(0);
@@ -43,9 +48,11 @@ export function useSpeechDraft(actor: SpeechTranscriptionActor, onText: (text: s
       }
       setState({ error: null, status: 'idle' });
     } catch (error) {
-      setState({ error: toSpeechDraftError(error), status: 'failed' });
+      const message = toSpeechDraftError(error);
+      onError?.(message);
+      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
     }
-  }, [actor, onText]);
+  }, [actor, onError, onText]);
 
   const start = useCallback(async () => {
     if (state.status === 'listening' || state.status === 'transcribing') return;
@@ -54,9 +61,11 @@ export function useSpeechDraft(actor: SpeechTranscriptionActor, onText: (text: s
       recordingStartedAtRef.current = await startLocalSpeechRecording(recorder);
     } catch (error) {
       recordingStartedAtRef.current = 0;
-      setState({ error: toSpeechDraftError(error), status: 'failed' });
+      const message = toSpeechDraftError(error);
+      onError?.(message);
+      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
     }
-  }, [recorder, state.status]);
+  }, [onError, recorder, state.status]);
 
   const stop = useCallback(async () => {
     if (state.status !== 'listening') return;
@@ -65,11 +74,13 @@ export function useSpeechDraft(actor: SpeechTranscriptionActor, onText: (text: s
       cachedRecordingRef.current = recording;
       await transcribeRecording(recording);
     } catch (error) {
-      setState({ error: toSpeechDraftError(error), status: 'failed' });
+      const message = toSpeechDraftError(error);
+      onError?.(message);
+      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
     } finally {
       recordingStartedAtRef.current = 0;
     }
-  }, [recorder, state.status, transcribeRecording]);
+  }, [onError, recorder, state.status, transcribeRecording]);
 
   const retry = useCallback(async () => {
     const recording = cachedRecordingRef.current;

@@ -127,6 +127,21 @@ export const styles = StyleSheet.create({
     width: 42,
     zIndex: 8,
   },
+  voiceToastContainer: {
+    alignItems: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    zIndex: 35,
+  },
+  voiceToast: {
+    borderRadius: reedRadii.lg,
+    borderWidth: 1,
+    maxWidth: 420,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    width: '100%',
+  },
   messageCluster: {
     gap: 14,
   },

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';

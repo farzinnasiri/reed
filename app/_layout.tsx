@@ -1,24 +1,27 @@
-import {
-  Outfit_400Regular,
-  Outfit_600SemiBold,
-  Outfit_800ExtraBold,
-  Outfit_900Black,
-  useFonts,
-} from '@expo-google-fonts/outfit';
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { ConvexProvider } from 'convex/react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, StyleSheet, View } from 'react-native';
+import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PostHogErrorBoundary, PostHogProvider } from 'posthog-react-native';
 import { posthog } from '@/lib/posthog';
 import { analytics } from '@/lib/analytics';
 import { authClient } from '@/lib/auth-client';
+import {
+  getStartupResult,
+  getStartupViewerState,
+  hideSplashAndEndStartup,
+  markStartupAuthReady,
+  markStartupConfigReady,
+  markStartupFontsReady,
+  markStartupViewerReady,
+} from '@/lib/startup-observability';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
@@ -27,6 +30,7 @@ import { reedRadii } from '@/design/system';
 import { convex, missingPublicEnv } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { requestAppCapabilityPermissionsAsync } from '@/lib/app-permissions';
+import { registerPushDeviceAsync } from '@/lib/push-notifications';
 
 export {
   ErrorBoundary,
@@ -35,12 +39,6 @@ export {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  const [fontsLoaded, fontLoadError] = useFonts({
-    Outfit_400Regular,
-    Outfit_600SemiBold,
-    Outfit_800ExtraBold,
-    Outfit_900Black,
-  });
   const pathname = usePathname();
   const previousPathname = useRef<string | undefined>(undefined);
 
@@ -51,34 +49,36 @@ export default function RootLayout() {
     }
   }, [pathname]);
 
-  if (!fontsLoaded && !fontLoadError) {
-    return null;
-  }
+  useEffect(() => {
+    markStartupFontsReady(false);
+  }, []);
 
   return (
     <SafeAreaProvider>
       <ReedThemeProvider>
         <GestureHandlerRootView style={styles.gestureRoot}>
-          <PostHogProvider
-            client={posthog}
-            autocapture={{
-              captureScreens: false,
-              captureTouches: true,
-              propsToCapture: ['testID'],
-              maxElementsCaptured: 20,
-            }}
-          >
-            <PostHogErrorBoundary
-              additionalProperties={() => ({
-                'error.boundary': 'root',
-                'event.kind': 'operational',
-                'screen.name': pathname,
-              })}
-              fallback={RootErrorFallback}
+          <KeyboardProvider>
+            <PostHogProvider
+              client={posthog}
+              autocapture={{
+                captureScreens: false,
+                captureTouches: true,
+                propsToCapture: ['testID'],
+                maxElementsCaptured: 20,
+              }}
             >
-              <RootApp />
-            </PostHogErrorBoundary>
-          </PostHogProvider>
+              <PostHogErrorBoundary
+                additionalProperties={() => ({
+                  'error.boundary': 'root',
+                  'event.kind': 'operational',
+                  'screen.name': pathname,
+                })}
+                fallback={RootErrorFallback}
+              >
+                <RootApp />
+              </PostHogErrorBoundary>
+            </PostHogProvider>
+          </KeyboardProvider>
         </GestureHandlerRootView>
       </ReedThemeProvider>
     </SafeAreaProvider>
@@ -112,7 +112,11 @@ function RootApp() {
 
   useEffect(() => {
     if (hasBootBlockingConfigError) {
-      SplashScreen.hideAsync().catch(() => {});
+      markStartupConfigReady(missingPublicEnv.length);
+      hideSplashAndEndStartup('config_error', {
+        'auth.state': 'not_started',
+        'viewer.state': 'not_started',
+      });
     }
   }, [hasBootBlockingConfigError]);
 
@@ -175,14 +179,39 @@ function RootNavigator() {
   const { theme } = useReedTheme();
   const { data: session, isPending } = authClient.useSession();
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
+  const disableNotificationDevice = useMutation(api.notificationDevices.disableCurrentDevice);
+  const registerNotificationDevice = useMutation(api.notificationDevices.registerDevice);
   const isAppReady = Boolean(session && viewer?.onboardingCompletedAt);
   const isRoutingPending = isPending || Boolean(session && viewer === undefined);
+  const hasMarkedAuthReady = useRef(false);
+  const hasMarkedViewerReady = useRef(false);
 
   useEffect(() => {
     if (!isRoutingPending) {
-      SplashScreen.hideAsync().catch(() => {});
+      hideSplashAndEndStartup(getStartupResult(session, viewer), {
+        'auth.state': session ? 'signed_in' : 'signed_out',
+        'viewer.state': getStartupViewerState(session, viewer),
+      });
     }
-  }, [isRoutingPending]);
+  }, [isRoutingPending, session, viewer]);
+
+  useEffect(() => {
+    if (isPending || hasMarkedAuthReady.current) {
+      return;
+    }
+
+    hasMarkedAuthReady.current = true;
+    markStartupAuthReady(session);
+  }, [isPending, session]);
+
+  useEffect(() => {
+    if (!session || viewer === undefined || hasMarkedViewerReady.current) {
+      return;
+    }
+
+    hasMarkedViewerReady.current = true;
+    markStartupViewerReady(session, viewer);
+  }, [session, viewer]);
 
   useEffect(() => {
     if (viewer) {
@@ -196,7 +225,11 @@ function RootNavigator() {
     }
 
     void requestAppCapabilityPermissionsAsync();
-  }, [isAppReady]);
+    void registerPushDeviceAsync({
+      disableDevice: disableNotificationDevice,
+      registerDevice: registerNotificationDevice,
+    });
+  }, [disableNotificationDevice, isAppReady, registerNotificationDevice]);
 
   if (isRoutingPending) {
     return (

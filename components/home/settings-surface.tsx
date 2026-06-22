@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
