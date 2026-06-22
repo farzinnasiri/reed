@@ -18,9 +18,9 @@ help:
 	@echo "make convex-deploy     # deploy Convex backend to production using .env.prod"
 	@echo "make convex-env-push ENV=dev|prod"
 	@echo "make eas-env-sync ENV=dev|prod # sync EXPO_PUBLIC_* to EAS env"
-	@echo "make android-dev-client # development client APK using .env.dev values"
-	@echo "make android-arm-dev   # arm64 APK build using .env.dev values"
-	@echo "make android-arm-prod  # arm64 APK build using .env.prod values"
+	@echo "make android-dev-client # Expo development client APK using .env.dev values"
+	@echo "make android-arm-dev   # installable arm64 APK named Reed Dev using .env.dev values"
+	@echo "make android-arm-prod  # installable arm64 APK named Reed using .env.prod values"
 	@echo "make env-show ENV=dev|prod"
 
 env-check:
@@ -103,14 +103,14 @@ eas-env-sync: env-check
 android-dev-client:
 	@$(MAKE) eas-env-sync ENV=dev
 	@set -a; source ".env.dev"; set +a; \
-	REED_ENV_FILE=".env.dev" npx eas-cli build -p android -e development
+	REED_APP_VARIANT="development" REED_ENV_FILE=".env.dev" npx eas-cli build -p android -e development
 
 android-arm-dev:
 	@$(MAKE) eas-env-sync ENV=dev
 	@set -a; source ".env.dev"; set +a; \
-	REED_ENV_FILE=".env.dev" npx eas-cli build -p android -e arm64Dev
+	REED_APP_VARIANT="dev" REED_ENV_FILE=".env.dev" npx eas-cli build -p android -e arm64Dev
 
 android-arm-prod:
 	@$(MAKE) eas-env-sync ENV=prod
 	@set -a; source ".env.prod"; set +a; \
-	REED_ENV_FILE=".env.prod" npx eas-cli build -p android -e arm64Prod
+	REED_APP_VARIANT="production" REED_ENV_FILE=".env.prod" npx eas-cli build -p android -e arm64Prod

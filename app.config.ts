@@ -10,10 +10,13 @@ if (existsSync(resolvedEnvFile)) {
   loadEnv({ path: resolvedEnvFile, override: true, quiet: true });
 }
 
-const appName = 'reed';
 const slug = 'reed';
-const scheme = 'reed';
-const androidPackage = 'com.farzinnasiri.reed';
+const appVariant = getAppVariant();
+const appName = appVariant === 'development' ? 'Reed Development' : appVariant === 'dev' ? 'Reed Dev' : 'Reed';
+const scheme = appVariant === 'production' ? 'reed' : `reed-${appVariant}`;
+const androidPackage = appVariant === 'production'
+  ? 'com.farzinnasiri.reed'
+  : `com.farzinnasiri.reed.${appVariant}`;
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
@@ -100,3 +103,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     posthogHost: process.env.POSTHOG_HOST,
   },
 });
+
+function getAppVariant() {
+  const explicitVariant = process.env.REED_APP_VARIANT;
+  if (explicitVariant === 'dev' || explicitVariant === 'development' || explicitVariant === 'production') {
+    return explicitVariant;
+  }
+
+  if (selectedEnvFile.includes('.env.dev')) return 'dev';
+  if (selectedEnvFile.includes('.env.prod')) return 'production';
+  return 'development';
+}

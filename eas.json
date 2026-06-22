@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 10.0.0"
+    "version": ">= 10.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -11,6 +12,7 @@
         "buildType": "apk"
       },
       "env": {
+        "REED_APP_VARIANT": "development",
         "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
       }
     },
@@ -26,6 +28,7 @@
         "buildType": "apk"
       },
       "env": {
+        "REED_APP_VARIANT": "dev",
         "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
       }
     },
@@ -35,6 +38,7 @@
         "buildType": "apk"
       },
       "env": {
+        "REED_APP_VARIANT": "production",
         "ORG_GRADLE_PROJECT_reactNativeArchitectures": "arm64-v8a"
       }
     },
