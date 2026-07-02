@@ -1,6 +1,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { Animated, Image, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { canUseGlassBlur, getAndroidGlassBlurProps, getGlassTabPillTokens } from '@/components/ui/glass-material';
+import { useGlassBlurTarget } from '@/components/ui/blur-target-context';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedEasing, reedMotion, shouldUseNativeDriver } from '@/design/motion';
@@ -14,11 +17,11 @@ const COMPOSER_INPUT_MAX_HEIGHT = 96;
 export function ReedComposer({
   attachments,
   canAttachMore,
-  composerText,
+  draftSeed,
   disabled,
   isPreparingAttachments,
   lastAttachmentError,
-  onChangeComposerText,
+  onChangeComposerDraft,
   onPickCamera,
   onPickFiles,
   onPickLibrary,
@@ -35,25 +38,36 @@ export function ReedComposer({
 }: {
   attachments: ReedDraftAttachment[];
   canAttachMore: boolean;
-  composerText: string;
+  draftSeed: { revision: number; text: string };
   disabled: boolean;
   isPreparingAttachments: boolean;
   lastAttachmentError: string | null;
-  onChangeComposerText: (text: string) => void;
+  onChangeComposerDraft: (text: string) => void;
   onPickCamera: () => void;
   onPickFiles: () => void;
   onPickLibrary: () => void;
-  onQuickAction: (prompt: string) => void;
+  onQuickAction: (prompt: string) => boolean;
   onRemoveAttachment: (attachmentId: string) => void;
   onRetryVoice: () => void;
-  onSendTyped: (text: string) => void;
-  onSendVoiceDraft: (text: string) => void;
+  onSendTyped: (text: string) => boolean;
+  onSendVoiceDraft: (text: string) => boolean;
   onStartVoice: () => void;
   onStopVoice: () => void;
   quickActions: ReedQuickAction[];
   shouldShowQuickActions: boolean;
   voiceState: VoiceComposerState;
 }) {
+  const [draftText, setDraftText] = useState(draftSeed.text);
+
+  useEffect(() => {
+    setDraftText(draftSeed.text);
+  }, [draftSeed.revision, draftSeed.text]);
+
+  function handleChangeDraftText(nextText: string) {
+    setDraftText(nextText);
+    onChangeComposerDraft(nextText);
+  }
+
   return (
     <>
       {shouldShowQuickActions ? (
@@ -69,7 +83,9 @@ export function ReedComposer({
               disabled={disabled}
               key={action.id}
               label={action.label}
-              onPress={() => onQuickAction(action.prompt)}
+              onPress={() => {
+                onQuickAction(action.prompt);
+              }}
             />
           ))}
         </ScrollView>
@@ -82,7 +98,7 @@ export function ReedComposer({
         isPreparingAttachments={isPreparingAttachments}
         lastAttachmentError={lastAttachmentError}
         onCancelVoice={onStopVoice}
-        onChangeText={onChangeComposerText}
+        onChangeText={handleChangeDraftText}
         onPickCamera={onPickCamera}
         onPickFiles={onPickFiles}
         onPickLibrary={onPickLibrary}
@@ -93,10 +109,10 @@ export function ReedComposer({
             onSendVoiceDraft(voiceState.transcript);
             return;
           }
-          onSendTyped(composerText);
+          onSendTyped(draftText);
         }}
         onVoice={onStartVoice}
-        text={composerText}
+        text={draftText}
         voiceState={voiceState}
       />
     </>
@@ -112,7 +128,12 @@ function QuickActionChip({
   label: string;
   onPress: () => void;
 }) {
-  const { theme } = useReedTheme();
+  const { reducedTransparency, theme } = useReedTheme();
+  const blurTarget = useGlassBlurTarget();
+  const pane = getGlassTabPillTokens(theme);
+  const androidBlurTarget = blurTarget?.isReady ? blurTarget.targetRef : undefined;
+  const canUseBlur = canUseGlassBlur({ hasAndroidTarget: Boolean(androidBlurTarget) }) && !reducedTransparency;
+  const shellBackground = canUseBlur ? pane.backgroundColor : pane.fallbackBackgroundColor;
 
   return (
     <Pressable
@@ -124,14 +145,35 @@ function QuickActionChip({
       onPress={onPress}
       style={({ pressed }) => [
         styles.quickActionChip,
+        pane.shadowStyle,
         {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
+          backgroundColor: shellBackground,
+          borderColor: pane.borderColor,
         },
         getTapScaleStyle(pressed, disabled),
       ]}
     >
-      <ReedText variant="caption">{label}</ReedText>
+      {canUseBlur ? (
+        <BlurView
+          {...getAndroidGlassBlurProps(androidBlurTarget)}
+          intensity={pane.blurIntensity}
+          pointerEvents="none"
+          style={StyleSheet.absoluteFill}
+          tint={theme.blur.tint}
+        />
+      ) : null}
+      <View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          styles.quickActionChipHighlight,
+          {
+            backgroundColor: canUseBlur ? 'transparent' : shellBackground,
+            borderColor: pane.borderColor,
+          },
+        ]}
+      />
+      <ReedText style={styles.quickActionChipLabel} variant="caption">{label}</ReedText>
     </Pressable>
   );
 }
@@ -216,7 +258,7 @@ function ComposerCard({
   };
 
   return (
-    <GlassSurface contentStyle={styles.composerCardContent} style={styles.composerCard}>
+    <GlassSurface androidBlur contentStyle={styles.composerCardContent} style={styles.composerCard}>
       {attachments.length > 0 || lastAttachmentError ? (
         <AttachmentTray
           attachments={attachments}

@@ -8,13 +8,12 @@ import {
 import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { StatusBar } from 'expo-status-bar';
 import { ConvexProvider } from 'convex/react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Platform, StatusBar, StyleSheet, View } from 'react-native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PostHogErrorBoundary, PostHogProvider } from 'posthog-react-native';
 import { posthog } from '@/lib/posthog';
@@ -111,7 +110,11 @@ function RootErrorFallback() {
 
   return (
     <>
-      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+        translucent
+      />
       <ScreenBackdrop>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.screen}>
@@ -144,7 +147,11 @@ function RootApp() {
   if (hasBootBlockingConfigError) {
     return (
       <>
-        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar
+          backgroundColor="transparent"
+          barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+          translucent
+        />
         <ScreenBackdrop>
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.screen}>
@@ -255,14 +262,22 @@ function RootNavigator() {
   if (isRoutingPending) {
     return (
       <>
-        <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+        <StatusBar
+          backgroundColor="transparent"
+          barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+          translucent
+        />
       </>
     );
   }
 
   return (
     <>
-      <StatusBar style={theme.mode === 'dark' ? 'light' : 'dark'} />
+      <StatusBar
+        backgroundColor="transparent"
+        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+        translucent
+      />
       <Stack
         screenOptions={{
           animation: Platform.OS === 'web' ? 'none' : 'fade_from_bottom',

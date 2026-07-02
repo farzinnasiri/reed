@@ -226,7 +226,7 @@ Glass surfaces use a three-layer stack on iOS and web:
 2. **Fill layer** — Translucent `backgroundColor` on the container view (`glass-fill` token).
 3. **Highlight layer** — A top-border inset overlay at `opacity: 0.75` to catch the specular edge (`glass-highlight` token).
 
-**Android fallback:** `BlurView` is skipped on Android (artefacts on rounded translucent views). The opaque `glass-fallback` colour is used instead. Shadows are also suppressed on Android.
+**Android blur:** Android `BlurView` requires an explicit `BlurTargetView`/`blurTarget` relationship. Use `GlassBlurTargetProvider` plus `GlassBlurTarget` around the content that should be sampled, then opt floating surfaces into Android blur (`GlassSurface androidBlur` or the shared tab/header/chip glass primitives). If no target exists, use the opaque `glass-fallback` colour. Shadows are still suppressed on Android.
 
 **Pane tones:**
 - `default`: `glass-fill` / `glass-highlight` border / `blur 66` (light), `blur 52` (dark)
@@ -238,6 +238,8 @@ Glass surfaces use a three-layer stack on iOS and web:
 - Keep card shadows visible by giving scroll content enough horizontal breathing room; do not push `GlassSurface` cards hard against clipped screen edges.
 
 **Backdrop diffusion:** Full-screen scenes use a radial gradient behind glass layers for ambient depth (`cool`, `warm`, `neutral` variants from `getBackdropDiffusionTokens`). These are background-only, not glass colours.
+
+**Background motion:** No background or presence animation is currently active. `AmbientBackground` is only a static canvas filler. Do not add background dots, traces, auroras, full-screen colour fields, oversized SVG radial blobs, animated gradient colours, full-screen frosted layers, or header aura/presence pulses unless a new direction is explicitly approved.
 
 ## Shapes
 
@@ -266,7 +268,7 @@ Four variants: `primary`, `secondary`, `ghost`, `danger`. All share `rounded.sm 
 Typed `Text` wrapper with `variant` and `tone` props. Never use raw `Text` + inline style for anything covered by these variants.
 
 ### `GlassSurface`
-`rounded.xl`, `borderWidth: 1`, `overflow: hidden`. Tones: `default` / `danger`. Inner content: `padding: 20px`, `gap: 14px`. On iOS/web renders a `BlurView` behind content; on Android uses opaque fallback fill.
+`rounded.xl`, `borderWidth: 1`, `overflow: hidden`. Tones: `default` / `danger`. Inner content: `padding: 20px`, `gap: 14px`. On iOS/web renders a `BlurView` behind content; on Android it can render native blur only when opted in with an explicit `GlassBlurTarget`.
 
 ### `SegmentedControl`
 Shell: `rounded.lg`, `padding: 4px`. Animated thumb slides via `Animated.timing` at `standard (180ms)`. Active label: `text-primary`. Inactive: `text-muted`. Heights: compact `40px`, default `44px`, stacked (icon+label) `58px`.
@@ -283,6 +285,9 @@ All animation primitives are single-source in `design/motion.ts`. Do not add cus
 | `micro` | 100ms | Press feedback (tap scale), fast toggles |
 | `standard` | 180ms | Segmented thumb, tab transitions, list inserts |
 | `mode` | 240ms | Theme switch, screen entry/exit |
+| `ambientReaction` | 360ms | Reed background response pulse |
+| `ambientSettle` | 820ms | Reed background pulse return |
+| `ambientQuick/Medium/Slow` | 11s / 16s / 22s | Long-running background drift |
 
 **Easing:** `easeOut (quad)` for animated values; `easeInOut (quad)` for layout animations.
 

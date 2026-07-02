@@ -13,6 +13,7 @@ import {
   TAB_DOCK_HORIZONTAL_MARGIN,
   TAB_PILL_MIN_HEIGHT,
 } from '@/components/ui/glass-material';
+import { GlassBlurTarget, GlassBlurTargetProvider } from '@/components/ui/blur-target-context';
 import { GlassTabPill } from '@/components/ui/glass-tab-pill';
 import { api } from '@/convex/_generated/api';
 import { useReedTheme } from '@/design/provider';
@@ -37,7 +38,6 @@ export function AppShell({ children, displayName }: AppShellProps) {
   const [isWorkoutSessionFullscreen, setIsWorkoutSessionFullscreen] = useState(false);
 
   const showDock = !isEditingSettingsProfile && !isWorkoutSessionFullscreen;
-  const shellTopInset = insets.top;
   const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
   const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
 
@@ -121,43 +121,45 @@ export function AppShell({ children, displayName }: AppShellProps) {
         setIsWorkoutSessionFullscreen,
       }}
     >
-      <View
-        style={[
-          styles.shellRoot,
-          {
-            backgroundColor: theme.colors.canvas,
-          },
-        ]}
-      >
-        <View style={[styles.shellContentStack, { backgroundColor: theme.colors.canvas }]}> 
-          <View style={[styles.shellContentLayer, { backgroundColor: theme.colors.canvas, pointerEvents: 'box-none', top: shellTopInset }]}> 
-            <View style={[styles.shellScreenCanvas, { backgroundColor: theme.colors.canvas }]}> 
-              {children}
+      <GlassBlurTargetProvider>
+        <View
+          style={[
+            styles.shellRoot,
+            {
+              backgroundColor: theme.colors.canvas,
+            },
+          ]}
+        >
+          <GlassBlurTarget style={[styles.shellContentStack, { backgroundColor: theme.colors.canvas }]}>
+            <View style={[styles.shellContentLayer, { backgroundColor: theme.colors.canvas, pointerEvents: 'box-none' }]}>
+              <View style={[styles.shellScreenCanvas, { backgroundColor: theme.colors.canvas }]}>
+                {children}
+              </View>
             </View>
-          </View>
-        </View>
+          </GlassBlurTarget>
 
-        {showDock ? (
-          <View
-            onLayout={event => {
-              const nextHeight = Math.round(event.nativeEvent.layout.height);
-              if (nextHeight > 0 && nextHeight !== dockHeight) {
-                setDockHeight(nextHeight);
-              }
-            }}
-            style={[
-              styles.bottomDockFloating,
-              {
-                bottom: dockBottom,
-                left: TAB_DOCK_HORIZONTAL_MARGIN,
-                right: TAB_DOCK_HORIZONTAL_MARGIN,
-              },
-            ]}
-          >
-            <GlassTabPill items={tabItems} onPress={handleChangeMode} />
-          </View>
-        ) : null}
-      </View>
+          {showDock ? (
+            <View
+              onLayout={event => {
+                const nextHeight = Math.round(event.nativeEvent.layout.height);
+                if (nextHeight > 0 && nextHeight !== dockHeight) {
+                  setDockHeight(nextHeight);
+                }
+              }}
+              style={[
+                styles.bottomDockFloating,
+                {
+                  bottom: dockBottom,
+                  left: TAB_DOCK_HORIZONTAL_MARGIN,
+                  right: TAB_DOCK_HORIZONTAL_MARGIN,
+                },
+              ]}
+            >
+              <GlassTabPill items={tabItems} onPress={handleChangeMode} />
+            </View>
+          ) : null}
+        </View>
+      </GlassBlurTargetProvider>
     </AppShellContext.Provider>
   );
 }

@@ -38,6 +38,8 @@ These skills do not auto-trigger. Use them explicitly when the situation matches
 2 . GitHub CLI auth may be invalid in some local sessions even if an account appears configured. Verify `gh auth status` before planning repo creation or push steps.
 3. Better Auth's Expo social flow in this project does not use `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID` or `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID`; server-side Google credentials plus the Convex site callback are the active integration path.
 4. When removing a field from an existing Convex table schema, dev deployment data may still contain legacy documents and block `convex codegen`/deploy with schema validation errors. Use a widen-migrate-narrow cleanup step rather than assuming local dev data is empty.
+5. Expo SDK 55+ Android blur is not automatic. Any Android `BlurView` using `dimezisBlurView`/`dimezisBlurViewSdk31Plus` needs a `BlurTargetView` ref passed through `blurTarget`; otherwise it falls back to no blur/semi-transparent fill. Do not fix this by making router scenes transparent or adding a global root blur target.
+6. Do not build Reed's motion identity with full-screen `BlurView`, full-screen colour fields, background dots/traces, auroras, oversized SVG radial blobs, or header aura/presence pulses unless a new direction is explicitly approved. Keep `AmbientBackground` static.
 
 ## Keep These Invariants
 
@@ -112,8 +114,15 @@ Strict collaboration rule:
 4. Treat this as collaborative engineering: surface tradeoffs, risks, and alternatives, then align with the developer.
 
 <!-- convex-ai-start -->
+
 This project uses [Convex](https://convex.dev) as its backend.
 
-When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+When working on Convex code, **always read
+`convex/_generated/ai/guidelines.md` first** for important guidelines on
+how to correctly use Convex APIs and patterns. The file contains rules that
+override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running
+`npx convex ai-files install`.
 
 <!-- convex-ai-end -->

@@ -11,29 +11,14 @@ export async function transcribeSpeechHttp(ctx: GenericCtx<DataModel>, request: 
     return jsonResponse({ error: 'Not authenticated.', code: 'unauthorized' }, 401);
   }
 
-  let formData: Pick<globalThis.FormData, 'get'>;
   try {
-    formData = await request.formData() as unknown as Pick<globalThis.FormData, 'get'>;
-  } catch {
-    return jsonResponse({ error: 'Invalid transcription request.', code: 'bad_request' }, 400);
-  }
-
-  const actor = formData.get('actor');
-  const file = formData.get('audio');
-  if (actor !== 'chat' && actor !== 'session_notes' && typeof actor !== 'string') {
-    return jsonResponse({ error: 'Invalid transcription target.', code: 'bad_request' }, 400);
-  }
-  if (typeof actor !== 'string' || !ALLOWED_ACTORS.has(actor)) {
-    return jsonResponse({ error: 'Invalid transcription target.', code: 'bad_request' }, 400);
-  }
-  if (!(file instanceof File)) {
-    return jsonResponse({ error: 'Missing audio recording.', code: 'bad_request' }, 400);
-  }
-
-  try {
-    const result = await transcribeSpeech({ actor: actor as SpeechActor, file });
+    const input = await readSpeechInput(request);
+    const result = await transcribeSpeech(input);
     return jsonResponse(result, 200);
   } catch (error) {
+    if (error instanceof SpeechRequestError) {
+      return jsonResponse({ error: error.message, code: 'bad_request' }, 400);
+    }
     if (error instanceof SpeechServiceError) {
       const status = error.code === 'configuration'
         ? 500
@@ -45,6 +30,63 @@ export async function transcribeSpeechHttp(ctx: GenericCtx<DataModel>, request: 
       return jsonResponse({ error: error.message, code: error.code }, status);
     }
     return jsonResponse({ error: 'Transcription failed.', code: 'transcription_failed' }, 500);
+  }
+}
+
+async function readSpeechInput(request: Request) {
+  const contentType = request.headers.get('content-type') ?? '';
+  if (!contentType.toLowerCase().startsWith('multipart/form-data')) {
+    return await readRawSpeechInput(request, contentType);
+  }
+
+  let formData: Pick<globalThis.FormData, 'get'>;
+  try {
+    formData = await request.formData() as unknown as Pick<globalThis.FormData, 'get'>;
+  } catch {
+    throw new SpeechRequestError('Invalid transcription request.');
+  }
+
+  const actor = formData.get('actor');
+  const file = formData.get('audio');
+  if (typeof actor !== 'string' || !ALLOWED_ACTORS.has(actor)) {
+    throw new SpeechRequestError('Invalid transcription target.');
+  }
+  if (!(file instanceof File)) {
+    throw new SpeechRequestError('Missing audio recording.');
+  }
+
+  return { actor: actor as SpeechActor, file };
+}
+
+async function readRawSpeechInput(request: Request, contentType: string) {
+  const actor = request.headers.get('x-reed-speech-actor');
+  if (typeof actor !== 'string' || !ALLOWED_ACTORS.has(actor)) {
+    throw new SpeechRequestError('Invalid transcription target.');
+  }
+
+  const bytes = await request.arrayBuffer().catch(() => null);
+  if (!bytes || bytes.byteLength <= 0) {
+    throw new SpeechRequestError('Missing audio recording.');
+  }
+
+  return {
+    actor: actor as SpeechActor,
+    file: new File([bytes], getSpeechFilename(request), {
+      type: contentType || 'application/octet-stream',
+    }),
+  };
+}
+
+function getSpeechFilename(request: Request) {
+  const filename = request.headers.get('x-reed-speech-filename')?.trim();
+  if (!filename) return 'speech.m4a';
+  return filename.replace(/[^A-Za-z0-9._-]/g, '').slice(0, 80) || 'speech.m4a';
+}
+
+class SpeechRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SpeechRequestError';
   }
 }
 
@@ -67,7 +109,7 @@ export function speechCorsResponse() {
 
 function corsHeaders() {
   return {
-    'Access-Control-Allow-Headers': 'authorization, content-type',
+    'Access-Control-Allow-Headers': 'authorization, content-type, x-reed-speech-actor, x-reed-speech-filename',
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Access-Control-Allow-Origin': '*',
   };

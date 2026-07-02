@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { GlassSurface } from '@/components/ui/glass-surface';
@@ -21,6 +22,7 @@ type SortOrder = 'due' | 'most' | 'newest';
 
 export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
   const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   const targets = useQuery(api.trainingTargets.list, { includeArchived: true });
   const refreshActiveTargets = useMutation(api.trainingTargets.refreshActive);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active');
@@ -55,7 +57,7 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
 
   return (
     <ScrollView
-      contentContainerStyle={[styles.content, { paddingBottom: 132, paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN, paddingTop: theme.spacing.xl }]}
+      contentContainerStyle={[styles.content, { paddingBottom: 132, paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN, paddingTop: insets.top + theme.spacing.xl }]}
       showsVerticalScrollIndicator={false}
       style={[styles.root, { backgroundColor: theme.colors.canvas }]}
     >

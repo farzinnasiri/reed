@@ -25,13 +25,20 @@ export const styles = StyleSheet.create({
     maxWidth: 320,
     minHeight: 58,
     minWidth: '48%',
+    overflow: 'hidden',
     paddingHorizontal: 22,
     paddingVertical: 8,
+    position: 'relative',
+  },
+  headerHighlight: {
+    borderTopWidth: 1,
+    opacity: 0.75,
   },
   headerIdentity: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
+    zIndex: 1,
   },
   headerAvatar: {
     alignItems: 'center',
@@ -42,6 +49,7 @@ export const styles = StyleSheet.create({
   },
   headerPresence: {
     alignItems: 'center',
+    zIndex: 1,
   },
   quickActionsScroller: {
     marginHorizontal: -12,
@@ -56,8 +64,17 @@ export const styles = StyleSheet.create({
     borderWidth: 1,
     justifyContent: 'center',
     minHeight: 44,
+    overflow: 'hidden',
     paddingHorizontal: 16,
     paddingVertical: 10,
+    position: 'relative',
+  },
+  quickActionChipHighlight: {
+    borderTopWidth: 1,
+    opacity: 0.75,
+  },
+  quickActionChipLabel: {
+    zIndex: 1,
   },
   thread: {
     gap: 14,
@@ -65,6 +82,11 @@ export const styles = StyleSheet.create({
   },
   threadRoot: {
     flex: 1,
+  },
+  threadBlurTarget: {
+    flex: 1,
+    overflow: 'hidden',
+    position: 'relative',
   },
   threadRootHidden: {
     opacity: 0,

@@ -3,6 +3,7 @@ import {
   setAudioModeAsync,
   type AudioRecorder,
 } from 'expo-audio';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 export type LocalSpeechRecording = {
@@ -45,7 +46,9 @@ export async function stopLocalSpeechRecording(
 ): Promise<LocalSpeechRecording> {
   await recorder.stop();
   const durationMs = Math.max(0, Date.now() - startedAt);
-  const uri = recorder.uri;
+  const uri = recorder.uri
+    ? await resolveAndroidRecordingUri(recorder.uri, Date.now())
+    : null;
 
   await setAudioModeAsync({
     allowsRecording: false,
@@ -73,11 +76,35 @@ export async function clearLocalSpeechRecording(recording: LocalSpeechRecording 
   if (Platform.OS === 'web') return;
 
   try {
-    const fileSystem = await import('expo-file-system');
-    new fileSystem.File(recording.uri).delete();
+    await FileSystem.deleteAsync(recording.uri, { idempotent: true });
   } catch {
     // Cleanup is best-effort; stale cache files are recoverable.
   }
+}
+
+async function resolveAndroidRecordingUri(uri: string, stoppedAt: number) {
+  if (Platform.OS !== 'android') return uri;
+
+  const info = await FileSystem.getInfoAsync(uri).catch(() => null);
+  if (info?.exists && !info.isDirectory && info.size > 0) return uri;
+
+  const audioDirectory = `${FileSystem.cacheDirectory ?? ''}Audio/`;
+  if (!audioDirectory.startsWith('file://')) return uri;
+
+  const names = await FileSystem.readDirectoryAsync(audioDirectory).catch(() => []);
+  let best: { diff: number; uri: string } | null = null;
+
+  for (const name of names) {
+    const candidateUri = `${audioDirectory}${name}`;
+    const candidate = await FileSystem.getInfoAsync(candidateUri).catch(() => null);
+    if (!candidate?.exists || candidate.isDirectory || candidate.size <= 0) continue;
+    const diff = Math.abs(candidate.modificationTime * 1000 - stoppedAt);
+    if (!best || diff < best.diff) {
+      best = { diff, uri: candidateUri };
+    }
+  }
+
+  return best?.uri ?? uri;
 }
 
 function getRecordingMimeType(uri: string) {

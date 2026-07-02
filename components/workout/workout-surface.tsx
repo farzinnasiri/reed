@@ -2,6 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, AppState, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
@@ -76,6 +77,7 @@ type QuickLogDayGroup = {
 export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
   const { setIsWorkoutSessionFullscreen } = useAppShell();
+  const insets = useSafeAreaInsets();
   const session = useQuery(api.liveSessions.getCurrent, {});
   const sessionInsights = useQuery(api.liveSessionInsights.getCurrent, {});
   const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
@@ -740,8 +742,8 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         <View style={styles.activeWorkoutShell}>
           <View style={styles.activeWorkoutPage}>{children}</View>
           <View
-            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + 8)}
-            style={styles.statusStripFloating}
+            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + insets.top + 16)}
+            style={[styles.statusStripFloating, { top: insets.top + 8 }]}
           >
             <WorkoutSessionStatusStrip
               onBack={onBack}
@@ -904,7 +906,11 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     }
 
     return (
-      <ScrollView contentContainerStyle={styles.startStateScroll} showsVerticalScrollIndicator={false} style={styles.startState}>
+      <ScrollView
+        contentContainerStyle={[styles.startStateScroll, { paddingTop: insets.top + 8 }]}
+        showsVerticalScrollIndicator={false}
+        style={styles.startState}
+      >
         {showStartBackButton ? (
           <View style={styles.startTopRow}>
             <Pressable accessibilityLabel="Exit workout" onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { Animated, Image, Pressable, ScrollView, View, type ScrollView as ScrollViewType } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation } from '@/design/motion';
@@ -9,7 +9,7 @@ import { useReedTheme } from '@/design/provider';
 import { styles } from './reed.styles';
 import type { ReedMessage } from './reed.types';
 
-export function ReedThread({
+function ReedThreadComponent({
   contentPaddingBottom,
   contentPaddingTop,
   hasMoreMessages,
@@ -83,8 +83,8 @@ export function ReedThread({
 
             return (
               <View key={message.id} style={styles.messageCluster}>
-                {shouldShowDateIndicator ? <DateIndicator createdAt={message.createdAt} /> : null}
-                <MessageRow
+                {shouldShowDateIndicator ? <MemoDateIndicator createdAt={message.createdAt} /> : null}
+                <MemoMessageRow
                   message={message}
                   onRetryAssistantMessage={onRetryAssistantMessage}
                 />
@@ -115,6 +115,8 @@ export function ReedThread({
     </View>
   );
 }
+
+export const ReedThread = memo(ReedThreadComponent);
 
 function MessageRow({
   message,
@@ -253,6 +255,9 @@ function DateIndicator({ createdAt }: { createdAt: number }) {
     </View>
   );
 }
+
+const MemoDateIndicator = memo(DateIndicator);
+const MemoMessageRow = memo(MessageRow);
 
 function formatMessageTime(createdAt: number) {
   return new Date(createdAt).toLocaleTimeString([], {

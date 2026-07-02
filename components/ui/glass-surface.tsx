@@ -1,12 +1,14 @@
 import { BlurView } from 'expo-blur';
 import { StyleSheet, View, type StyleProp, type ViewProps, type ViewStyle } from 'react-native';
-import { canUseGlassBlur, getGlassPaneTokens } from '@/components/ui/glass-material';
+import { canUseGlassBlur, getAndroidGlassBlurProps, getGlassPaneTokens } from '@/components/ui/glass-material';
+import { useGlassBlurTarget } from '@/components/ui/blur-target-context';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 
 type GlassSurfaceTone = 'default' | 'danger';
 
 type GlassSurfaceProps = ViewProps & {
+  androidBlur?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   elevated?: boolean;
   style?: StyleProp<ViewStyle>;
@@ -14,6 +16,7 @@ type GlassSurfaceProps = ViewProps & {
 };
 
 export function GlassSurface({
+  androidBlur = false,
   children,
   contentStyle,
   elevated = true,
@@ -22,7 +25,9 @@ export function GlassSurface({
   ...props
 }: GlassSurfaceProps) {
   const { reducedTransparency, theme } = useReedTheme();
-  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
+  const blurTarget = useGlassBlurTarget();
+  const androidBlurTarget = androidBlur && blurTarget?.isReady ? blurTarget.targetRef : undefined;
+  const canUseBlur = canUseGlassBlur({ hasAndroidTarget: Boolean(androidBlurTarget) }) && !reducedTransparency;
   const pane = getGlassPaneTokens(theme, tone);
   const flattenedShellStyle = StyleSheet.flatten(style);
   const outerBorderRadius =
@@ -45,6 +50,7 @@ export function GlassSurface({
     >
       {canUseBlur ? (
         <BlurView
+          {...getAndroidGlassBlurProps(androidBlurTarget)}
           intensity={pane.blurIntensity}
           style={StyleSheet.absoluteFill}
           tint={theme.blur.tint}

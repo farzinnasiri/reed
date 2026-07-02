@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { api } from '@/convex/_generated/api';
@@ -210,6 +211,7 @@ type ProfileSurfaceProps = {
 
 export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileSurfaceProps) {
   const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   const viewerTrainingProfile = useQuery(api.profiles.viewerTrainingProfile, {});
   const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -272,7 +274,7 @@ export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileS
         {
           paddingBottom: 132,
           paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
-          paddingTop: theme.spacing.xl,
+          paddingTop: insets.top + theme.spacing.xl,
         },
       ]}
       showsVerticalScrollIndicator={false}
@@ -2245,7 +2247,6 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   bodyWeightSurface: {
-    marginTop: 8,
   },
   bodyWeightTrendCopy: {
     flex: 1,
@@ -2263,7 +2264,6 @@ const styles = StyleSheet.create({
     padding: 18,
   },
   coachNoteFrame: {
-    marginBottom: 4,
     position: 'relative',
   },
   coachNotePulseRim: {
@@ -2332,7 +2332,6 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   consistencySurface: {
-    marginBottom: 4,
   },
   dashboardCardHeader: {
     alignItems: 'center',

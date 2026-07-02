@@ -1,11 +1,17 @@
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
-import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
+import { reedSprings } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+import { usePressAnimation } from '@/design/use-press-animation';
 
 type SegmentedOption<T extends string> = {
   accessibilityLabel?: string;
@@ -42,8 +48,8 @@ export function SegmentedControl<T extends string>({
   const { theme } = useReedTheme();
   const control = getGlassControlTokens(theme);
   const [itemLayouts, setItemLayouts] = useState<Record<string, ItemLayout>>({});
-  const indicatorX = useRef(new Animated.Value(0)).current;
-  const indicatorWidth = useRef(new Animated.Value(0)).current;
+  const indicatorX = useSharedValue(0);
+  const indicatorWidth = useSharedValue(0);
   const hasPositionedIndicator = useRef(false);
   const shouldStackItems = !iconOnly && options.length > 0 && options.every(option => Boolean(option.icon && option.label));
   const optionSignature = useMemo(() => options.map(option => option.value).join('|'), [options]);
@@ -51,8 +57,8 @@ export function SegmentedControl<T extends string>({
 
   useEffect(() => {
     hasPositionedIndicator.current = false;
-    indicatorX.setValue(0);
-    indicatorWidth.setValue(0);
+    indicatorX.value = 0;
+    indicatorWidth.value = 0;
     setItemLayouts({});
   }, [indicatorWidth, indicatorX, optionSignature]);
 
@@ -62,17 +68,20 @@ export function SegmentedControl<T extends string>({
     }
 
     if (!hasPositionedIndicator.current) {
-      indicatorX.setValue(activeLayout.x);
-      indicatorWidth.setValue(activeLayout.width);
+      indicatorX.value = activeLayout.x;
+      indicatorWidth.value = activeLayout.width;
       hasPositionedIndicator.current = true;
       return;
     }
 
-    Animated.parallel([
-      createTiming(indicatorX, activeLayout.x, reedMotion.durations.standard, undefined, false),
-      createTiming(indicatorWidth, activeLayout.width, reedMotion.durations.standard, undefined, false),
-    ]).start();
+    indicatorX.value = withSpring(activeLayout.x, reedSprings.smooth);
+    indicatorWidth.value = withSpring(activeLayout.width, reedSprings.smooth);
   }, [activeLayout, indicatorWidth, indicatorX]);
+
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: indicatorX.value }],
+    width: indicatorWidth.value,
+  }));
 
   return (
     <View
@@ -100,9 +109,8 @@ export function SegmentedControl<T extends string>({
             {
               backgroundColor: control.activeBackgroundColor,
               borderColor: variant === 'default' ? control.activeBorderColor : 'transparent',
-              transform: [{ translateX: indicatorX }],
-              width: indicatorWidth,
             },
+            indicatorStyle,
           ]}
         />
       ) : null}
@@ -112,16 +120,17 @@ export function SegmentedControl<T extends string>({
         const hasIconAndLabel = Boolean(option.icon && option.label);
 
         return (
-          <Pressable
+          <SegmentedItem
             accessibilityLabel={option.accessibilityLabel ?? option.label}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: isActive }}
+            compact={compact}
+            hasIconAndLabel={hasIconAndLabel}
+            icon={option.icon}
+            iconOnly={iconOnly}
+            isActive={isActive}
             key={option.value}
-            onLayout={event => {
-              const nextLayout = {
-                width: event.nativeEvent.layout.width,
-                x: event.nativeEvent.layout.x,
-              };
+            label={option.label}
+            onChange={() => onChange(option.value)}
+            onLayout={nextLayout => {
               setItemLayouts(layouts => {
                 const current = layouts[option.value];
                 if (current && current.x === nextLayout.x && current.width === nextLayout.width) {
@@ -130,43 +139,91 @@ export function SegmentedControl<T extends string>({
                 return { ...layouts, [option.value]: nextLayout };
               });
             }}
-            onPress={() => onChange(option.value)}
-            style={({ pressed }) => [
-              styles.item,
-              variant !== 'default' ? styles.pillItem : null,
-              compact ? styles.itemCompact : null,
-              shouldStackItems ? styles.itemStacked : null,
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            {option.icon ? <View style={styles.iconWrap}>{option.icon}</View> : shouldStackItems ? <View style={styles.iconSpacer} /> : null}
-            {iconOnly ? null : option.label ? (
-              <ReedText
-                adjustsFontSizeToFit
-                ellipsizeMode="tail"
-                minimumFontScale={0.78}
-                numberOfLines={1}
-                style={[
-                  styles.label,
-                  shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
-                  {
-                    color:
-                      variant === 'default' && isActive
-                        ? theme.colors.pillActiveText
-                        : isActive
-                          ? theme.colors.textPrimary
-                          : theme.colors.textMuted,
-                  },
-                ]}
-                variant={compact || shouldStackItems ? 'caption' : 'bodyStrong'}
-              >
-                {option.label}
-              </ReedText>
-            ) : null}
-          </Pressable>
+            shouldStackItems={shouldStackItems}
+            variant={variant}
+          />
         );
       })}
     </View>
+  );
+}
+
+function SegmentedItem({
+  accessibilityLabel,
+  compact,
+  hasIconAndLabel,
+  icon,
+  iconOnly,
+  isActive,
+  label,
+  onChange,
+  onLayout,
+  shouldStackItems,
+  variant,
+}: {
+  accessibilityLabel?: string;
+  compact: boolean;
+  hasIconAndLabel: boolean;
+  icon?: ReactNode;
+  iconOnly: boolean;
+  isActive: boolean;
+  label?: string;
+  onChange: () => void;
+  onLayout: (layout: ItemLayout) => void;
+  shouldStackItems: boolean;
+  variant: 'default' | 'ghost' | 'pill';
+}) {
+  const { theme } = useReedTheme();
+  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
+
+  return (
+    <Pressable
+      accessibilityLabel={accessibilityLabel}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isActive }}
+      onLayout={event => {
+        onLayout({
+          width: event.nativeEvent.layout.width,
+          x: event.nativeEvent.layout.x,
+        });
+      }}
+      onPress={onChange}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
+      style={[
+        styles.item,
+        variant !== 'default' ? styles.pillItem : null,
+        compact ? styles.itemCompact : null,
+        shouldStackItems ? styles.itemStacked : null,
+      ]}
+    >
+      <Animated.View style={[styles.itemContent, animatedStyle]}>
+        {icon ? <View style={styles.iconWrap}>{icon}</View> : shouldStackItems ? <View style={styles.iconSpacer} /> : null}
+        {iconOnly ? null : label ? (
+          <ReedText
+            adjustsFontSizeToFit
+            ellipsizeMode="tail"
+            minimumFontScale={0.78}
+            numberOfLines={1}
+            style={[
+              styles.label,
+              shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
+              {
+                color:
+                  variant === 'default' && isActive
+                    ? theme.colors.pillActiveText
+                    : isActive
+                      ? theme.colors.textPrimary
+                      : theme.colors.textMuted,
+              },
+            ]}
+            variant={compact || shouldStackItems ? 'caption' : 'bodyStrong'}
+          >
+            {label}
+          </ReedText>
+        ) : null}
+      </Animated.View>
+    </Pressable>
   );
 }
 
@@ -217,12 +274,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: reedRadii.md,
     flex: 1,
-    gap: 6,
     justifyContent: 'center',
     minHeight: 44,
     minWidth: 0,
     paddingHorizontal: 12,
     zIndex: 1,
+  },
+  itemContent: {
+    alignItems: 'center',
+    gap: 6,
   },
   label: {
     maxWidth: '100%',

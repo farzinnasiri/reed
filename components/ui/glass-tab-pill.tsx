@@ -5,8 +5,10 @@ import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import {
   TAB_PILL_MIN_HEIGHT,
   canUseGlassBlur,
+  getAndroidGlassBlurProps,
   getGlassTabPillTokens,
 } from '@/components/ui/glass-material';
+import { useGlassBlurTarget } from '@/components/ui/blur-target-context';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
@@ -31,8 +33,10 @@ const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillProps<T>) {
   const { reducedTransparency, theme } = useReedTheme();
+  const blurTarget = useGlassBlurTarget();
   const pane = getGlassTabPillTokens(theme);
-  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
+  const androidBlurTarget = blurTarget?.isReady ? blurTarget.targetRef : undefined;
+  const canUseBlur = canUseGlassBlur({ hasAndroidTarget: Boolean(androidBlurTarget) }) && !reducedTransparency;
   const shellBackground = canUseBlur ? pane.backgroundColor : pane.fallbackBackgroundColor;
   const activeIndex = Math.max(0, items.findIndex(item => item.isActive));
   const progress = useRef(new Animated.Value(activeIndex)).current;
@@ -54,6 +58,7 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
     >
       {canUseBlur ? (
         <BlurView
+          {...getAndroidGlassBlurProps(androidBlurTarget)}
           intensity={pane.blurIntensity}
           style={StyleSheet.absoluteFill}
           tint={theme.blur.tint}

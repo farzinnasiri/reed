@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
@@ -28,6 +29,7 @@ type SettingsSurfaceProps = {
 export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurfaceProps) {
   const { data: session } = authClient.useSession();
   const { preference, setPreference, theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   const glassControls = getGlassControlTokens(theme);
   const viewerProfile = useQuery(api.profiles.viewer, {});
   const onboardingEditorData = useQuery(api.profiles.viewerTrainingProfile, {});
@@ -217,7 +219,7 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
         styles.content,
         {
           paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
-          paddingTop: theme.spacing.xl,
+            paddingTop: insets.top + theme.spacing.xl,
           paddingBottom: 132,
         },
       ]}

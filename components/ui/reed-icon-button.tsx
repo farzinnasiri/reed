@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, type PressableProps } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { getGlassControlTokens } from '@/components/ui/glass-material';
-import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+import { getDisabledOpacity, usePressAnimation } from '@/design/use-press-animation';
 
 type ReedIconButtonProps = Omit<PressableProps, 'style'> & {
   children: React.ReactNode;
@@ -19,34 +20,41 @@ export function ReedIconButton({
 }: ReedIconButtonProps) {
   const { theme } = useReedTheme();
   const glassControls = getGlassControlTokens(theme);
+  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
 
   return (
     <Pressable
       accessibilityRole="button"
       disabled={disabled}
-      style={({ pressed }) => [
-        styles.base,
-        variant === 'default' ? theme.shadows.controlActive : null,
-        shape === 'pill' ? styles.pill : null,
-        {
-          backgroundColor:
-            variant === 'ghost'
-              ? 'transparent'
-              : variant === 'glass'
-                ? glassControls.shellBackgroundColor
-                : theme.colors.controlFill,
-          borderColor:
-            variant === 'ghost'
-              ? 'transparent'
-              : variant === 'glass'
-                ? glassControls.shellBorderColor
-                : theme.colors.controlBorder,
-          ...getTapScaleStyle(pressed, disabled),
-        },
-      ]}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       {...props}
     >
-      {children}
+      <Animated.View
+        style={[
+          styles.base,
+          variant === 'default' ? theme.shadows.controlActive : null,
+          shape === 'pill' ? styles.pill : null,
+          {
+            backgroundColor:
+              variant === 'ghost'
+                ? 'transparent'
+                : variant === 'glass'
+                  ? glassControls.shellBackgroundColor
+                  : theme.colors.controlFill,
+            borderColor:
+              variant === 'ghost'
+                ? 'transparent'
+                : variant === 'glass'
+                  ? glassControls.shellBorderColor
+                  : theme.colors.controlBorder,
+            opacity: getDisabledOpacity(disabled),
+          },
+          animatedStyle,
+        ]}
+      >
+        {children}
+      </Animated.View>
     </Pressable>
   );
 }

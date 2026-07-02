@@ -1,6 +1,7 @@
 import { authClient } from '@/lib/auth-client';
 import { appEnv } from '@/lib/env';
-import { startClientWideEvent } from '@/lib/client-observability';
+import { sizeBucket, startClientWideEvent } from '@/lib/client-observability';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { LocalSpeechRecording } from './audio-recording';
 
@@ -8,6 +9,12 @@ export type SpeechTranscriptionActor = 'chat' | 'session_notes';
 
 export type SpeechTranscriptionResponse = {
   text: string;
+};
+
+type SpeechHttpResponse = {
+  json: () => Promise<{ code?: string; error?: string; text?: string }>;
+  ok: boolean;
+  status: number;
 };
 
 const MAX_ATTEMPTS = 3;
@@ -41,7 +48,7 @@ export async function transcribeLocalSpeechRecording(args: {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
     try {
       event.set({ 'speech.attempt': attempt + 1 });
-      const result = await transcribeOnce(args, step => event.set({ 'speech.step': step }));
+      const result = await transcribeOnce(args, attrs => event.set(attrs));
       event.end({
         'speech.attempts': attempt + 1,
         'speech.transcript_length_bucket': transcriptLengthBucket(result.text),
@@ -73,34 +80,24 @@ export async function transcribeLocalSpeechRecording(args: {
 async function transcribeOnce(args: {
   actor: SpeechTranscriptionActor;
   recording: LocalSpeechRecording;
-}, onStep: (step: string) => void) {
+}, setAttrs: (attrs: Record<string, string | number | boolean | null | undefined>) => void) {
   if (!appEnv.convexSiteUrl) {
     throw new SpeechTranscriptionError('Speech transcription is not configured for this build.', 'configuration', false);
   }
 
-  onStep('auth_token');
+  setAttrs({ 'speech.step': 'auth_token' });
   const tokenResult = await authClient.convex.token({ fetchOptions: { throw: false } });
   const token = tokenResult.data?.token;
   if (!token) {
     throw new SpeechTranscriptionError('You need to be signed in to transcribe audio.', 'unauthorized', false);
   }
 
-  onStep('form_data');
-  const formData = new FormData();
-  formData.append('actor', args.actor);
-  await appendAudioPart(formData, args.recording);
+  const response = Platform.OS === 'web'
+    ? await transcribeWithWebMultipart(args, token, setAttrs)
+    : await transcribeWithNativeBody(args, token, setAttrs);
 
-  onStep('http_request');
-  const response = await fetch(`${appEnv.convexSiteUrl}/speech/transcribe`, {
-    body: formData,
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    method: 'POST',
-  });
-
-  onStep('response_parse');
-  const payload = await response.json().catch(() => ({})) as { code?: string; error?: string; text?: string };
+  setAttrs({ 'speech.step': 'response_parse' });
+  const payload = await response.json().catch(() => ({} as { code?: string; error?: string; text?: string }));
   if (!response.ok) {
     throw new SpeechTranscriptionError(
       payload.error || 'Transcription failed.',
@@ -117,20 +114,69 @@ async function transcribeOnce(args: {
   return { text };
 }
 
-async function appendAudioPart(formData: FormData, recording: LocalSpeechRecording) {
-  const filename = getRecordingFilename(recording.mimeType);
+async function transcribeWithWebMultipart(
+  args: {
+    actor: SpeechTranscriptionActor;
+    recording: LocalSpeechRecording;
+  },
+  token: string,
+  setAttrs: (attrs: Record<string, string | number | boolean | null | undefined>) => void
+) {
+  setAttrs({ 'speech.step': 'form_data' });
+  const formData = new FormData();
+  formData.append('actor', args.actor);
+  const audio = await fetch(args.recording.uri).then(response => response.blob());
+  formData.append('audio', audio, getRecordingFilename(args.recording.mimeType));
+  setAttrs({
+    'speech.audio_size_bucket': sizeBucket(audio.size),
+    'speech.upload_transport': 'browser_multipart',
+  });
 
-  if (Platform.OS === 'web') {
-    const audio = await fetch(recording.uri).then(response => response.blob());
-    formData.append('audio', audio, filename);
-    return;
+  setAttrs({ 'speech.step': 'http_request' });
+  return await fetch(`${appEnv.convexSiteUrl}/speech/transcribe`, {
+    body: formData,
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    method: 'POST',
+  }) as SpeechHttpResponse;
+}
+
+async function transcribeWithNativeBody(
+  args: {
+    actor: SpeechTranscriptionActor;
+    recording: LocalSpeechRecording;
+  },
+  token: string,
+  setAttrs: (attrs: Record<string, string | number | boolean | null | undefined>) => void
+) {
+  setAttrs({ 'speech.step': 'local_audio_info' });
+  const audio = await FileSystem.getInfoAsync(args.recording.uri);
+  if (!audio.exists || audio.size <= 0) {
+    throw new SpeechTranscriptionError('Could not read the recorded audio from this device.', 'local_audio_read', false);
   }
+  setAttrs({
+    'speech.audio_size_bucket': sizeBucket(audio.size),
+    'speech.upload_transport': 'native_filesystem_upload',
+  });
 
-  formData.append('audio', {
-    name: filename,
-    type: recording.mimeType,
-    uri: recording.uri,
-  } as unknown as Blob);
+  setAttrs({ 'speech.step': 'http_request' });
+  const response = await FileSystem.uploadAsync(`${appEnv.convexSiteUrl}/speech/transcribe`, args.recording.uri, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': args.recording.mimeType,
+      'X-Reed-Speech-Actor': args.actor,
+      'X-Reed-Speech-Filename': getRecordingFilename(args.recording.mimeType),
+    },
+    httpMethod: 'POST',
+    uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+  });
+
+  return {
+    json: async () => JSON.parse(response.body || '{}') as { code?: string; error?: string; text?: string },
+    ok: response.status >= 200 && response.status < 300,
+    status: response.status,
+  } satisfies SpeechHttpResponse;
 }
 
 function normalizeTranscriptionError(error: unknown) {

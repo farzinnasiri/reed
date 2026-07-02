@@ -6,6 +6,8 @@ import { api } from '@/convex/_generated/api';
 import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
+import { AmbientBackground } from '@/components/ui/ambient-background';
+import { GlassBlurTarget, GlassBlurTargetProvider } from '@/components/ui/blur-target-context';
 import { ReedText } from '@/components/ui/reed-text';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
@@ -20,6 +22,7 @@ import { useReedPresence } from './use-reed-presence';
 import { useSpeechDraft } from '@/lib/speech/use-speech-draft';
 
 const REED_HEADER_HEIGHT = 58;
+const ANDROID_KEYBOARD_COMPOSER_CLEARANCE = 12;
 
 export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps) {
   const { theme } = useReedTheme();
@@ -27,7 +30,8 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const scrollRef = useRef<ScrollViewType | null>(null);
   const hasInitialScrollSettledRef = useRef(false);
   const hasInitialComposerAlignmentRef = useRef(false);
-  const [composerText, setComposerText] = useState('');
+  const composerDraftRef = useRef('');
+  const [composerDraftSeed, setComposerDraftSeed] = useState({ revision: 0, text: '' });
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isThreadReady, setIsThreadReady] = useState(false);
@@ -76,7 +80,14 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     state: speechState,
     stop: stopVoice,
   } = useSpeechDraft('chat', transcript => {
-    setComposerText(current => current.trim() ? `${current.trimEnd()} ${transcript}` : transcript);
+    const nextText = composerDraftRef.current.trim()
+      ? `${composerDraftRef.current.trimEnd()} ${transcript}`
+      : transcript;
+    composerDraftRef.current = nextText;
+    setComposerDraftSeed(current => ({
+      revision: current.revision + 1,
+      text: nextText,
+    }));
   }, { onError: showVoiceToast });
   const voiceState = useMemo(() => ({
     error: speechState.error,
@@ -91,9 +102,11 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
 
   const visibleQuickActions = quickActions ?? [];
   const shouldShowQuickActions = !isReedOnline && voiceState.status === 'idle' && visibleQuickActions.length > 0;
-  const headerTopInset = theme.spacing.sm;
+  const headerTopInset = insets.top + theme.spacing.sm;
   const contentTopPadding = headerTopInset + REED_HEADER_HEIGHT + theme.spacing.lg;
-  const keyboardLift = Platform.OS === 'android' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+  const keyboardLift = Platform.OS === 'android' && keyboardHeight > 0
+    ? Math.max(0, keyboardHeight - insets.bottom) + ANDROID_KEYBOARD_COMPOSER_CLEARANCE
+    : 0;
   const composerBottomPadding = keyboardLift > 0 ? theme.spacing.xs : dockReservedSpace + theme.spacing.xs;
   const scrollBottomSpace = composerDockHeight > 0
     ? keyboardLift + composerDockHeight + theme.spacing.lg
@@ -197,9 +210,17 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   }, [isThreadReady, latestMessageSignature]);
 
   function clearComposerState() {
-    setComposerText('');
+    composerDraftRef.current = '';
+    setComposerDraftSeed(current => ({
+      revision: current.revision + 1,
+      text: '',
+    }));
     clearAttachments();
     resetVoice();
+  }
+
+  function handleComposerDraftChange(text: string) {
+    composerDraftRef.current = text;
   }
 
   function sendTyped(text: string) {
@@ -209,7 +230,10 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         hasAttachments: readyAttachmentIds.length > 0,
       });
       clearComposerState();
+      return true;
     }
+
+    return false;
   }
 
   function sendVoiceDraft(text: string) {
@@ -219,90 +243,100 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         hasAttachments: false,
       });
       clearComposerState();
+      return true;
     }
+
+    return false;
   }
 
   return (
-    <View style={styles.root}>
-      <ReedHeader
-        label={reedPresenceLabel}
-        topInset={headerTopInset}
-      />
+    <GlassBlurTargetProvider>
+      <View style={styles.root}>
+        <GlassBlurTarget style={styles.threadBlurTarget}>
+          <AmbientBackground variant="reed" />
+          <ReedThread
+            contentPaddingBottom={scrollBottomSpace}
+            contentPaddingTop={contentTopPadding}
+            hasMoreMessages={hasMoreMessages}
+            messages={messages}
+            isReady={isThreadReady}
+            onLoadOlderMessages={loadOlderMessages}
+            onRetryAssistantMessage={retryAssistantMessage}
+            scrollRef={scrollRef}
+          />
+        </GlassBlurTarget>
 
-      <ReedThread
-        contentPaddingBottom={scrollBottomSpace}
-        contentPaddingTop={contentTopPadding}
-        hasMoreMessages={hasMoreMessages}
-        messages={messages}
-        isReady={isThreadReady}
-        onLoadOlderMessages={loadOlderMessages}
-        onRetryAssistantMessage={retryAssistantMessage}
-        scrollRef={scrollRef}
-      />
-
-      {voiceToastMessage ? (
-        <VoiceToast
-          message={voiceToastMessage}
-          onDismiss={() => setVoiceToastMessage(null)}
-          top={theme.spacing.sm}
+        <ReedHeader
+          label={reedPresenceLabel}
+          topInset={headerTopInset}
         />
-      ) : null}
 
-      <View
-        onLayout={event => {
-          const nextHeight = Math.round(event.nativeEvent.layout.height);
-          if (nextHeight > 0 && nextHeight !== composerDockHeight) {
-            setComposerDockHeight(nextHeight);
-          }
-        }}
-        style={[
-          styles.composerDock,
-          {
-            bottom: keyboardLift,
-            paddingBottom: composerBottomPadding,
-            paddingHorizontal: theme.spacing.sm,
-          },
-        ]}
-      >
-        <ReedComposer
-          attachments={attachments}
-          canAttachMore={canAttachMore}
-          composerText={composerText}
-          disabled={Boolean(pendingRunId)}
-          isPreparingAttachments={isPreparingAttachments}
-          lastAttachmentError={lastAttachmentError}
-          onChangeComposerText={setComposerText}
-          onPickCamera={() => void attachFromCamera()}
-          onPickFiles={() => void attachFromFiles()}
-          onPickLibrary={() => void attachFromLibrary()}
-          onQuickAction={prompt => {
-            if (sendPrompt(prompt, 'quick-action', readyAttachmentIds)) {
-              analytics.reedMessageSent({
-                source: 'quick-action',
-                hasAttachments: readyAttachmentIds.length > 0,
-              });
-              clearComposerState();
+        {voiceToastMessage ? (
+          <VoiceToast
+            message={voiceToastMessage}
+            onDismiss={() => setVoiceToastMessage(null)}
+            top={theme.spacing.sm}
+          />
+        ) : null}
+
+        <View
+          onLayout={event => {
+            const nextHeight = Math.round(event.nativeEvent.layout.height);
+            if (nextHeight > 0 && nextHeight !== composerDockHeight) {
+              setComposerDockHeight(nextHeight);
             }
           }}
-          onRemoveAttachment={removeAttachment}
-          onRetryVoice={() => void retryVoice()}
-          onSendTyped={sendTyped}
-          onSendVoiceDraft={sendVoiceDraft}
-          onStartVoice={() => void startVoice()}
-          onStopVoice={() => void stopVoice()}
-          quickActions={visibleQuickActions}
-          shouldShowQuickActions={shouldShowQuickActions}
-          voiceState={voiceState}
+          style={[
+            styles.composerDock,
+            {
+              bottom: keyboardLift,
+              paddingBottom: composerBottomPadding,
+              paddingHorizontal: theme.spacing.sm,
+            },
+          ]}
+        >
+          <ReedComposer
+            attachments={attachments}
+            canAttachMore={canAttachMore}
+            draftSeed={composerDraftSeed}
+            disabled={Boolean(pendingRunId)}
+            isPreparingAttachments={isPreparingAttachments}
+            lastAttachmentError={lastAttachmentError}
+            onChangeComposerDraft={handleComposerDraftChange}
+            onPickCamera={() => void attachFromCamera()}
+            onPickFiles={() => void attachFromFiles()}
+            onPickLibrary={() => void attachFromLibrary()}
+            onQuickAction={prompt => {
+              if (sendPrompt(prompt, 'quick-action', readyAttachmentIds)) {
+                analytics.reedMessageSent({
+                  source: 'quick-action',
+                  hasAttachments: readyAttachmentIds.length > 0,
+                });
+                clearComposerState();
+                return true;
+              }
+              return false;
+            }}
+            onRemoveAttachment={removeAttachment}
+            onRetryVoice={() => void retryVoice()}
+            onSendTyped={sendTyped}
+            onSendVoiceDraft={sendVoiceDraft}
+            onStartVoice={() => void startVoice()}
+            onStopVoice={() => void stopVoice()}
+            quickActions={visibleQuickActions}
+            shouldShowQuickActions={shouldShowQuickActions}
+            voiceState={voiceState}
+          />
+        </View>
+
+        <ReedImageEditor
+          image={editingImage}
+          onCancel={cancelImageEditor}
+          onUseImage={uploadEditedImage}
+          visible={Boolean(editingImage)}
         />
       </View>
-
-      <ReedImageEditor
-        image={editingImage}
-        onCancel={cancelImageEditor}
-        onUseImage={uploadEditedImage}
-        visible={Boolean(editingImage)}
-      />
-    </View>
+    </GlassBlurTargetProvider>
   );
 }
 

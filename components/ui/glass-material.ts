@@ -1,4 +1,6 @@
-import { Platform, type ViewStyle } from 'react-native';
+import type { RefObject } from 'react';
+import type { BlurViewProps } from 'expo-blur';
+import { Platform, type View, type ViewStyle } from 'react-native';
 import type { ReedTheme } from '@/design/system';
 
 export type GlassTone = 'default' | 'danger';
@@ -36,8 +38,22 @@ type BackdropDiffusionTokens = {
   warm: readonly [string, string, string];
 };
 
-export function canUseGlassBlur() {
-  return Platform.OS === 'ios' || Platform.OS === 'web';
+export function canUseGlassBlur({ hasAndroidTarget = false }: { hasAndroidTarget?: boolean } = {}) {
+  return Platform.OS === 'ios' || Platform.OS === 'web' || (Platform.OS === 'android' && hasAndroidTarget);
+}
+
+export function getAndroidGlassBlurProps(
+  blurTarget?: RefObject<View | null>,
+): Pick<BlurViewProps, 'blurMethod' | 'blurReductionFactor' | 'blurTarget'> {
+  if (Platform.OS !== 'android' || !blurTarget) {
+    return {};
+  }
+
+  return {
+    blurMethod: 'dimezisBlurViewSdk31Plus',
+    blurReductionFactor: 2,
+    blurTarget,
+  };
 }
 
 export function getSolidGlassCardTokens(theme: ReedTheme) {

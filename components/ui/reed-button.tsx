@@ -1,8 +1,9 @@
 import { Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
-import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+import { getDisabledOpacity, usePressAnimation } from '@/design/use-press-animation';
 
 type ReedButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
@@ -22,6 +23,7 @@ export function ReedButton({
   ...props
 }: ReedButtonProps) {
   const { theme } = useReedTheme();
+  const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
 
   const palette =
     variant === 'primary'
@@ -51,26 +53,32 @@ export function ReedButton({
   return (
     <Pressable
       disabled={disabled}
-      style={({ pressed }) => [
-        styles.base,
-        variant === 'ghost' || !elevated ? null : theme.shadows.floating,
-        {
-          backgroundColor: palette.backgroundColor,
-          borderColor: palette.borderColor,
-          ...getTapScaleStyle(pressed, disabled),
-        },
-        style,
-      ]}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       {...props}
     >
-      <View style={styles.inner}>
-        <ReedText
-          style={{ color: palette.textColor }}
-          variant="bodyStrong"
-        >
-          {label}
-        </ReedText>
-      </View>
+      <Animated.View
+        style={[
+          styles.base,
+          variant === 'ghost' || !elevated ? null : theme.shadows.floating,
+          {
+            backgroundColor: palette.backgroundColor,
+            borderColor: palette.borderColor,
+            opacity: getDisabledOpacity(disabled),
+          },
+          animatedStyle,
+          style,
+        ]}
+      >
+        <View style={styles.inner}>
+          <ReedText
+            style={{ color: palette.textColor }}
+            variant="bodyStrong"
+          >
+            {label}
+          </ReedText>
+        </View>
+      </Animated.View>
     </Pressable>
   );
 }

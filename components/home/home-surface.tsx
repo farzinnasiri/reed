@@ -8,7 +8,9 @@ import {
   View,
 } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '@/convex/_generated/api';
+import { AmbientBackground } from '@/components/ui/ambient-background';
 import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
@@ -21,6 +23,9 @@ import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
 import { GoalsHomeCard } from './goals-home-card';
 import { ProfileDashboardCards, TrainingProgressExpansion } from './profile-surface';
 import { QuickLogSheet } from './quick-log-sheet';
+
+import Animated from 'react-native-reanimated';
+import { useEntryAnimation } from '@/design/use-entry-animation';
 
 type HomeSurfaceProps = {
   dockReservedSpace: number;
@@ -38,6 +43,7 @@ export function HomeSurface({
   onOpenWorkout,
 }: HomeSurfaceProps) {
   const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   const { isCompact, width } = useBreakpoint();
   const useCompactHeadline = isCompact || width < 430;
   const startSession = useMutation(api.liveSessions.start);
@@ -46,6 +52,13 @@ export function HomeSurface({
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const glassControls = getGlassControlTokens(theme);
+
+  // Staggered entry animations for the "opening breath" of Home surface content
+  const headerEntry = useEntryAnimation({ delay: 60, translateY: 16 });
+  const startCardEntry = useEntryAnimation({ delay: 120, translateY: 16 });
+  const dashboardEntry = useEntryAnimation({ delay: 180, translateY: 16 });
+  const goalsEntry = useEntryAnimation({ delay: 240, translateY: 16 });
+  const statsEntry = useEntryAnimation({ delay: 300, translateY: 16 });
 
   const weekRange = getCurrentWeekRange();
   const weeklyStats = useQuery(api.homeStats.getWeeklyMuscleStats, {
@@ -79,19 +92,21 @@ export function HomeSurface({
   }
 
   return (
-    <ScrollView
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingBottom: dockReservedSpace + theme.spacing.xl,
-          paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
-          paddingTop: theme.spacing.xl,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-      style={styles.root}
-    >
-      <View style={styles.header}>
+    <View style={styles.root}>
+      <AmbientBackground variant="home" />
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: dockReservedSpace + theme.spacing.xl,
+            paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
+            paddingTop: insets.top + theme.spacing.xl,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        style={styles.scroller}
+      >
+      <Animated.View style={[styles.header, headerEntry]}>
         <ReedText
           ellipsizeMode="tail"
           numberOfLines={1}
@@ -100,101 +115,110 @@ export function HomeSurface({
         >
           {homeHeadline}
         </ReedText>
-      </View>
+      </Animated.View>
 
-      <GlassSurface style={styles.card}>
-        <Pressable
-          accessibilityLabel={hasActiveSession ? 'Continue current session' : 'Start a new session'}
-          disabled={isStarting}
-          onPress={() => void handleStartSession()}
-          style={({ pressed }) => [
-            styles.startButtonShell,
-            {
-              opacity: isStarting ? 0.7 : 1,
-              ...getTapScaleStyle(pressed, isStarting),
-            },
-          ]}
-        >
-          <View
-            style={[
-              styles.startButtonFill,
-              { backgroundColor: theme.colors.accentPrimary },
+      <Animated.View style={startCardEntry}>
+        <GlassSurface style={styles.card}>
+          <Pressable
+            accessibilityLabel={hasActiveSession ? 'Continue current session' : 'Start a new session'}
+            disabled={isStarting}
+            onPress={() => void handleStartSession()}
+            style={({ pressed }) => [
+              styles.startButtonShell,
+              {
+                opacity: isStarting ? 0.7 : 1,
+                ...getTapScaleStyle(pressed, isStarting),
+              },
             ]}
           >
-            <ReedText style={[styles.startButtonLabel, { color: theme.colors.accentPrimaryText }]} variant="section">
-              {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Instant Session'}
-            </ReedText>
-          </View>
-        </Pressable>
+            <View
+              style={[
+                styles.startButtonFill,
+                { backgroundColor: theme.colors.accentPrimary },
+              ]}
+            >
+              <ReedText style={[styles.startButtonLabel, { color: theme.colors.accentPrimaryText }]} variant="section">
+                {isStarting ? 'Starting...' : hasActiveSession ? 'Continue Session' : 'Start Instant Session'}
+              </ReedText>
+            </View>
+          </Pressable>
 
-        {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
+          {startError ? <ReedText tone="danger">{startError}</ReedText> : null}
 
-        <ReedButton
-          accessibilityLabel="Open quick log"
-          elevated={false}
-          label="Quick Log"
-          onPress={() => setIsQuickLogOpen(true)}
-          variant="secondary"
-        />
-      </GlassSurface>
+          <ReedButton
+            accessibilityLabel="Open quick log"
+            elevated={false}
+            label="Quick Log"
+            onPress={() => setIsQuickLogOpen(true)}
+            variant="secondary"
+          />
+        </GlassSurface>
+      </Animated.View>
 
       <QuickLogSheet onClose={() => setIsQuickLogOpen(false)} visible={isQuickLogOpen} />
 
-      <ProfileDashboardCards />
+      <Animated.View style={[styles.dashboardContainer, dashboardEntry]}>
+        <ProfileDashboardCards />
+      </Animated.View>
 
-      <GoalsHomeCard onOpenGoals={onOpenGoals} />
+      <Animated.View style={goalsEntry}>
+        <GoalsHomeCard onOpenGoals={onOpenGoals} />
+      </Animated.View>
 
-      <GlassSurface style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.weeklyHeaderCopy}>
-            <ReedText variant="section">Training</ReedText>
-            <ReedText tone="muted">{weekLabel}</ReedText>
-          </View>
-          <Pressable
-            accessibilityLabel={isBreakdownExpanded ? 'Hide muscle load breakdown' : 'Show muscle load breakdown'}
-            onPress={toggleBreakdown}
-            style={({ pressed }) => [
-              styles.expandButton,
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            <Ionicons
-              color={String(theme.colors.textPrimary)}
-              name={isBreakdownExpanded ? 'chevron-up' : 'chevron-down'}
-              size={16}
-            />
-          </Pressable>
-        </View>
-
-        {weeklyStats === undefined ? (
-          <View style={styles.loadingRow}>
-            <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-            <ReedText tone="muted">Preparing weekly breakdown...</ReedText>
-          </View>
-        ) : (
-          <>
-            <View style={styles.summaryStrip}>
-              <SummaryMetric
-                label="Sets"
-                showDivider
-                value={{ value: formatWholeNumber(weeklyStats.totalSets) }}
-              />
-              <SummaryMetric
-                label="Reps"
-                showDivider
-                value={{ value: formatWholeNumber(weeklyStats.totalReps) }}
-              />
-              <SummaryMetric
-                label="Load"
-                value={formatVolumeDisplay(weeklyStats.totalVolume)}
-              />
+      <Animated.View style={statsEntry}>
+        <GlassSurface style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.weeklyHeaderCopy}>
+              <ReedText variant="section">Training</ReedText>
+              <ReedText tone="muted">{weekLabel}</ReedText>
             </View>
+            <Pressable
+              accessibilityLabel={isBreakdownExpanded ? 'Hide muscle load breakdown' : 'Show muscle load breakdown'}
+              onPress={toggleBreakdown}
+              style={({ pressed }) => [
+                styles.expandButton,
+                getTapScaleStyle(pressed),
+              ]}
+            >
+              <Ionicons
+                color={String(theme.colors.textPrimary)}
+                name={isBreakdownExpanded ? 'chevron-up' : 'chevron-down'}
+                size={16}
+              />
+            </Pressable>
+          </View>
 
-            {isBreakdownExpanded ? <TrainingProgressExpansion /> : null}
-          </>
-        )}
-      </GlassSurface>
-    </ScrollView>
+          {weeklyStats === undefined ? (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+              <ReedText tone="muted">Preparing weekly breakdown...</ReedText>
+            </View>
+          ) : (
+            <>
+              <View style={styles.summaryStrip}>
+                <SummaryMetric
+                  label="Sets"
+                  showDivider
+                  value={{ value: formatWholeNumber(weeklyStats.totalSets) }}
+                />
+                <SummaryMetric
+                  label="Reps"
+                  showDivider
+                  value={{ value: formatWholeNumber(weeklyStats.totalReps) }}
+                />
+                <SummaryMetric
+                  label="Load"
+                  value={formatVolumeDisplay(weeklyStats.totalVolume)}
+                />
+              </View>
+
+              {isBreakdownExpanded ? <TrainingProgressExpansion /> : null}
+            </>
+          )}
+        </GlassSurface>
+      </Animated.View>
+      </ScrollView>
+    </View>
   );
 }
 
@@ -303,8 +327,16 @@ function getErrorMessage(error: unknown) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  scroller: {
+    flex: 1,
   },
   content: {
+    gap: 16,
+  },
+  dashboardContainer: {
     gap: 16,
   },
   header: {
