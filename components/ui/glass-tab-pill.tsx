@@ -133,6 +133,11 @@ function GlassTabPillButton({
     >
       <Animated.View style={[styles.iconWrap, { transform: [{ scale: iconScale }] }]}>
         {icon}
+        {hasIndicator ? (
+          <View style={[styles.indicatorDot, { backgroundColor: theme.colors.accentSecondary }]} />
+        ) : null}
+      </Animated.View>
+      <View pointerEvents="none" style={styles.activePinSlot}>
         <Animated.View
           style={[
             styles.activePin,
@@ -143,10 +148,7 @@ function GlassTabPillButton({
             },
           ]}
         />
-        {hasIndicator ? (
-          <View style={[styles.indicatorDot, { backgroundColor: theme.colors.accentSecondary }]} />
-        ) : null}
-      </Animated.View>
+      </View>
     </Pressable>
   );
 }
@@ -167,12 +169,15 @@ const styles = StyleSheet.create({
   },
   activePin: {
     borderRadius: reedRadii.pill,
-    bottom: -11,
     height: 3,
-    left: '50%',
-    marginLeft: -ACTIVE_PIN_WIDTH / 2,
-    position: 'absolute',
     width: ACTIVE_PIN_WIDTH,
+  },
+  activePinSlot: {
+    alignItems: 'center',
+    bottom: 5,
+    left: 0,
+    position: 'absolute',
+    right: 0,
   },
   highlight: {
     borderTopWidth: 1,
@@ -186,6 +191,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 50,
     justifyContent: 'center',
+    position: 'relative',
     zIndex: 1,
   },
   iconWrap: {
