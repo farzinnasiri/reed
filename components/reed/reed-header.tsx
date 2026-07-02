@@ -1,58 +1,49 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, View } from 'react-native';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { View } from 'react-native';
+import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
-import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './reed.styles';
 
 export function ReedHeader({
   label,
-  onOpenCoachItems,
-  openItemsCount,
   topInset,
 }: {
   label: string;
-  onOpenCoachItems: () => void;
-  openItemsCount: number;
   topInset: number;
 }) {
   const { theme } = useReedTheme();
+  const controls = getGlassControlTokens(theme);
 
   return (
-    <GlassSurface
-      elevated={false}
-      contentStyle={[
-        styles.fixedHeaderContent,
+    <View
+      pointerEvents="none"
+      style={[
+        styles.fixedHeader,
         {
-          paddingBottom: theme.spacing.xs,
-          paddingHorizontal: theme.spacing.sm,
           paddingTop: topInset,
         },
       ]}
-      style={styles.fixedHeader}
     >
-      <View style={styles.header}>
+      <View
+        style={[
+          styles.header,
+          controls.shadowStyle,
+          {
+            backgroundColor: controls.shellBackgroundColor,
+            borderColor: controls.shellBorderColor,
+          },
+        ]}
+      >
         <View style={styles.headerIdentity}>
-          <ReedText variant="title">Reed</ReedText>
+          <View style={[styles.headerAvatar, { backgroundColor: theme.colors.accentPrimary }]}>
+            <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">R</ReedText>
+          </View>
+          <ReedText variant="section">Reed</ReedText>
+        </View>
+        <View style={styles.headerPresence}>
           <ReedText tone="muted" variant="caption">{label}</ReedText>
         </View>
-        <View style={styles.headerActions}>
-          <Pressable
-            accessibilityHint="Shows saved coaching notes and follow-up items."
-            accessibilityLabel={`Open coach items, ${openItemsCount} open`}
-            accessibilityRole="button"
-            onPress={onOpenCoachItems}
-            style={({ pressed }) => [
-              styles.headerAction,
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            <Ionicons color={String(theme.colors.textMuted)} name="book-outline" size={16} />
-            <ReedText tone="muted" variant="caption">{openItemsCount}</ReedText>
-          </Pressable>
-        </View>
       </View>
-    </GlassSurface>
+    </View>
   );
 }

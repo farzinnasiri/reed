@@ -56,7 +56,7 @@ const DEFAULT_COACH_STATE_PROMPT = `You are Reed's private coaching observer.
 
 Update Reed's private coaching dialogue from the previous dialogue and new evidence.
 
-Focus on coaching posture: pressure, warmth/trust, depth, agency, certainty, what changed relationally, what to avoid, and when to reconsider. Do not try to carry the whole durable memory system; coach mental model and private coaching journeys handle broad user memory, and the chat agenda handles turn-to-turn coaching actions.
+Focus on coaching posture: pressure, warmth/trust, depth, agency, certainty, what changed relationally, what to avoid, and when to reconsider. Do not try to carry the whole durable memory system; coach mental model and private coaching journeys handle broad user memory.
 
 <previous_dialogue>
 {{previous_coach_state}}
@@ -486,7 +486,6 @@ export const loadAssistantContext = internalQuery({
 
 export const completeAssistantMessage = internalMutation({
   args: {
-    agendaItems: v.array(v.string()),
     assistantMessageId: v.id('reedMessages'),
     content: v.string(),
     completedAt: v.number(),
@@ -500,7 +499,6 @@ export const completeAssistantMessage = internalMutation({
       completedAt: args.completedAt,
     });
     await ctx.db.patch(args.threadId, {
-      agendaItems: args.agendaItems.map(item => item.trim()).filter(Boolean).map(item => item.slice(0, 160)).slice(0, 4),
       updatedAt: args.completedAt,
       lastMessageAt: args.completedAt,
     });

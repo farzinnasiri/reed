@@ -150,7 +150,6 @@ export const getReedDebugContext = query({
       },
       activeThread: thread ? {
         _id: thread._id,
-        agendaItems: thread.agendaItems ?? [],
         compactedThroughMessageId: thread.compactedThroughMessageId ?? null,
         lastMessageAt: thread.lastMessageAt ?? null,
         updatedAt: thread.updatedAt,

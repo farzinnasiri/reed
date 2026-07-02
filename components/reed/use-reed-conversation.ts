@@ -4,12 +4,10 @@ import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { startClientWideEvent } from '@/lib/client-observability';
-import { summarizeCoachItemTitle } from './reed.presenter';
-import type { CoachItem, ComposerSource, ReedMessage } from './reed.types';
+import type { ComposerSource, ReedMessage } from './reed.types';
 
 const INITIAL_MESSAGE_LIMIT = 20;
 const MESSAGE_PAGE_SIZE = 30;
-const COACH_ITEMS_STORAGE_KEY = 'reed.coachItems.v1';
 const RECENT_MESSAGES_STORAGE_KEY = 'reed.recentMessages.v1';
 const RECENT_MESSAGES_CACHE_LIMIT = INITIAL_MESSAGE_LIMIT;
 
@@ -38,16 +36,6 @@ function getRenderMessageId(message: ServerReedMessage, lastUserNonce: string | 
   return message._id;
 }
 
-const INITIAL_COACH_ITEMS: CoachItem[] = [
-  {
-    body: 'Revisit after two lower-body sessions.',
-    id: 'coach-item-1',
-    status: 'open',
-    title: 'Lower-body recovery',
-    type: 'check_in',
-  },
-];
-
 export function useReedConversation({
   markOnline,
 }: {
@@ -72,8 +60,6 @@ export function useReedConversation({
   const fetchedHasMore = messagesPage.status === 'CanLoadMore';
   const sendReedMessage = useMutation(api.reed.sendMessage);
   const retryReedAssistantMessage = useMutation(api.reed.retryAssistantMessage);
-  const [coachItems, setCoachItems] = useState<CoachItem[]>(INITIAL_COACH_ITEMS);
-  const [hasLoadedCoachItems, setHasLoadedCoachItems] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<ReedMessage[]>([]);
   const [pendingSendNonce, setPendingSendNonce] = useState<string | null>(null);
   const lastSeenAssistantMessageIdRef = useRef<string | null>(null);
@@ -265,34 +251,6 @@ export function useReedConversation({
   }, [fetchedMessagesCacheKey]);
 
   useEffect(() => {
-    let isMounted = true;
-
-    void AsyncStorage.getItem(COACH_ITEMS_STORAGE_KEY)
-      .then(value => {
-        if (!isMounted) return;
-        if (!value) {
-          setHasLoadedCoachItems(true);
-          return;
-        }
-        const parsed = JSON.parse(value) as CoachItem[];
-        setCoachItems(Array.isArray(parsed) ? parsed : INITIAL_COACH_ITEMS);
-        setHasLoadedCoachItems(true);
-      })
-      .catch(() => {
-        if (isMounted) setHasLoadedCoachItems(true);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!hasLoadedCoachItems) return;
-    void AsyncStorage.setItem(COACH_ITEMS_STORAGE_KEY, JSON.stringify(coachItems));
-  }, [coachItems, hasLoadedCoachItems]);
-
-  useEffect(() => {
     const latest = messages.at(-1);
     if (latest?.role !== 'assistant' || latest.status !== 'sent') return;
     if (lastSeenAssistantMessageIdRef.current === latest.id) return;
@@ -392,34 +350,12 @@ export function useReedConversation({
     }).catch(() => {});
   }, [markOnline, pendingRunId, retryReedAssistantMessage]);
 
-  const saveCoachItem = useCallback((message: ReedMessage) => {
-    if (!message.text.trim()) return;
-    const title = summarizeCoachItemTitle(message.text);
-    setCoachItems(current => current.some(item => item.sourceMessageId === message.id || item.title === title)
-      ? current
-      : [{ body: message.text, id: `coach-item-${Date.now()}`, sourceMessageId: message.id, status: 'open', title, type: 'focus' }, ...current]);
-  }, []);
-
-  const isMessageSaved = useCallback((message: ReedMessage) => {
-    if (!message.text.trim()) return false;
-    const title = summarizeCoachItemTitle(message.text);
-    return coachItems.some(item => item.sourceMessageId === message.id || item.title === title);
-  }, [coachItems]);
-
-  const resolveCoachItem = useCallback((itemId: string) => {
-    setCoachItems(current => current.map(item => (item.id === itemId ? { ...item, status: 'resolved' } : item)));
-  }, []);
-
   return {
-    coachItems,
     hasMoreMessages,
     isLoadingInitialMessages: messagesPage.status === 'LoadingFirstPage',
-    isMessageSaved,
     loadOlderMessages,
     messages: visibleMessages,
     pendingRunId,
-    resolveCoachItem,
-    saveCoachItem,
     sendPrompt,
     retryAssistantMessage,
   };

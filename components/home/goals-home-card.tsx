@@ -98,18 +98,13 @@ export function GoalsHomeCard({ onOpenGoals }: GoalsHomeCardProps) {
             <GoalSummary label="Missed" value={summary.missed} />
           </View>
 
-          {summary.activeTargets.length === 0 ? (
-            <Pressable onPress={openCreateGoal} style={({ pressed }) => [styles.emptyState, { borderColor: theme.colors.controlBorder }, getTapScaleStyle(pressed)]}>
-              <ReedText variant="bodyStrong">Set one concrete target</ReedText>
-              <ReedText tone="muted" variant="caption">A deadline, a metric, and Reed tracks the rest.</ReedText>
-            </Pressable>
-          ) : (
+          {summary.activeTargets.length > 0 ? (
             <View style={styles.previewStack}>
               {(isExpanded ? summary.activeTargets : summary.activeTargets.slice(0, 1)).map(target => (
                 <HomeGoalRow key={target._id} target={target} />
               ))}
             </View>
-          )}
+          ) : null}
 
           {isExpanded ? (
             <Pressable onPress={openGoals} style={({ pressed }) => [styles.openFullList, getTapScaleStyle(pressed)]}>
@@ -165,7 +160,6 @@ function summarizeTargets(targets: TrainingTarget[]) {
 
 const styles = StyleSheet.create({
   card: { borderRadius: reedRadii.xl },
-  emptyState: { borderRadius: reedRadii.lg, borderWidth: 1, gap: 4, padding: 14 },
   goalPreviewCopy: { flex: 1, gap: 2, minWidth: 0 },
   goalPreviewRow: { gap: 8 },
   headerActions: { alignItems: 'center', flexDirection: 'row', gap: 8 },

@@ -7,7 +7,6 @@ import { KeyboardEvents } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReedTheme } from '@/design/provider';
 import { ReedText } from '@/components/ui/reed-text';
-import { ReedCoachItemsPage } from './reed-coach-items-page';
 import { ReedComposer } from './reed-composer';
 import { ReedHeader } from './reed-header';
 import { ReedImageEditor } from './reed-image-editor';
@@ -20,13 +19,14 @@ import { useReedConversation } from './use-reed-conversation';
 import { useReedPresence } from './use-reed-presence';
 import { useSpeechDraft } from '@/lib/speech/use-speech-draft';
 
+const REED_HEADER_HEIGHT = 58;
+
 export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps) {
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollViewType | null>(null);
   const hasInitialScrollSettledRef = useRef(false);
   const hasInitialComposerAlignmentRef = useRef(false);
-  const [isViewingCoachItems, setIsViewingCoachItems] = useState(false);
   const [composerText, setComposerText] = useState('');
   const [composerDockHeight, setComposerDockHeight] = useState(0);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -53,16 +53,12 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
   const quickActions = useQuery(api.reed.listQuickActions, {});
   const { isOnline: isReedOnline, label: reedPresenceLabel, markOnline, shouldDelayAssistantStart } = useReedPresence(presence?.lastMessageAt ?? null);
   const {
-    coachItems,
     hasMoreMessages,
     isLoadingInitialMessages,
-    isMessageSaved,
     loadOlderMessages,
     messages,
     pendingRunId,
-    resolveCoachItem,
     retryAssistantMessage,
-    saveCoachItem,
     sendPrompt,
   } = useReedConversation({
     displayName,
@@ -93,14 +89,10 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     voiceLevel: speechState.voiceLevel,
   }), [speechState.error, speechState.status, speechState.voiceLevel]);
 
-  const openCoachItems = useMemo(
-    () => coachItems.filter(item => item.status === 'open'),
-    [coachItems],
-  );
   const visibleQuickActions = quickActions ?? [];
   const shouldShowQuickActions = !isReedOnline && voiceState.status === 'idle' && visibleQuickActions.length > 0;
-  const headerTopInset = insets.top + theme.spacing.sm;
-  const contentTopPadding = headerTopInset + 44 + theme.spacing.lg;
+  const headerTopInset = theme.spacing.sm;
+  const contentTopPadding = headerTopInset + REED_HEADER_HEIGHT + theme.spacing.lg;
   const keyboardLift = Platform.OS === 'android' ? Math.max(0, keyboardHeight - insets.bottom) : 0;
   const composerBottomPadding = keyboardLift > 0 ? theme.spacing.xs : dockReservedSpace + theme.spacing.xs;
   const scrollBottomSpace = composerDockHeight > 0
@@ -230,25 +222,10 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
     }
   }
 
-  if (isViewingCoachItems) {
-    return (
-      <ReedCoachItemsPage
-        contentTopPadding={contentTopPadding}
-        dockReservedSpace={dockReservedSpace}
-        items={coachItems}
-        onBack={() => setIsViewingCoachItems(false)}
-        onResolve={resolveCoachItem}
-        topInset={headerTopInset}
-      />
-    );
-  }
-
   return (
     <View style={styles.root}>
       <ReedHeader
         label={reedPresenceLabel}
-        onOpenCoachItems={() => setIsViewingCoachItems(true)}
-        openItemsCount={openCoachItems.length}
         topInset={headerTopInset}
       />
 
@@ -260,8 +237,6 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         isReady={isThreadReady}
         onLoadOlderMessages={loadOlderMessages}
         onRetryAssistantMessage={retryAssistantMessage}
-        isMessageSaved={isMessageSaved}
-        onSaveCoachItem={saveCoachItem}
         scrollRef={scrollRef}
       />
 
@@ -269,7 +244,7 @@ export function ReedSurface({ displayName, dockReservedSpace }: ReedSurfaceProps
         <VoiceToast
           message={voiceToastMessage}
           onDismiss={() => setVoiceToastMessage(null)}
-          top={insets.top + theme.spacing.sm}
+          top={theme.spacing.sm}
         />
       ) : null}
 

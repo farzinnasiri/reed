@@ -16,6 +16,7 @@ import {
 import { GlassTabPill } from '@/components/ui/glass-tab-pill';
 import { api } from '@/convex/_generated/api';
 import { useReedTheme } from '@/design/provider';
+import { useCoachMessageUnread } from './use-coach-message-unread';
 
 type AppShellProps = {
   children: ReactNode;
@@ -28,13 +29,15 @@ export function AppShell({ children, displayName }: AppShellProps) {
   const segments = useSegments();
   const activeMode = appModeFromRouteSegment(segments.at(-1));
   const currentWorkoutSession = useQuery(api.liveSessions.getCurrent, {});
+  const profileInsight = useQuery(api.profileInsight.getCurrent, {});
   const hasActiveWorkoutSession = currentWorkoutSession !== null && currentWorkoutSession !== undefined;
+  const { hasUnreadCoachMessage, markCoachMessageRead } = useCoachMessageUnread(profileInsight?.content);
   const [dockHeight, setDockHeight] = useState(TAB_PILL_MIN_HEIGHT);
   const [isEditingSettingsProfile, setIsEditingSettingsProfile] = useState(false);
   const [isWorkoutSessionFullscreen, setIsWorkoutSessionFullscreen] = useState(false);
 
   const showDock = !isEditingSettingsProfile && !isWorkoutSessionFullscreen;
-  const shellTopInset = activeMode === 'chat' ? 0 : insets.top;
+  const shellTopInset = insets.top;
   const dockBottom = TAB_DOCK_BASE_BOTTOM_OFFSET + insets.bottom;
   const dockReservedSpace = showDock ? dockBottom + dockHeight : insets.bottom + theme.spacing.sm;
 
@@ -54,6 +57,7 @@ export function AppShell({ children, displayName }: AppShellProps) {
           size={22}
         />
       ),
+      hasIndicator: hasUnreadCoachMessage,
       id: 'home',
       isActive: activeMode === 'home',
     },
@@ -110,7 +114,9 @@ export function AppShell({ children, displayName }: AppShellProps) {
       value={{
         displayName,
         dockReservedSpace,
+        hasUnreadCoachMessage,
         hasActiveWorkoutSession,
+        markCoachMessageRead,
         setIsEditingSettingsProfile,
         setIsWorkoutSessionFullscreen,
       }}

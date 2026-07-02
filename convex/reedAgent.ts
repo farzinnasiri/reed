@@ -70,21 +70,17 @@ export const runAssistant = internalAction({
 
         const contextBlocks = await buildContextBlocks(ctx, context);
         const coachingMemory = await ctx.runQuery(internal.reedCoachingMemory.loadPromptMemory, { profileId: context.profile._id });
-        const result = await invokeChatModel(
-          buildChatPrompt(context, contextBlocks, coachingMemory),
-          context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [],
-        );
+        const response = await invokeChatModel(buildChatPrompt(context, contextBlocks, coachingMemory));
 
         await ctx.runMutation(internal.reed.completeAssistantMessage, {
           threadId: context.thread._id,
           assistantMessageId: context.assistantMessage._id,
-          agendaItems: result.agenda,
-          content: result.response,
+          content: response,
           completedAt: Date.now(),
           reentryState: context.reentryState,
         });
 
-        return result;
+        return response;
       });
     } catch (error) {
       console.error('[REED_ASSISTANT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -313,12 +309,8 @@ function buildChatPrompt(
     context.prompt.content,
     '',
     'Required output format:',
-    '- Return strict JSON only: {"agenda":["short private checklist item"],"response":"user-facing reply"}.',
+    '- Return strict JSON only: {"response":"user-facing reply"}.',
     '- response: the exact text shown to the user.',
-    '- agenda: Reed’s private coaching checklist for the next turn. It is not hidden facts; it is the current plan of action.',
-    '- agenda may have 0 to 4 items. Each item must be short. Delete items that are already done. Revise the list every turn.',
-    '- Example agenda item style: "Ask pain severity before suggesting lower-body work."',
-    '- Never reveal or mention the agenda in response.',
     '',
     'Current time:',
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
@@ -341,7 +333,6 @@ function buildChatPrompt(
     'Compacted Reed memory:',
     context.memorySummary ?? 'No compacted chat memory yet.',
     ...buildCoachStatePromptLines(context.coachState?.content ?? null),
-    ...buildAgendaLines(context),
     '',
     recentSegmentHeading(context),
     ...context.recentMessages.map((message: { role: string; content: string; createdAt: number }) => formatMessageLine(message, context.clientNow, context.clientTimeZone)),
@@ -379,23 +370,6 @@ function buildCoachingMemoryLines(memory: ReedPromptMemory) {
 
   lines.push('- Use this memory to keep a broad working model of the athlete. Do not dump it into the answer.');
   return lines;
-}
-
-function buildAgendaLines(context: Awaited<ReturnType<typeof loadContextType>>) {
-  const agenda = context.reentryState === 'cold' ? [] : context.thread.agendaItems ?? [];
-  if (agenda.length === 0) {
-    return [
-      '',
-      'Private session agenda:',
-      '- No active agenda. Create one only if the current turn needs follow-up across turns.',
-    ];
-  }
-  return [
-    '',
-    'Private session agenda:',
-    '- This is Reed’s current checklist. Complete, delete, or revise items as the conversation moves.',
-    ...agenda.slice(0, 4).map((item, index) => `${index + 1}. ${item}`),
-  ];
 }
 
 function buildAppTimelineLines(context: Awaited<ReturnType<typeof loadContextType>>) {
@@ -543,14 +517,9 @@ function formatElapsed(ageMs: number) {
   return months < 2 ? 'about a month' : `about ${months} months`;
 }
 
-type ReedChatResult = {
-  agenda: string[];
-  response: string;
-};
-
-async function invokeChatModel(prompt: { system: string; user: string }, fallbackAgenda: string[]): Promise<ReedChatResult> {
+async function invokeChatModel(prompt: { system: string; user: string }) {
   if (!process.env.XAI_API_KEY) {
-    return { agenda: fallbackAgenda, response: fallbackAssistantReply(prompt.user) };
+    return fallbackAssistantReply(prompt.user);
   }
 
   console.log('[REED_CHAT_MODEL_REQUEST]', {
@@ -585,7 +554,7 @@ async function invokeChatModel(prompt: { system: string; user: string }, fallbac
     responseChars: responseText.length,
   });
 
-  return parseChatResult(responseText, fallbackAgenda);
+  return parseChatResult(responseText);
 }
 
 async function invokeChatModelOnce(prompt: { system: string; user: string }, signal?: AbortSignal) {
@@ -611,24 +580,15 @@ async function invokeChatModelOnce(prompt: { system: string; user: string }, sig
   return extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
 }
 
-function parseChatResult(text: string, fallbackAgenda: string[]): ReedChatResult {
-  const fallback = { agenda: fallbackAgenda, response: text.trim() || fallbackAssistantReply('') };
+function parseChatResult(text: string) {
+  const fallback = text.trim() || fallbackAssistantReply('');
   try {
     const value = JSON.parse(extractJsonObject(text));
     if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
     const record = value as Record<string, unknown>;
-    const response = typeof record.response === 'string' && record.response.trim()
+    return typeof record.response === 'string' && record.response.trim()
       ? record.response.trim()
-      : fallback.response;
-    const agenda = Array.isArray(record.agenda)
-      ? record.agenda
-        .filter((item): item is string => typeof item === 'string')
-        .map(item => item.trim())
-        .filter(Boolean)
-        .map(item => item.slice(0, 160))
-        .slice(0, 4)
-      : [];
-    return { agenda, response };
+      : fallback;
   } catch {
     return fallback;
   }
@@ -891,7 +851,7 @@ declare function loadContextType(): Promise<{
   clientTimeZone?: string;
   priorLastMessageAt: number | null;
   reentryState: 'hot' | 'warm' | 'cold';
-  thread: { _id: Id<'reedThreads'>; agendaItems?: string[] };
+  thread: { _id: Id<'reedThreads'> };
   profile: { _id: Id<'profiles'>; displayName?: string };
   assistantMessage: { _id: Id<'reedMessages'> };
   userMessage: { _id: Id<'reedMessages'>; content: string; createdAt: number };

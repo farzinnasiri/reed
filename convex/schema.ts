@@ -217,7 +217,6 @@ export default defineSchema({
     lastMessageAt: v.optional(v.number()),
     activeSummaryId: v.optional(v.id('reedMemorySummaries')),
     compactedThroughMessageId: v.optional(v.id('reedMessages')),
-    agendaItems: v.optional(v.array(v.string())),
   })
     .index('by_profile_id_and_status', ['profileId', 'status'])
     .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),

@@ -13,23 +13,19 @@ export function ReedThread({
   contentPaddingBottom,
   contentPaddingTop,
   hasMoreMessages,
-  isMessageSaved,
   isReady,
   messages,
   onLoadOlderMessages,
   onRetryAssistantMessage,
-  onSaveCoachItem,
   scrollRef,
 }: {
   contentPaddingBottom: number;
   contentPaddingTop: number;
   hasMoreMessages: boolean;
-  isMessageSaved: (message: ReedMessage) => boolean;
   isReady: boolean;
   messages: ReedMessage[];
   onLoadOlderMessages: () => void;
   onRetryAssistantMessage: (message: ReedMessage) => void;
-  onSaveCoachItem: (message: ReedMessage) => void;
   scrollRef: RefObject<ScrollViewType | null>;
 }) {
   const { theme } = useReedTheme();
@@ -89,10 +85,8 @@ export function ReedThread({
               <View key={message.id} style={styles.messageCluster}>
                 {shouldShowDateIndicator ? <DateIndicator createdAt={message.createdAt} /> : null}
                 <MessageRow
-                  isSaved={isMessageSaved(message)}
                   message={message}
                   onRetryAssistantMessage={onRetryAssistantMessage}
-                  onSaveCoachItem={onSaveCoachItem}
                 />
               </View>
             );
@@ -123,15 +117,11 @@ export function ReedThread({
 }
 
 function MessageRow({
-  isSaved,
   message,
-  onSaveCoachItem,
   onRetryAssistantMessage,
 }: {
-  isSaved: boolean;
   message: ReedMessage;
   onRetryAssistantMessage: (message: ReedMessage) => void;
-  onSaveCoachItem: (message: ReedMessage) => void;
 }) {
   const { theme } = useReedTheme();
   const isAssistant = message.role === 'assistant';
@@ -153,11 +143,6 @@ function MessageRow({
       previousLayoutSignatureRef.current = nextSignature;
     }
   }, [message.attachments?.length, message.status, messageText.length]);
-
-  function handleSave() {
-    onSaveCoachItem(message);
-    void Haptics.selectionAsync();
-  }
 
   function handleRetry() {
     onRetryAssistantMessage(message);
@@ -228,20 +213,6 @@ function MessageRow({
                     />
                   </Pressable>
                 ) : null}
-                <Pressable
-                  accessibilityHint="Saves this Reed response as a coach item."
-                  accessibilityLabel="Save as coach item"
-                  accessibilityRole="button"
-                  hitSlop={10}
-                  onPress={handleSave}
-                  style={({ pressed }) => [styles.messageInlineAction, getTapScaleStyle(pressed)]}
-                >
-                  <Ionicons
-                    color={String(theme.colors.textMuted)}
-                    name={isSaved ? 'bookmark' : 'bookmark-outline'}
-                    size={15}
-                  />
-                </Pressable>
                 <Pressable
                   accessibilityHint="Copies this Reed response to the clipboard."
                   accessibilityLabel="Copy response"

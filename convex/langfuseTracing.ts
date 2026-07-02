@@ -226,7 +226,6 @@ function inferTraceOutput(value: unknown) {
   if (isRecord(value)) {
     const output: Record<string, unknown> = {};
     if (typeof value.response === 'string') output.response = value.response;
-    if (Array.isArray(value.agenda)) output.agenda = value.agenda;
     if (typeof value.text === 'string') output.text = value.text;
     if (typeof value.content === 'string') output.content = value.content;
     if (Object.keys(output).length > 0) return output;

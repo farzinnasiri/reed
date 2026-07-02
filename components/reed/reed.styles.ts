@@ -9,6 +9,7 @@ export const styles = StyleSheet.create({
     gap: 16,
   },
   fixedHeader: {
+    alignItems: 'center',
     borderRadius: 0,
     left: 0,
     position: 'absolute',
@@ -16,48 +17,31 @@ export const styles = StyleSheet.create({
     top: 0,
     zIndex: 15,
   },
-  fixedHeaderContent: {
-    gap: 0,
-  },
   header: {
     alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 44,
-    paddingHorizontal: 2,
+    borderRadius: reedRadii.pill,
+    borderWidth: 1,
+    gap: 2,
+    maxWidth: 320,
+    minHeight: 58,
+    minWidth: '48%',
+    paddingHorizontal: 22,
+    paddingVertical: 8,
   },
   headerIdentity: {
-    alignItems: 'flex-start',
-    gap: 1,
-  },
-  headerActions: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 8,
   },
-  headerAction: {
+  headerAvatar: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
-    minHeight: 44,
-    paddingHorizontal: 8,
-  },
-  headerActionIconOnly: {
-    alignItems: 'center',
-    height: 44,
+    borderRadius: reedRadii.pill,
+    height: 30,
     justifyContent: 'center',
-    width: 44,
+    width: 30,
   },
-  todayStrip: {
+  headerPresence: {
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-  },
-  todayCopy: {
-    gap: 3,
   },
   quickActionsScroller: {
     marginHorizontal: -12,
@@ -74,37 +58,6 @@ export const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 16,
     paddingVertical: 10,
-  },
-  coachItemsBlock: {
-    gap: 8,
-  },
-  coachItemStack: {
-    gap: 8,
-  },
-  coachItemRow: {
-    alignItems: 'center',
-    borderRadius: reedRadii.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 64,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  coachItemDot: {
-    borderRadius: reedRadii.pill,
-    height: 8,
-    width: 8,
-  },
-  coachItemCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  coachItemAction: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 44,
   },
   thread: {
     gap: 14,

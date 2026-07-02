@@ -1,5 +1,4 @@
 export type ComposerSource = 'quick-action' | 'typed' | 'voice';
-export type CoachItemStatus = 'open' | 'resolved';
 export type MessageStatus = 'failed' | 'pending' | 'sent';
 export type VoiceComposerStatus = 'failed' | 'idle' | 'listening' | 'ready' | 'transcribing';
 
@@ -27,15 +26,6 @@ export type ReedDraftAttachment = {
   storageId?: string;
   uri: string;
   width?: number;
-};
-
-export type CoachItem = {
-  body: string;
-  id: string;
-  sourceMessageId?: string;
-  status: CoachItemStatus;
-  title: string;
-  type: 'caution' | 'check_in' | 'experiment' | 'focus';
 };
 
 export type ReedMessage = {

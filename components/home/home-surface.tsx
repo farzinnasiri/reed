@@ -9,18 +9,17 @@ import {
 } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii, workoutSemanticPalette } from '@/design/system';
+import { reedRadii } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
 import { GoalsHomeCard } from './goals-home-card';
+import { ProfileDashboardCards, TrainingProgressExpansion } from './profile-surface';
 import { QuickLogSheet } from './quick-log-sheet';
 
 type HomeSurfaceProps = {
@@ -29,19 +28,6 @@ type HomeSurfaceProps = {
   homeHeadline: string;
   onOpenGoals: () => void;
   onOpenWorkout: () => void;
-};
-
-type WeeklyBreakdownMetric = 'reps' | 'sets' | 'volume';
-type WeeklyBreakdownGroup = {
-  groupId: string;
-  label: string;
-  reps: number;
-  setCount: number;
-  volume: number;
-};
-type WeeklyBreakdownStats = {
-  granularGroups?: WeeklyBreakdownGroup[];
-  groups: WeeklyBreakdownGroup[];
 };
 
 export function HomeSurface({
@@ -56,7 +42,6 @@ export function HomeSurface({
   const useCompactHeadline = isCompact || width < 430;
   const startSession = useMutation(api.liveSessions.start);
   const [isBreakdownExpanded, setIsBreakdownExpanded] = useState(false);
-  const [metricMode, setMetricMode] = useState<WeeklyBreakdownMetric>('sets');
   const [isStarting, setIsStarting] = useState(false);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -72,64 +57,6 @@ export function HomeSurface({
     weeklyStats?.weekStartAt ?? weekRange.weekStartAt,
     weeklyStats?.weekEndAt ?? weekRange.weekEndAt,
   );
-  const workoutShapeGroups = weeklyStats?.groups ?? [];
-  const breakdownGroups = getWeeklyBreakdownGroups(weeklyStats);
-  const rankedWorkoutShapeGroups = useMemo(
-    () =>
-      [...workoutShapeGroups]
-        .filter(group => group.setCount > 0)
-        .sort((left, right) => right.setCount - left.setCount || left.label.localeCompare(right.label)),
-    [workoutShapeGroups],
-  );
-  const workoutShapeShare = useMemo(
-    () => getNormalizedShareByGroup(rankedWorkoutShapeGroups, 'sets'),
-    [rankedWorkoutShapeGroups],
-  );
-  const workoutShapeSegments = useMemo(
-    () =>
-      rankedWorkoutShapeGroups.map(group => ({
-        color: getCoarseMuscleGroupColor(group.groupId),
-        groupId: group.groupId,
-        label: group.label,
-        percent: workoutShapeShare.get(group.groupId) ?? 0,
-      })),
-    [rankedWorkoutShapeGroups, workoutShapeShare],
-  );
-  const rankedGroups = useMemo(
-    () =>
-      [...breakdownGroups]
-        .filter(group => getMetricValue(group, metricMode) > 0)
-        .sort((left, right) => {
-          const diff = getMetricValue(right, metricMode) - getMetricValue(left, metricMode);
-          if (diff !== 0) {
-            return diff;
-          }
-          return left.label.localeCompare(right.label);
-        }),
-    [breakdownGroups, metricMode],
-  );
-  const shareByGroup = useMemo(
-    () => getNormalizedShareByGroup(rankedGroups, metricMode),
-    [metricMode, rankedGroups],
-  );
-  const totalMetricValue = useMemo(
-    () => rankedGroups.reduce((sum, group) => sum + getMetricValue(group, metricMode), 0),
-    [metricMode, rankedGroups],
-  );
-  const chartSegments = useMemo(
-    () =>
-      rankedGroups
-        .filter(group => getMetricValue(group, metricMode) > 0)
-        .map(group => ({
-          color: getGranularMuscleGroupColor(group.groupId),
-          groupId: group.groupId,
-          label: group.label,
-          percent: shareByGroup.get(group.groupId) ?? 0,
-          value: getMetricValue(group, metricMode),
-        })),
-    [metricMode, rankedGroups, shareByGroup],
-  );
-
   function toggleBreakdown() {
     runReedLayoutAnimation();
     setIsBreakdownExpanded(current => !current);
@@ -165,7 +92,12 @@ export function HomeSurface({
       style={styles.root}
     >
       <View style={styles.header}>
-        <ReedText style={[styles.headerHeadline, useCompactHeadline && styles.headerHeadlineCompact]} variant="title">
+        <ReedText
+          ellipsizeMode="tail"
+          numberOfLines={1}
+          style={[styles.headerHeadline, useCompactHeadline && styles.headerHeadlineCompact]}
+          variant="title"
+        >
           {homeHeadline}
         </ReedText>
       </View>
@@ -207,6 +139,8 @@ export function HomeSurface({
       </GlassSurface>
 
       <QuickLogSheet onClose={() => setIsQuickLogOpen(false)} visible={isQuickLogOpen} />
+
+      <ProfileDashboardCards />
 
       <GoalsHomeCard onOpenGoals={onOpenGoals} />
 
@@ -256,95 +190,7 @@ export function HomeSurface({
               />
             </View>
 
-            {isBreakdownExpanded ? (
-              rankedGroups.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <ReedText tone="muted">
-                    No activity logged this week yet. Start a session or quick log something small.
-                  </ReedText>
-                </View>
-              ) : (
-                <View style={styles.breakdownSection}>
-                  <SegmentedControl<WeeklyBreakdownMetric>
-                    compact
-                    onChange={setMetricMode}
-                    options={[
-                      { label: 'Sets', value: 'sets' },
-                      { label: 'Reps', value: 'reps' },
-                      { label: 'Load', value: 'volume' },
-                    ]}
-                    value={metricMode}
-                    variant="pill"
-                  />
-
-                  <View style={[styles.breakdownOverview, isCompact && styles.breakdownOverviewCompact]}>
-                    <WeeklyDonutChart
-                      segments={chartSegments.map(segment => ({
-                        color: segment.color,
-                        id: segment.groupId,
-                        percent: segment.percent,
-                      }))}
-                      subtitle={metricMode === 'sets' ? 'sets' : metricMode === 'reps' ? 'reps' : 'volume'}
-                      value={formatMetricSummaryValue(metricMode, totalMetricValue)}
-                    />
-
-                    <View style={styles.breakdownLegend}>
-                      {chartSegments.slice(0, 5).map(segment => (
-                        <View key={`legend-${segment.groupId}`} style={styles.breakdownLegendRow}>
-                          <View style={[styles.breakdownLegendDot, { backgroundColor: segment.color }]} />
-                          <ReedText style={styles.breakdownLegendLabel} variant="caption">
-                            {segment.label}
-                          </ReedText>
-                          <ReedText tone="muted" variant="caption">
-                            {segment.percent}% ({formatMetricLegendValue(metricMode, segment.value)})
-                          </ReedText>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-
-                  {workoutShapeSegments.length > 0 ? (
-                    <View style={styles.breakdownShapeSection}>
-                      <ReedText tone="muted" variant="caption">
-                        Workout shape
-                      </ReedText>
-                      <View
-                        style={[
-                          styles.breakdownShapeTrack,
-                          { backgroundColor: theme.colors.controlBorder },
-                        ]}
-                      >
-                        {workoutShapeSegments.map(segment => (
-                          <View
-                            key={`shape-${segment.groupId}`}
-                            style={[
-                              styles.breakdownShapeSegment,
-                              {
-                                backgroundColor: segment.color,
-                                flex: Math.max(segment.percent, 0.0001),
-                              },
-                            ]}
-                          />
-                        ))}
-                      </View>
-                      <View style={styles.breakdownShapeLegend}>
-                        {workoutShapeSegments.map(segment => (
-                          <View key={`shape-legend-${segment.groupId}`} style={styles.breakdownShapeLegendRow}>
-                            <View style={[styles.breakdownLegendDot, { backgroundColor: segment.color }]} />
-                            <ReedText style={styles.breakdownShapeLegendLabel} variant="caption">
-                              {segment.label}
-                            </ReedText>
-                            <ReedText tone="muted" variant="caption">
-                              {segment.percent}%
-                            </ReedText>
-                          </View>
-                        ))}
-                      </View>
-                    </View>
-                  ) : null}
-                </View>
-              )
-            ) : null}
+            {isBreakdownExpanded ? <TrainingProgressExpansion /> : null}
           </>
         )}
       </GlassSurface>
@@ -396,231 +242,10 @@ function SummaryMetric({
   );
 }
 
-function WeeklyDonutChart({
-  segments,
-  subtitle,
-  value,
-}: {
-  segments: Array<{ color: string; id: string; percent: number }>;
-  subtitle: string;
-  value: string;
-}) {
-  return (
-    <AnalyticsDonut
-      centerPrimary={value}
-      centerPrimaryStyle={styles.breakdownDonutValue}
-      centerSecondary={subtitle}
-      centerSecondaryStyle={styles.breakdownDonutSubtitle}
-      containerStyle={styles.breakdownDonutContainer}
-      segments={segments}
-      size={132}
-      strokeWidth={16}
-      wrapStyle={styles.breakdownDonutWrap}
-    />
-  );
-}
-
 type MetricDisplay = {
   unit?: string;
   value: string;
 };
-
-function getWeeklyBreakdownGroups(weeklyStats: WeeklyBreakdownStats | undefined): WeeklyBreakdownGroup[] {
-  if (!weeklyStats) {
-    return [];
-  }
-
-  if ('granularGroups' in weeklyStats && Array.isArray(weeklyStats.granularGroups)) {
-    return weeklyStats.granularGroups;
-  }
-
-  return weeklyStats.groups;
-}
-
-function getMetricValue(group: WeeklyBreakdownGroup, mode: WeeklyBreakdownMetric) {
-  if (mode === 'sets') {
-    return group.setCount;
-  }
-
-  if (mode === 'reps') {
-    return group.reps;
-  }
-
-  return group.volume;
-}
-
-function formatMetricSummaryValue(mode: WeeklyBreakdownMetric, value: number) {
-  if (mode === 'volume') {
-    return formatWeeklyVolume(value);
-  }
-
-  return formatWholeNumber(value);
-}
-
-function formatMetricLegendValue(mode: WeeklyBreakdownMetric, value: number) {
-  if (mode === 'sets') {
-    return `${formatWholeNumber(value)} sets`;
-  }
-
-  if (mode === 'reps') {
-    return `${formatWholeNumber(value)} reps`;
-  }
-
-  return formatWeeklyVolume(value);
-}
-
-function getNormalizedShareByGroup(
-  groups: WeeklyBreakdownGroup[],
-  mode: WeeklyBreakdownMetric,
-) {
-  const shares = new Map<string, number>();
-  const positive = groups
-    .map(group => ({ group, value: getMetricValue(group, mode) }))
-    .filter(entry => entry.value > 0);
-
-  if (positive.length === 0) {
-    for (const group of groups) {
-      shares.set(group.groupId, 0);
-    }
-    return shares;
-  }
-
-  const total = positive.reduce((sum, entry) => sum + entry.value, 0);
-  const ranked = positive.map(entry => {
-    const raw = (entry.value / total) * 100;
-    const floor = Math.floor(raw);
-    return {
-      floor,
-      fraction: raw - floor,
-      groupId: entry.group.groupId,
-      value: entry.value,
-    };
-  });
-
-  let distributed = ranked.reduce((sum, row) => sum + row.floor, 0);
-  const needed = Math.max(0, 100 - distributed);
-  const byRemainder = [...ranked].sort(
-    (left, right) =>
-      right.fraction - left.fraction || right.value - left.value || left.groupId.localeCompare(right.groupId),
-  );
-
-  for (let index = 0; index < needed; index += 1) {
-    const target = byRemainder[index % byRemainder.length];
-    target.floor += 1;
-    distributed += 1;
-    if (distributed >= 100) {
-      break;
-    }
-  }
-
-  for (const row of ranked) {
-    shares.set(row.groupId, row.floor);
-  }
-
-  for (const group of groups) {
-    if (!shares.has(group.groupId)) {
-      shares.set(group.groupId, 0);
-    }
-  }
-
-  return shares;
-}
-
-function getCoarseMuscleGroupColor(groupId: string) {
-  if (groupId === 'arms') {
-    return workoutSemanticPalette.muscleGroups.arms;
-  }
-
-  if (groupId === 'back') {
-    return workoutSemanticPalette.muscleGroups.back;
-  }
-
-  if (groupId === 'cardio') {
-    return workoutSemanticPalette.muscleGroups.cardio;
-  }
-
-  if (groupId === 'chest') {
-    return workoutSemanticPalette.muscleGroups.chest;
-  }
-
-  if (groupId === 'core') {
-    return workoutSemanticPalette.muscleGroups.core;
-  }
-
-  if (groupId === 'legs') {
-    return workoutSemanticPalette.muscleGroups.legs;
-  }
-
-  if (groupId === 'shoulders') {
-    return workoutSemanticPalette.muscleGroups.shoulders;
-  }
-
-  return workoutSemanticPalette.muscleGroups.other;
-}
-
-function getGranularMuscleGroupColor(groupId: string) {
-  if (groupId === 'adductors') {
-    return workoutSemanticPalette.granularMuscleGroups.adductors;
-  }
-
-  if (groupId === 'biceps') {
-    return workoutSemanticPalette.granularMuscleGroups.biceps;
-  }
-
-  if (groupId === 'calves') {
-    return workoutSemanticPalette.granularMuscleGroups.calves;
-  }
-
-  if (groupId === 'cardio') {
-    return workoutSemanticPalette.granularMuscleGroups.cardio;
-  }
-
-  if (groupId === 'chest') {
-    return workoutSemanticPalette.granularMuscleGroups.chest;
-  }
-
-  if (groupId === 'core') {
-    return workoutSemanticPalette.granularMuscleGroups.core;
-  }
-
-  if (groupId === 'forearms') {
-    return workoutSemanticPalette.granularMuscleGroups.forearms;
-  }
-
-  if (groupId === 'glutes') {
-    return workoutSemanticPalette.granularMuscleGroups.glutes;
-  }
-
-  if (groupId === 'hamstrings') {
-    return workoutSemanticPalette.granularMuscleGroups.hamstrings;
-  }
-
-  if (groupId === 'lats') {
-    return workoutSemanticPalette.granularMuscleGroups.lats;
-  }
-
-  if (groupId === 'quads') {
-    return workoutSemanticPalette.granularMuscleGroups.quads;
-  }
-
-  if (groupId === 'shoulders') {
-    return workoutSemanticPalette.granularMuscleGroups.shoulders;
-  }
-
-  if (groupId === 'traps') {
-    return workoutSemanticPalette.granularMuscleGroups.traps;
-  }
-
-  if (groupId === 'triceps') {
-    return workoutSemanticPalette.granularMuscleGroups.triceps;
-  }
-
-  if (groupId === 'upperBack') {
-    return workoutSemanticPalette.granularMuscleGroups.upperBack;
-  }
-
-  return workoutSemanticPalette.granularMuscleGroups.other;
-}
 
 function getCurrentWeekRange() {
   const now = new Date();
@@ -687,12 +312,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   headerHeadline: {
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 21,
+    lineHeight: 26,
   },
   headerHeadlineCompact: {
-    fontSize: 21,
-    lineHeight: 27,
+    fontSize: 19,
+    lineHeight: 24,
   },
   card: {
     borderRadius: reedRadii.xl,
@@ -772,77 +397,5 @@ const styles = StyleSheet.create({
     right: 0,
     top: 8,
     width: 1,
-  },
-  breakdownSection: {
-    gap: 24,
-    paddingTop: 14,
-  },
-  breakdownShapeSection: {
-    gap: 10,
-  },
-  breakdownShapeTrack: {
-    borderRadius: reedRadii.pill,
-    flexDirection: 'row',
-    height: 10,
-    overflow: 'hidden',
-  },
-  breakdownShapeSegment: {
-    minWidth: 0,
-  },
-  breakdownShapeLegend: {
-    gap: 4,
-  },
-  breakdownShapeLegendRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
-  },
-  breakdownShapeLegendLabel: {
-    flex: 1,
-  },
-  breakdownOverview: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 14,
-  },
-  breakdownDonutContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  breakdownDonutWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  breakdownDonutValue: {
-    textAlign: 'center',
-  },
-  breakdownDonutSubtitle: {
-    marginTop: -1,
-    textTransform: 'capitalize',
-  },
-  breakdownLegend: {
-    flex: 1,
-    gap: 6,
-  },
-  breakdownLegendRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 7,
-  },
-  breakdownLegendDot: {
-    borderRadius: reedRadii.pill,
-    height: 8,
-    width: 8,
-  },
-  breakdownLegendLabel: {
-    flex: 1,
-  },
-  emptyState: {
-    minHeight: 80,
-    justifyContent: 'center',
-  },
-  breakdownOverviewCompact: {
-    flexDirection: 'column',
   },
 });

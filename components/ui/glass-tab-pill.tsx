@@ -1,11 +1,10 @@
 import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, Platform, Pressable, StyleSheet, View } from 'react-native';
 import {
   TAB_PILL_MIN_HEIGHT,
   canUseGlassBlur,
-  getGlassControlTokens,
   getGlassTabPillTokens,
 } from '@/components/ui/glass-material';
 import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
@@ -27,21 +26,16 @@ type GlassTabPillProps<T extends string> = {
 
 const SHELL_HORIZONTAL_PADDING = 10;
 const SHELL_VERTICAL_PADDING = 7;
+const ACTIVE_PIN_WIDTH = 24;
 const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillProps<T>) {
   const { reducedTransparency, theme } = useReedTheme();
   const pane = getGlassTabPillTokens(theme);
-  const control = getGlassControlTokens(theme);
   const canUseBlur = canUseGlassBlur() && !reducedTransparency;
-  const [shellWidth, setShellWidth] = useState(0);
+  const shellBackground = canUseBlur ? pane.backgroundColor : pane.fallbackBackgroundColor;
   const activeIndex = Math.max(0, items.findIndex(item => item.isActive));
   const progress = useRef(new Animated.Value(activeIndex)).current;
-  const itemWidth = Math.max(0, (shellWidth - SHELL_HORIZONTAL_PADDING * 2) / Math.max(1, items.length));
-  const indicatorTranslateX = useMemo(
-    () => Animated.multiply(progress, itemWidth || 0),
-    [itemWidth, progress],
-  );
 
   useEffect(() => {
     createTiming(progress, activeIndex, reedMotion.durations.standard, undefined, SHOULD_USE_NATIVE_DRIVER).start();
@@ -49,12 +43,11 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
 
   return (
     <View
-      onLayout={event => setShellWidth(event.nativeEvent.layout.width)}
       style={[
         styles.shell,
         pane.shadowStyle,
         {
-          backgroundColor: pane.backgroundColor,
+          backgroundColor: shellBackground,
           borderColor: pane.borderColor,
         },
       ]}
@@ -67,19 +60,16 @@ export function GlassTabPill<T extends string>({ items, onPress }: GlassTabPillP
         />
       ) : null}
 
-      {itemWidth > 0 ? (
-        <Animated.View
-          style={[
-            styles.activeIndicator,
-            {
-              backgroundColor: control.activeBackgroundColor,
-              borderColor: control.activeBorderColor,
-              transform: [{ translateX: indicatorTranslateX }],
-              width: itemWidth,
-            },
-          ]}
-        />
-      ) : null}
+      <View
+        style={[
+          StyleSheet.absoluteFill,
+          styles.highlight,
+          {
+            backgroundColor: canUseBlur ? 'transparent' : shellBackground,
+            borderColor: pane.borderColor,
+          },
+        ]}
+      />
 
       <View style={styles.row}>
         {items.map(item => (
@@ -122,6 +112,16 @@ function GlassTabPillButton({
     inputRange: [index - 1, index, index + 1],
     outputRange: [1, reedMotion.scale.activeTab, 1],
   });
+  const activePinOpacity = progress.interpolate({
+    extrapolate: 'clamp',
+    inputRange: [index - 0.55, index, index + 0.55],
+    outputRange: [0, 1, 0],
+  });
+  const activePinScaleX = progress.interpolate({
+    extrapolate: 'clamp',
+    inputRange: [index - 0.55, index, index + 0.55],
+    outputRange: [0.45, 1, 0.45],
+  });
 
   return (
     <Pressable
@@ -133,6 +133,16 @@ function GlassTabPillButton({
     >
       <Animated.View style={[styles.iconWrap, { transform: [{ scale: iconScale }] }]}>
         {icon}
+        <Animated.View
+          style={[
+            styles.activePin,
+            {
+              backgroundColor: theme.colors.accentPrimary,
+              opacity: activePinOpacity,
+              transform: [{ scaleX: activePinScaleX }],
+            },
+          ]}
+        />
         {hasIndicator ? (
           <View style={[styles.indicatorDot, { backgroundColor: theme.colors.accentSecondary }]} />
         ) : null}
@@ -155,13 +165,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
   },
-  activeIndicator: {
-    borderRadius: reedRadii.md,
-    borderWidth: 1,
-    bottom: SHELL_VERTICAL_PADDING,
-    left: SHELL_HORIZONTAL_PADDING,
+  activePin: {
+    borderRadius: reedRadii.pill,
+    bottom: -11,
+    height: 3,
+    left: '50%',
+    marginLeft: -ACTIVE_PIN_WIDTH / 2,
     position: 'absolute',
-    top: SHELL_VERTICAL_PADDING,
+    width: ACTIVE_PIN_WIDTH,
+  },
+  highlight: {
+    borderTopWidth: 1,
+    opacity: 0.75,
+    pointerEvents: 'none',
   },
   item: {
     alignItems: 'center',

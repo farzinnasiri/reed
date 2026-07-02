@@ -1,5 +1,4 @@
-import type { ReedTheme } from '@/design/system';
-import type { CoachItem, ReedMessage } from './reed.types';
+import type { ReedMessage } from './reed.types';
 
 export const VOICE_WAVEFORM_BARS = [
   { low: 0.52, high: 1.2 },
@@ -31,13 +30,6 @@ export function buildCoachReply(prompt: string, displayName: string) {
   return 'Good. Keep the question concrete and I’ll keep the answer useful.';
 }
 
-export function summarizeCoachItemTitle(text: string) {
-  const [firstSentence] = text.split('.');
-  const trimmed = firstSentence?.trim() ?? text.trim();
-  if (!trimmed) return 'Coach item';
-  return trimmed.length > 36 ? `${trimmed.slice(0, 33).trimEnd()}...` : trimmed;
-}
-
 export function summarizeReplyQuote(text: string) {
   const normalized = text.replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
@@ -63,13 +55,6 @@ export function formatReedLastSeen(lastSeenAt: number, now: number = Date.now())
   const elapsedWeeks = Math.floor(elapsedDays / 7);
   if (elapsedWeeks === 1) return 'Last seen 1 week ago';
   return `Last seen ${elapsedWeeks} weeks ago`;
-}
-
-export function getCoachItemColor(theme: ReedTheme, type: CoachItem['type']) {
-  if (type === 'caution') return String(theme.colors.dangerText);
-  if (type === 'experiment') return String(theme.colors.accentSecondary);
-  if (type === 'check_in') return String(theme.colors.successText);
-  return String(theme.colors.accentPrimary);
 }
 
 export function pickVoiceTranscript(messages: ReedMessage[]) {

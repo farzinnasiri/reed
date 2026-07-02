@@ -3,7 +3,9 @@ import { createContext, useContext } from 'react';
 type AppShellContextValue = {
   displayName: string;
   dockReservedSpace: number;
+  hasUnreadCoachMessage: boolean;
   hasActiveWorkoutSession: boolean;
+  markCoachMessageRead: () => void;
   setIsEditingSettingsProfile: (isEditing: boolean) => void;
   setIsWorkoutSessionFullscreen: (isFullscreen: boolean) => void;
 };
