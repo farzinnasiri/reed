@@ -5,6 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { Platform } from 'react-native';
 import { requestAppNotificationPermissionsAsync } from '@/lib/background-alerts';
+import { startClientWideEvent } from '@/lib/client-observability';
 
 const CLIENT_INSTALL_ID_KEY = 'reed.push.clientInstallId.v1';
 const REMOTE_NOTIFICATION_CHANNEL_ID = 'reed-updates-v1';
@@ -18,8 +19,16 @@ type RegisterDevice = (args: {
 
 type DisableDevice = (args: {
   clientInstallId: string;
-  reason: 'logout' | 'permission_denied';
+  reason: 'logout' | 'permission_denied' | 'user_disabled';
 }) => Promise<null>;
+
+export type PushDeviceRegistrationStatus =
+  | 'failed'
+  | 'missing_project_id'
+  | 'permission_denied'
+  | 'registered'
+  | 'unavailable_platform'
+  | 'unavailable_web';
 
 let responseHandlerInstalled = false;
 let tokenListenerInstalled = false;
@@ -30,43 +39,86 @@ export async function registerPushDeviceAsync({
 }: {
   disableDevice: DisableDevice;
   registerDevice: RegisterDevice;
-}) {
-  if (Platform.OS === 'web') return;
-  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
-
-  const clientInstallId = await getClientInstallIdAsync();
-  const permissionStatus = await requestAppNotificationPermissionsAsync();
-  if (permissionStatus !== 'granted') {
-    await disableDevice({ clientInstallId, reason: 'permission_denied' }).catch(() => null);
-    return;
-  }
-
-  if (Platform.OS === 'android') {
-    await Notifications.setNotificationChannelAsync(REMOTE_NOTIFICATION_CHANNEL_ID, {
-      importance: Notifications.AndroidImportance.DEFAULT,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      name: 'Reed updates',
-      sound: 'default',
-      vibrationPattern: [0, 250, 200, 250],
-    });
-  }
-
-  const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
-  if (!projectId) {
-    console.info('[push-notifications] missing EAS project id');
-    return;
-  }
-
-  const token = await Notifications.getExpoPushTokenAsync({ projectId });
-  await registerDevice({
-    appVersion: Application.nativeApplicationVersion ?? Constants.expoConfig?.version,
-    clientInstallId,
-    expoPushToken: token.data,
-    platform: Platform.OS,
+}): Promise<PushDeviceRegistrationStatus> {
+  const event = startClientWideEvent('push_device_registration', {
+    'push.platform': Platform.OS,
   });
 
-  installNotificationResponseHandler();
-  installPushTokenRotationListener(registerDevice, clientInstallId);
+  try {
+    if (Platform.OS === 'web') {
+      event.end({ 'push.status': 'unavailable_web' });
+      return 'unavailable_web';
+    }
+    if (Platform.OS !== 'android' && Platform.OS !== 'ios') {
+      event.end({ 'push.status': 'unavailable_platform' });
+      return 'unavailable_platform';
+    }
+
+    const clientInstallId = await getClientInstallIdAsync();
+    event.set({ 'push.step': 'permission' });
+    const permissionStatus = await requestAppNotificationPermissionsAsync();
+    event.set({ 'push.permission.status': permissionStatus });
+    if (permissionStatus !== 'granted') {
+      await disableDevice({ clientInstallId, reason: 'permission_denied' }).catch(() => null);
+      event.end({ 'push.status': permissionStatus });
+      return 'permission_denied';
+    }
+
+    if (Platform.OS === 'android') {
+      event.set({ 'push.step': 'android_channel' });
+      await Notifications.setNotificationChannelAsync(REMOTE_NOTIFICATION_CHANNEL_ID, {
+        importance: Notifications.AndroidImportance.DEFAULT,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        name: 'Reed updates',
+        sound: 'default',
+        vibrationPattern: [0, 250, 200, 250],
+      });
+    }
+
+    const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
+    if (!projectId) {
+      console.info('[push-notifications] missing EAS project id');
+      event.end({ 'push.status': 'missing_project_id' });
+      return 'missing_project_id';
+    }
+
+    event.set({ 'push.step': 'expo_token' });
+    const token = await Notifications.getExpoPushTokenAsync({ projectId });
+    event.set({ 'push.step': 'convex_register' });
+    await registerDevice({
+      appVersion: Application.nativeApplicationVersion ?? Constants.expoConfig?.version,
+      clientInstallId,
+      expoPushToken: token.data,
+      platform: Platform.OS,
+    });
+
+    installNotificationResponseHandler();
+    installPushTokenRotationListener(registerDevice, clientInstallId);
+    event.end({ 'push.status': 'registered' });
+    return 'registered';
+  } catch (error) {
+    event.fail(error, 'push_device_registration_failed');
+    return 'failed';
+  }
+}
+
+export async function disablePushDeviceAsync(disableDevice: DisableDevice) {
+  const event = startClientWideEvent('push_device_disable', {
+    'push.platform': Platform.OS,
+  });
+
+  try {
+    if (Platform.OS === 'web' || (Platform.OS !== 'android' && Platform.OS !== 'ios')) {
+      event.end({ 'push.status': 'unavailable_platform' });
+      return;
+    }
+
+    const clientInstallId = await getClientInstallIdAsync();
+    await disableDevice({ clientInstallId, reason: 'user_disabled' });
+    event.end({ 'push.status': 'disabled' });
+  } catch (error) {
+    event.fail(error, 'push_device_disable_failed');
+  }
 }
 
 function installNotificationResponseHandler() {

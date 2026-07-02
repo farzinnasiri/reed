@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { analytics } from '@/lib/analytics';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
@@ -18,6 +18,7 @@ import { EMPTY_DRAFT, type OnboardingDraft } from '@/components/onboarding/types
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
 import { reedRadii } from '@/design/system';
+import { disablePushDeviceAsync, registerPushDeviceAsync } from '@/lib/push-notifications';
 
 type SettingsSurfaceProps = {
   onBack?: () => void;
@@ -30,7 +31,12 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
   const glassControls = getGlassControlTokens(theme);
   const viewerProfile = useQuery(api.profiles.viewer, {});
   const onboardingEditorData = useQuery(api.profiles.viewerTrainingProfile, {});
+  const notificationPreferences = useQuery(api.notificationPreferences.viewerPreferences, {});
+  const notificationDeviceStatus = useQuery(api.notificationDevices.viewerStatus, {});
   const completeOnboarding = useMutation(api.profiles.completeOnboarding);
+  const disableNotificationDevice = useMutation(api.notificationDevices.disableCurrentDevice);
+  const registerNotificationDevice = useMutation(api.notificationDevices.registerDevice);
+  const updateNotificationPreferences = useMutation(api.notificationPreferences.updatePreferences);
   const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const editDraft = useMemo(() => {
@@ -103,6 +109,25 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
 
       if (result.error) {
         throw result.error;
+      }
+    });
+  }
+
+  async function handleNotificationToggle(enabled: boolean) {
+    await runAction(async () => {
+      await updateNotificationPreferences({ enabled });
+
+      if (!enabled) {
+        await disablePushDeviceAsync(disableNotificationDevice);
+        return;
+      }
+
+      const status = await registerPushDeviceAsync({
+        disableDevice: disableNotificationDevice,
+        registerDevice: registerNotificationDevice,
+      });
+      if (status !== 'registered') {
+        throw new Error(notificationRegistrationMessage(status));
       }
     });
   }
@@ -239,6 +264,35 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
           }}
           variant="secondary"
         />
+      </GlassSurface>
+
+      <GlassSurface>
+        <View style={styles.sectionHeader}>
+          <Ionicons color={String(theme.colors.textMuted)} name="notifications-outline" size={18} />
+          <ReedText variant="bodyStrong">Notifications</ReedText>
+        </View>
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleCopy}>
+            <ReedText>Coach updates</ReedText>
+            <ReedText tone="muted" variant="caption">
+              {notificationStatusText(notificationPreferences, notificationDeviceStatus)}
+            </ReedText>
+          </View>
+          <Switch
+            disabled={isWorking || notificationPreferences === undefined || notificationDeviceStatus === undefined}
+            onValueChange={value => {
+              void handleNotificationToggle(value);
+            }}
+            thumbColor={notificationPreferences?.enabled && notificationDeviceStatus?.hasEnabledDevice
+              ? String(theme.colors.accentPrimary)
+              : undefined}
+            trackColor={{
+              false: String(theme.colors.controlBorder),
+              true: String(theme.colors.controlFill),
+            }}
+            value={Boolean(notificationPreferences?.enabled && notificationDeviceStatus?.hasEnabledDevice)}
+          />
+        </View>
       </GlassSurface>
 
       <GlassSurface>
@@ -465,6 +519,25 @@ function getErrorMessage(error: unknown) {
   return 'Something went wrong while talking to auth.';
 }
 
+function notificationStatusText(
+  preferences: { enabled: boolean } | null | undefined,
+  deviceStatus: { hasEnabledDevice: boolean; latestDevice: { disableReason?: string } | null } | undefined,
+) {
+  if (preferences === undefined || deviceStatus === undefined) return 'Checking this phone.';
+  if (!preferences?.enabled) return 'Off for this account.';
+  if (deviceStatus.hasEnabledDevice) return 'On for this phone.';
+  if (deviceStatus.latestDevice?.disableReason === 'permission_denied') return 'Permission is off on this phone.';
+  if (deviceStatus.latestDevice?.disableReason === 'user_disabled') return 'Off on this phone.';
+  return 'Not set up on this phone.';
+}
+
+function notificationRegistrationMessage(status: string) {
+  if (status === 'permission_denied') return 'Notifications are blocked for Reed. Enable them in Android settings, then try again.';
+  if (status === 'missing_project_id') return 'This build is missing its Expo project id.';
+  if (status === 'unavailable_platform' || status === 'unavailable_web') return 'Push notifications are not available on this platform.';
+  return 'Reed could not register this phone for push notifications.';
+}
+
 const styles = StyleSheet.create({
   content: {
     gap: 16,
@@ -492,5 +565,15 @@ const styles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 12,
     paddingVertical: 8,
+  },
+  toggleCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  toggleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 16,
+    minHeight: 54,
   },
 });

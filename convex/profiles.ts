@@ -286,6 +286,9 @@ export const ensureViewerProfile = mutation({
         throw new ConvexError('Profile disappeared during sync');
       }
 
+      if (updatedProfile.onboardingCompletedAt) {
+        await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: updatedProfile._id });
+      }
       return updatedProfile;
     }
 
@@ -306,6 +309,9 @@ export const ensureViewerProfile = mutation({
         throw new ConvexError('Profile disappeared during account linking');
       }
 
+      if (linkedProfile.onboardingCompletedAt) {
+        await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: linkedProfile._id });
+      }
       return linkedProfile;
     }
 
@@ -386,6 +392,7 @@ export const completeOnboarding = mutation({
       profileId: profile._id,
       reason: 'profile_updated',
     });
+    await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: profile._id });
 
     return updatedProfile;
   },

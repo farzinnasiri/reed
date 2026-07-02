@@ -31,8 +31,10 @@ export async function transcribeLocalSpeechRecording(args: {
 }): Promise<SpeechTranscriptionResponse> {
   const event = startClientWideEvent('speech.transcription', {
     'speech.actor': args.actor,
+    'speech.convex_site_url_present': Boolean(appEnv.convexSiteUrl),
     'speech.duration_ms': Math.round(args.recording.durationMs),
     'speech.mime_type': args.recording.mimeType,
+    'speech.recording_uri_scheme': getUriScheme(args.recording.uri),
   });
   let lastError: SpeechTranscriptionError | null = null;
 
@@ -72,6 +74,10 @@ async function transcribeOnce(args: {
   actor: SpeechTranscriptionActor;
   recording: LocalSpeechRecording;
 }, onStep: (step: string) => void) {
+  if (!appEnv.convexSiteUrl) {
+    throw new SpeechTranscriptionError('Speech transcription is not configured for this build.', 'configuration', false);
+  }
+
   onStep('auth_token');
   const tokenResult = await authClient.convex.token({ fetchOptions: { throw: false } });
   const token = tokenResult.data?.token;
@@ -80,11 +86,9 @@ async function transcribeOnce(args: {
   }
 
   onStep('form_data');
-  const audio = await getFormDataAudio(args.recording);
-  const mimeType = args.recording.mimeType;
   const formData = new FormData();
   formData.append('actor', args.actor);
-  formData.append('audio', audio, getRecordingFilename(mimeType));
+  await appendAudioPart(formData, args.recording);
 
   onStep('http_request');
   const response = await fetch(`${appEnv.convexSiteUrl}/speech/transcribe`, {
@@ -113,17 +117,20 @@ async function transcribeOnce(args: {
   return { text };
 }
 
-async function getFormDataAudio(recording: LocalSpeechRecording) {
+async function appendAudioPart(formData: FormData, recording: LocalSpeechRecording) {
+  const filename = getRecordingFilename(recording.mimeType);
+
   if (Platform.OS === 'web') {
     const audio = await fetch(recording.uri).then(response => response.blob());
-    return audio;
+    formData.append('audio', audio, filename);
+    return;
   }
 
-  return {
-    name: getRecordingFilename(recording.mimeType),
+  formData.append('audio', {
+    name: filename,
     type: recording.mimeType,
     uri: recording.uri,
-  } as unknown as Blob;
+  } as unknown as Blob);
 }
 
 function normalizeTranscriptionError(error: unknown) {
@@ -140,6 +147,11 @@ function getRecordingFilename(mimeType: string) {
         ? 'aac'
         : 'm4a';
   return `speech-${Date.now()}.${extension}`;
+}
+
+function getUriScheme(uri: string) {
+  const match = /^([a-z][a-z0-9+.-]*):/i.exec(uri);
+  return match?.[1]?.toLowerCase() ?? 'unknown';
 }
 
 function wait(ms: number) {

@@ -20,7 +20,9 @@ export const ensureScheduled = internalMutation({
 
     if (existing) {
       if (existing.status === 'paused') return null;
-      await ctx.db.patch(existing._id, { status: 'active', updatedAt: now });
+      if (existing.status !== 'active') {
+        await ctx.db.patch(existing._id, { status: 'active', updatedAt: now });
+      }
       return null;
     }
 

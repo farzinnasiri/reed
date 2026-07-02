@@ -1,7 +1,56 @@
 import { ConvexError, v } from 'convex/values';
-import { mutation } from './_generated/server';
+import { mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
 import { requireViewerProfile } from './profiles';
+
+export const viewerStatus = query({
+  args: {},
+  returns: v.object({
+    enabledDeviceCount: v.number(),
+    hasEnabledDevice: v.boolean(),
+    latestDevice: v.union(
+      v.object({
+        disabledAt: v.optional(v.number()),
+        disableReason: v.optional(v.union(
+          v.literal('device_not_registered'),
+          v.literal('logout'),
+          v.literal('permission_denied'),
+          v.literal('replaced'),
+          v.literal('user_disabled'),
+        )),
+        enabled: v.boolean(),
+        lastRegisteredAt: v.number(),
+        lastSeenAt: v.number(),
+        platform: v.union(v.literal('android'), v.literal('ios')),
+      }),
+      v.null(),
+    ),
+  }),
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const devices = await ctx.db
+      .query('notificationDevices')
+      .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
+      .collect();
+    const latestDevice = devices.sort((left, right) => right.lastSeenAt - left.lastSeenAt)[0] ?? null;
+    const enabledDeviceCount = devices.filter(device => device.enabled).length;
+
+    return {
+      enabledDeviceCount,
+      hasEnabledDevice: enabledDeviceCount > 0,
+      latestDevice: latestDevice
+        ? {
+            disabledAt: latestDevice.disabledAt,
+            disableReason: latestDevice.disableReason,
+            enabled: latestDevice.enabled,
+            lastRegisteredAt: latestDevice.lastRegisteredAt,
+            lastSeenAt: latestDevice.lastSeenAt,
+            platform: latestDevice.platform,
+          }
+        : null,
+    };
+  },
+});
 
 export const registerDevice = mutation({
   args: {
@@ -71,7 +120,7 @@ export const registerDevice = mutation({
 export const disableCurrentDevice = mutation({
   args: {
     clientInstallId: v.string(),
-    reason: v.union(v.literal('logout'), v.literal('permission_denied')),
+    reason: v.union(v.literal('logout'), v.literal('permission_denied'), v.literal('user_disabled')),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

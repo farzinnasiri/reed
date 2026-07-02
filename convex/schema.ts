@@ -498,6 +498,7 @@ export default defineSchema({
       v.literal('logout'),
       v.literal('permission_denied'),
       v.literal('replaced'),
+      v.literal('user_disabled'),
     )),
     enabled: v.boolean(),
     expoPushToken: v.string(),
