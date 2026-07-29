@@ -1,0 +1,1519 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="data:,">
+  <title>Loop Mascot</title>
+  <style>
+    :root {
+      --canvas: #040404;
+      --ink: #f4f5f7;
+      --muted: #8c8e95;
+      --line: rgba(255, 255, 255, 0.12);
+      --blue-bright: #3f6dff;
+      --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--canvas);
+      color: var(--ink);
+    }
+
+    body,
+    button {
+      font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+    }
+
+    body {
+      -webkit-font-smoothing: antialiased;
+      touch-action: none;
+    }
+
+    .demo {
+      position: relative;
+      display: grid;
+      width: 100%;
+      height: 100svh;
+      min-height: 540px;
+      place-items: center;
+      isolation: isolate;
+      background:
+        radial-gradient(circle at 50% 49%, rgba(255, 255, 255, 0.026), transparent 31%),
+        var(--canvas);
+    }
+
+    .demo::before {
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background-image: radial-gradient(rgba(255, 255, 255, 0.07) 0.55px, transparent 0.55px);
+      background-size: 5px 5px;
+      content: "";
+      opacity: 0.11;
+      pointer-events: none;
+    }
+
+    .stage {
+      position: relative;
+      width: min(76vw, 760px);
+      height: min(64vh, 620px);
+      min-width: 290px;
+      min-height: 300px;
+      contain: layout paint;
+      cursor: crosshair;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    #loop {
+      display: block;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+
+    .status {
+      position: fixed;
+      top: max(24px, env(safe-area-inset-top));
+      left: max(24px, env(safe-area-inset-left));
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .status-mark {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue-bright);
+      box-shadow: 0 0 0 4px rgba(36, 85, 230, 0.13);
+    }
+
+    .status-copy {
+      display: grid;
+      gap: 2px;
+    }
+
+    .status-state {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .status-hint {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.06em;
+    }
+
+    .controls {
+      position: fixed;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      left: max(18px, env(safe-area-inset-left));
+      z-index: 7;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .control-panel {
+      display: grid;
+      width: min(1240px, calc(100vw - 86px));
+      gap: 3px;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(4, 4, 4, 0.84);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.32);
+      backdrop-filter: blur(18px);
+      pointer-events: auto;
+    }
+
+    .control-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+      gap: 2px;
+    }
+
+    .control-options button,
+    .utility-button {
+      min-height: 38px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 11px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
+      transition:
+        color 180ms var(--ease-out),
+        background-color 180ms var(--ease-out),
+        transform 100ms var(--ease-out);
+    }
+
+    .control-options button {
+      min-width: 0;
+      padding-inline: 8px;
+      white-space: nowrap;
+    }
+
+    .control-options button:hover,
+    .utility-button:hover {
+      color: var(--ink);
+    }
+
+    .control-options button:active,
+    .utility-button:active {
+      transform: scale(0.96);
+    }
+
+    .control-options button[aria-pressed="true"] {
+      background: var(--ink);
+      color: #111216;
+    }
+
+    .utility-button {
+      width: 42px;
+      padding: 0;
+      border: 1px solid var(--line);
+      background: rgba(4, 4, 4, 0.84);
+      color: var(--ink);
+      pointer-events: auto;
+      backdrop-filter: blur(18px);
+    }
+
+    .utility-button[aria-pressed="true"] {
+      border-color: rgba(63, 109, 255, 0.48);
+      color: var(--blue-bright);
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--blue-bright);
+      outline-offset: 3px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    @media (max-width: 760px) {
+      .stage {
+        width: 96vw;
+        height: 50vh;
+        min-height: 250px;
+        transform: translateY(-12vh);
+      }
+
+      .status {
+        top: 25px;
+        left: 19px;
+      }
+
+      .status-hint {
+        display: none;
+      }
+
+      .controls {
+        right: 10px;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        left: 10px;
+        justify-content: flex-start;
+      }
+
+      .control-panel {
+        width: calc(100vw - 70px);
+        max-width: calc(100vw - 70px);
+      }
+
+      .control-options button {
+        min-height: 42px;
+        padding: 0 6px;
+        font-size: 10px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .control-options {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .control-options button {
+        min-height: 34px;
+        padding: 0 2px;
+        font-size: 9px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        scroll-behavior: auto !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="demo">
+    <div class="status" aria-live="polite">
+      <span class="status-mark" aria-hidden="true"></span>
+      <span class="status-copy">
+        <span class="status-state" id="stateLabel">Idle</span>
+        <span class="status-hint">Move to direct gaze · tap to react</span>
+      </span>
+    </div>
+
+    <section class="stage" id="stage" aria-label="Interactive Loop mascot">
+      <svg id="loop" viewBox="0 0 600 600" role="img" aria-labelledby="mascotTitle mascotDescription">
+        <title id="mascotTitle">Loop, Reed's interactive mascot</title>
+        <desc id="mascotDescription">A dark circular face with one intelligent white aperture that can fold, rotate, measure progress, become a ring, or occasionally open into two expressive eyes.</desc>
+
+        <defs>
+          <linearGradient id="inkGradient" gradientUnits="userSpaceOnUse" x1="-54" y1="-58" x2="56" y2="58">
+            <stop offset="0" stop-color="#15161a"/>
+            <stop offset="0.55" stop-color="#0e0f12"/>
+            <stop offset="1" stop-color="#090a0c"/>
+          </linearGradient>
+          <radialGradient id="haloGradient">
+            <stop offset="0" stop-color="#2455e6" stop-opacity="0.38"/>
+            <stop offset="0.7" stop-color="#2455e6" stop-opacity="0.3"/>
+            <stop offset="1" stop-color="#2455e6" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="rimGradient" gradientUnits="userSpaceOnUse" x1="-55" y1="34" x2="32" y2="-56">
+            <stop offset="0" stop-color="#fff" stop-opacity="0"/>
+            <stop offset="0.42" stop-color="#fff" stop-opacity="0.34"/>
+            <stop offset="0.72" stop-color="#d9dce2" stop-opacity="0.12"/>
+            <stop offset="1" stop-color="#d9dce2" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="counterRimGradient" gradientUnits="userSpaceOnUse" x1="-18" y1="61" x2="57" y2="29">
+            <stop offset="0" stop-color="#c8cad0" stop-opacity="0"/>
+            <stop offset="0.58" stop-color="#c8cad0" stop-opacity="0.1"/>
+            <stop offset="1" stop-color="#c8cad0" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="apertureGradient" gradientUnits="userSpaceOnUse" x1="-36" y1="0" x2="36" y2="0">
+            <stop offset="0" stop-color="#d9dce2"/>
+            <stop offset="0.5" stop-color="#ffffff"/>
+            <stop offset="1" stop-color="#d9dce2"/>
+          </linearGradient>
+        </defs>
+
+        <g id="coreGroup">
+          <circle id="coreHalo" cx="0" cy="0" r="79" fill="url(#haloGradient)" opacity="0.58"/>
+          <circle id="core" cx="0" cy="0" r="65" fill="url(#inkGradient)"/>
+          <path d="M -55 34 A 64.25 64.25 0 0 1 32 -56" fill="none" stroke="url(#rimGradient)" stroke-width="1.4" stroke-linecap="round"/>
+          <path d="M -18 61 A 64.25 64.25 0 0 0 57 29" fill="none" stroke="url(#counterRimGradient)" stroke-width="1.2" stroke-linecap="round"/>
+          <g id="apertureGroup">
+            <path id="apertureTrack" fill="none" stroke="#f4f5f7" stroke-width="6" stroke-linecap="round" opacity="0"/>
+            <path id="apertureMeter" fill="none" stroke="url(#apertureGradient)" stroke-width="7" stroke-linecap="round" opacity="0"/>
+            <path id="apertureMain" fill="none" stroke="url(#apertureGradient)" stroke-width="8" stroke-linecap="round"/>
+            <path id="apertureSecond" fill="none" stroke="url(#apertureGradient)" stroke-width="8" stroke-linecap="round" opacity="0"/>
+            <path id="recoveryWave" fill="none" stroke="url(#apertureGradient)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0"/>
+            <g id="focusReticle" opacity="0">
+              <path class="focus-corner" fill="none" stroke="url(#apertureGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="focus-corner" fill="none" stroke="url(#apertureGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="focus-corner" fill="none" stroke="url(#apertureGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+              <path class="focus-corner" fill="none" stroke="url(#apertureGradient)" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+            <g id="inboundSignalGlyph" opacity="0">
+              <path id="inboundLeft" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path id="inboundCenter" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path id="inboundRight" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+            </g>
+            <g id="soundBarsGroup" opacity="0">
+              <path class="sound-bar" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path class="sound-bar" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path class="sound-bar" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path class="sound-bar" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+              <path class="sound-bar" fill="none" stroke="url(#apertureGradient)" stroke-width="5.5" stroke-linecap="round"/>
+            </g>
+            <g id="typingGlyph" opacity="0">
+              <path class="typing-dot" fill="none" stroke="url(#apertureGradient)" stroke-width="8" stroke-linecap="round"/>
+              <path class="typing-dot" fill="none" stroke="url(#apertureGradient)" stroke-width="8" stroke-linecap="round"/>
+              <path class="typing-dot" fill="none" stroke="url(#apertureGradient)" stroke-width="8" stroke-linecap="round"/>
+            </g>
+            <circle id="apertureRing" cx="0" cy="0" r="16" fill="none" stroke="url(#apertureGradient)" stroke-width="7" opacity="0"/>
+            <circle id="apertureSignal" cx="0" cy="0" r="3.2" fill="#f4f5f7" opacity="0"/>
+          </g>
+        </g>
+      </svg>
+    </section>
+
+    <div class="controls">
+      <div class="control-panel" id="stateStrip" aria-label="Mascot expressions">
+        <div class="control-options" role="toolbar" aria-label="Expression">
+          <button type="button" data-state="idle" aria-pressed="true">Neutral</button>
+          <button type="button" data-state="listening" aria-pressed="false">Listening</button>
+          <button type="button" data-state="speaking" aria-pressed="false">Speaking</button>
+          <button type="button" data-state="typing" aria-pressed="false">Typing</button>
+          <button type="button" data-state="watching" aria-pressed="false">Observing</button>
+          <button type="button" data-state="thinking" aria-pressed="false">Thinking</button>
+          <button type="button" data-state="focused" aria-pressed="false">Focused</button>
+          <button type="button" data-state="encouraging" aria-pressed="false">Encouraging</button>
+          <button type="button" data-state="concerned" aria-pressed="false">Concerned</button>
+          <button type="button" data-state="happy" aria-pressed="false">Pleased</button>
+          <button type="button" data-state="excited" aria-pressed="false">Excited</button>
+          <button type="button" data-state="proud" aria-pressed="false">Proud</button>
+          <button type="button" data-state="surprised" aria-pressed="false">Surprised</button>
+          <button type="button" data-state="sad" aria-pressed="false">Empathetic</button>
+          <button type="button" data-state="relieved" aria-pressed="false">Relieved</button>
+          <button type="button" data-state="exhausted" aria-pressed="false">Weary</button>
+          <button type="button" data-state="ready" aria-pressed="false">Determined</button>
+          <button type="button" data-state="rest" aria-pressed="false">Waiting</button>
+          <button type="button" data-state="setComplete" aria-pressed="false">Affirming</button>
+          <button type="button" data-state="personalRecord" aria-pressed="false">Celebrating</button>
+          <button type="button" data-state="missed" aria-pressed="false">Reassuring</button>
+          <button type="button" data-state="recovery" aria-pressed="false">Restoring</button>
+        </div>
+      </div>
+      <button class="utility-button" id="autoButton" type="button" aria-label="Autoplay expressions" aria-pressed="false">▶</button>
+    </div>
+    <span class="sr-only" id="announcement" aria-live="polite"></span>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const stage = document.getElementById("stage");
+      const coreGroup = document.getElementById("coreGroup");
+      const coreHalo = document.getElementById("coreHalo");
+      const apertureGroup = document.getElementById("apertureGroup");
+      const apertureTrack = document.getElementById("apertureTrack");
+      const apertureMeter = document.getElementById("apertureMeter");
+      const apertureMain = document.getElementById("apertureMain");
+      const apertureSecond = document.getElementById("apertureSecond");
+      const recoveryWave = document.getElementById("recoveryWave");
+      const focusReticle = document.getElementById("focusReticle");
+      const focusCorners = [...focusReticle.querySelectorAll(".focus-corner")];
+      const inboundSignalGlyph = document.getElementById("inboundSignalGlyph");
+      const inboundLeft = document.getElementById("inboundLeft");
+      const inboundCenter = document.getElementById("inboundCenter");
+      const inboundRight = document.getElementById("inboundRight");
+      const soundBarsGroup = document.getElementById("soundBarsGroup");
+      const soundBars = [...soundBarsGroup.querySelectorAll(".sound-bar")];
+      const typingGlyph = document.getElementById("typingGlyph");
+      const typingDots = [...typingGlyph.querySelectorAll(".typing-dot")];
+      const apertureRing = document.getElementById("apertureRing");
+      const apertureSignal = document.getElementById("apertureSignal");
+      const stateLabel = document.getElementById("stateLabel");
+      const stateStrip = document.getElementById("stateStrip");
+      const autoButton = document.getElementById("autoButton");
+      const announcement = document.getElementById("announcement");
+      const reduceMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+      const FACE_X = 300;
+      const FACE_Y = 285;
+      const FACE_SCALE = 1.7;
+
+      const expressionDefaults = Object.freeze({
+        x: 0,
+        y: 0,
+        scaleX: 1,
+        scaleY: 1,
+        angle: 0,
+        apertureWidth: 45,
+        apertureCurve: 0,
+        apertureFold: 0,
+        foldBias: 0,
+        apertureAngle: 0,
+        apertureY: 0,
+        apertureThickness: 8,
+        apertureOpacity: 1,
+        split: 0,
+        eyeGap: 12,
+        eyeRotation: 0,
+        eyeSplay: 0,
+        eyeLengthBalance: 0,
+        eyeOffsetY: 0,
+        eyeCurveBalance: 0,
+        ring: 0,
+        ringRadius: 16,
+        spinner: 0,
+        meter: 0,
+        meterProgress: 0,
+        scan: 0,
+        focusReticle: 0,
+        inboundSignal: 0,
+        soundBars: 0,
+        typingDots: 0,
+        breathWave: 0,
+        gazeX: 0,
+        gazeY: 0,
+        pointerGainX: 0.8,
+        pointerGainY: 0.55,
+        haloEnergy: 0.58,
+        breathAmplitude: 1,
+        breathPeriod: 5,
+        blinkPeriod: 4.5,
+        blinkDuration: 0.22,
+        blinkJitter: 0.9,
+        blinkMode: "line",
+        entryBlink: "none"
+      });
+
+      const expression = (values) => ({ ...expressionDefaults, ...values });
+
+      const states = {
+        idle: expression({
+          label: "Neutral",
+          apertureThickness: 5.5,
+          breathAmplitude: 2.2, breathPeriod: 4.8, blinkPeriod: 3.7
+        }),
+        listening: expression({
+          label: "Listening",
+          x: 4, y: -2, angle: 3,
+          apertureWidth: 58, apertureThickness: 5.5, apertureOpacity: 0,
+          inboundSignal: 1,
+          gazeX: 5, gazeY: -1, pointerGainX: 0.55, pointerGainY: 0.25,
+          breathAmplitude: 0.7, breathPeriod: 5.2, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "attend", actionDuration: 0.38
+        }),
+        speaking: expression({
+          label: "Speaking",
+          x: 3, y: -2, angle: 2,
+          apertureWidth: 58, apertureThickness: 5.5, apertureOpacity: 0,
+          soundBars: 1,
+          gazeX: 2, pointerGainX: 0.34, pointerGainY: 0.22, haloEnergy: 0.62,
+          breathAmplitude: 0.45, breathPeriod: 5, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "lift", actionHeight: 4, actionDuration: 0.34
+        }),
+        typing: expression({
+          label: "Typing",
+          x: 1, y: -1,
+          apertureWidth: 54, apertureThickness: 5.5, apertureOpacity: 0,
+          typingDots: 1,
+          pointerGainX: 0.2, pointerGainY: 0.14,
+          breathAmplitude: 0.35, breathPeriod: 5.4, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "settle", actionDuration: 0.32
+        }),
+        watching: expression({
+          label: "Observing",
+          x: 2, y: -5, angle: 1,
+          apertureWidth: 38, apertureThickness: 6,
+          ring: 1, ringRadius: 13,
+          gazeX: 2, pointerGainX: 0.22, pointerGainY: 0.18,
+          breathAmplitude: 0.35, breathPeriod: 5.6, blinkPeriod: 5.6,
+          blinkDuration: 0.26, blinkMode: "ring"
+        }),
+        thinking: expression({
+          label: "Thinking",
+          x: -2, y: -6, scaleX: 0.99, scaleY: 1.01,
+          apertureWidth: 40, apertureThickness: 6.5,
+          ring: 1, ringRadius: 16, spinner: 1,
+          gazeX: -3, gazeY: -2, pointerGainX: 0.12, pointerGainY: 0.08,
+          breathAmplitude: 0.45, breathPeriod: 5.8, blinkPeriod: 0,
+          blinkMode: "none"
+        }),
+        focused: expression({
+          label: "Focused",
+          y: -1, scaleX: 1.01, scaleY: 0.995,
+          apertureWidth: 58, apertureThickness: 5.5, apertureOpacity: 0,
+          focusReticle: 1,
+          pointerGainX: 0.12, pointerGainY: 0.08,
+          breathAmplitude: 0.12, breathPeriod: 6, blinkPeriod: 0,
+          blinkMode: "none"
+        }),
+        encouraging: expression({
+          label: "Encouraging",
+          x: 3, y: -6, angle: 2,
+          apertureWidth: 62, apertureThickness: 8,
+          split: 1, eyeGap: 20, eyeRotation: 90, eyeSplay: 4,
+          pointerGainX: 0.5, pointerGainY: 0.35, haloEnergy: 0.63,
+          breathAmplitude: 0.5, breathPeriod: 5.2, blinkPeriod: 4.8,
+          blinkMode: "vertical",
+          action: "nod", actionDuration: 0.44
+        }),
+        concerned: expression({
+          label: "Concerned",
+          x: -2, y: 5, angle: -2,
+          apertureWidth: 57, apertureThickness: 5.8,
+          split: 1, eyeGap: 19, eyeRotation: 45, eyeSplay: 45,
+          eyeLengthBalance: 0.18, eyeOffsetY: 1.5,
+          pointerGainX: 0.38, pointerGainY: 0.26,
+          breathAmplitude: 0.35, breathPeriod: 6, blinkPeriod: 5.4,
+          blinkDuration: 0.32, blinkMode: "pair",
+          action: "settle", actionDuration: 0.42
+        }),
+        happy: expression({
+          label: "Pleased",
+          y: -5, scaleX: 1.01, scaleY: 1.01,
+          apertureWidth: 64, apertureCurve: -8, apertureThickness: 8,
+          split: 1, eyeGap: 14,
+          pointerGainX: 0.35, pointerGainY: 0.2,
+          breathAmplitude: 0.65, breathPeriod: 4.6, blinkPeriod: 5,
+          blinkMode: "closed",
+          action: "lift", actionHeight: 8, actionDuration: 0.48
+        }),
+        excited: expression({
+          label: "Excited",
+          y: -10, scaleX: 0.99, scaleY: 1.02,
+          apertureWidth: 72, apertureThickness: 8.5,
+          split: 1, eyeGap: 26, eyeRotation: 90, eyeSplay: -12,
+          pointerGainX: 0.55, pointerGainY: 0.38, haloEnergy: 0.7,
+          breathAmplitude: 0.3, breathPeriod: 4.4, blinkPeriod: 4.7,
+          blinkMode: "vertical",
+          action: "success", actionHeight: 26, actionDuration: 0.68
+        }),
+        proud: expression({
+          label: "Proud",
+          y: -14, scaleX: 1.02, scaleY: 1.015,
+          apertureWidth: 66, apertureCurve: 8, apertureY: 6, apertureThickness: 6.5,
+          gazeY: -1, pointerGainX: 0.08, pointerGainY: 0.04, haloEnergy: 0.64,
+          breathAmplitude: 0.35, breathPeriod: 5.8, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "rise", actionDuration: 0.5
+        }),
+        surprised: expression({
+          label: "Surprised",
+          y: -8, scaleX: 1.01, scaleY: 1.015,
+          apertureWidth: 48, apertureThickness: 8.5,
+          ring: 1, ringRadius: 21,
+          pointerGainX: 0.25, pointerGainY: 0.18, haloEnergy: 0.68,
+          breathAmplitude: 0.16, breathPeriod: 5.8, blinkPeriod: 5.2,
+          blinkDuration: 0.28, blinkMode: "ring",
+          action: "open", actionDuration: 0.38
+        }),
+        sad: expression({
+          label: "Empathetic",
+          y: 22, scaleX: 1.02, scaleY: 0.97, angle: -3,
+          apertureWidth: 58, apertureCurve: -2, apertureFold: -7, foldBias: 0.08,
+          apertureY: 5, apertureThickness: 6,
+          pointerGainX: 0.18, pointerGainY: 0.1,
+          breathAmplitude: 0.35, breathPeriod: 6.6, blinkPeriod: 5.8,
+          blinkDuration: 0.3, blinkMode: "heavy",
+          action: "drop", actionDuration: 0.48
+        }),
+        relieved: expression({
+          label: "Relieved",
+          y: 18, scaleX: 1.01, scaleY: 0.99,
+          apertureWidth: 66, apertureCurve: -5, apertureY: 4, apertureThickness: 5.5,
+          split: 1, eyeGap: 16,
+          pointerGainX: 0.14, pointerGainY: 0.08,
+          breathAmplitude: 1, breathPeriod: 6.4, blinkPeriod: 6.2,
+          blinkMode: "closed",
+          action: "release", actionDuration: 0.7
+        }),
+        exhausted: expression({
+          label: "Weary",
+          y: 44, scaleX: 1.03, scaleY: 0.97, angle: -2,
+          apertureWidth: 66, apertureCurve: 5.5, foldBias: 0.32,
+          apertureY: 14, apertureThickness: 3.5,
+          pointerGainX: 0.05, pointerGainY: 0.03,
+          breathAmplitude: 1.4, breathPeriod: 7.4, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "sink", actionDuration: 1.05
+        }),
+        ready: expression({
+          label: "Determined",
+          y: -4, scaleX: 1.01, scaleY: 1.01, angle: 0,
+          apertureWidth: 38, apertureAngle: 90, apertureThickness: 8,
+          pointerGainX: 0.22, pointerGainY: 0.15, haloEnergy: 0.55,
+          breathAmplitude: 0.12, breathPeriod: 6, blinkPeriod: 5.2,
+          blinkMode: "vertical",
+          action: "set", actionDuration: 0.42
+        }),
+        rest: expression({
+          label: "Waiting",
+          y: 38, scaleX: 1.015, scaleY: 0.985,
+          apertureWidth: 70, apertureY: 4, apertureThickness: 6,
+          apertureOpacity: 0, meter: 1, meterProgress: 0.08,
+          pointerGainX: 0.04, pointerGainY: 0.02,
+          breathAmplitude: 1.4, breathPeriod: 6.4, blinkPeriod: 0,
+          blinkMode: "none"
+        }),
+        setComplete: expression({
+          label: "Affirming",
+          y: -9, scaleX: 0.99, scaleY: 1.01,
+          apertureWidth: 68, apertureCurve: -8,
+          split: 1, eyeGap: 19,
+          pointerGainX: 0.28, pointerGainY: 0.16, haloEnergy: 0.67,
+          breathAmplitude: 0.35, breathPeriod: 5.2, blinkPeriod: 5.1,
+          blinkMode: "closed",
+          action: "complete", actionHeight: 22, actionDuration: 0.72
+        }),
+        personalRecord: expression({
+          label: "Celebrating",
+          y: -15, scaleX: 0.985, scaleY: 1.02,
+          apertureWidth: 76, apertureThickness: 9,
+          split: 1, eyeGap: 27, eyeRotation: 90, eyeSplay: -13,
+          pointerGainX: 0.48, pointerGainY: 0.32, haloEnergy: 0.78,
+          breathAmplitude: 0.3, breathPeriod: 5.2, blinkPeriod: 5,
+          blinkMode: "vertical",
+          action: "record", actionHeight: 34, actionDuration: 0.82
+        }),
+        missed: expression({
+          label: "Reassuring",
+          y: 23, scaleX: 1.02, scaleY: 0.98,
+          apertureWidth: 74, apertureY: 5, apertureThickness: 5.5,
+          apertureOpacity: 0, meter: 1, meterProgress: 0.82,
+          pointerGainX: 0.12, pointerGainY: 0.08,
+          breathAmplitude: 0.2, breathPeriod: 6.2, blinkPeriod: 0,
+          blinkMode: "none",
+          action: "shortfall", actionDuration: 0.64
+        }),
+        recovery: expression({
+          label: "Restoring",
+          y: 31, scaleX: 1.015, scaleY: 0.99,
+          apertureWidth: 72, apertureY: 7, apertureThickness: 4,
+          apertureOpacity: 0, breathWave: 1,
+          pointerGainX: 0.12, pointerGainY: 0.07,
+          breathAmplitude: 1.1, breathPeriod: 7, blinkPeriod: 0,
+          blinkMode: "none"
+        })
+      };
+
+      const stateNames = Object.keys(states);
+      const motionKeys = Object.keys(expressionDefaults).filter(
+        (key) => typeof expressionDefaults[key] === "number"
+      );
+      const TRANSITION_MS = 460;
+      let stateName = "idle";
+      let stateStartedAt = performance.now();
+      let touchStartedAt = -Infinity;
+      let touchDirection = 0;
+      let transition = null;
+      let autoplay = false;
+      let autoplayTimer = null;
+      let blinkStartedAt = -Infinity;
+      let queuedBlinkAt = Infinity;
+      let nextBlinkAt = performance.now() + 3000;
+      let pointerActive = false;
+      const pointer = { x: 0, y: 0 };
+      const current = { ...states.idle };
+      const lastActionPose = { y: 0, scaleX: 1, scaleY: 1, angle: 0 };
+      const lastBlinkPose = { y: 0, scaleX: 1, scaleY: 1 };
+      const lastGlyphOverlay = {
+        meter: 0,
+        meterProgress: 0,
+        ring: 0,
+        ringRadius: 16,
+        glyphReveal: 1
+      };
+      const soundBarCenters = [-22, -11, 0, 11, 22];
+      const soundBarHeights = [12, 19, 27, 18, 11];
+
+      function clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+      }
+
+      function lerp(a, b, t) {
+        return a + (b - a) * t;
+      }
+
+      function easeOutQuint(t) {
+        return 1 - Math.pow(1 - t, 5);
+      }
+
+      function smootherStep(t) {
+        const progress = clamp(t, 0, 1);
+        return progress * progress * progress
+          * (progress * (progress * 6 - 15) + 10);
+      }
+
+      function singleArc(elapsed, duration, amplitude) {
+        const progress = clamp(elapsed / duration, 0, 1);
+        return -Math.sin(progress * Math.PI) * amplitude;
+      }
+
+      function scheduleNextBlink(time, target) {
+        if (target.blinkMode === "none" || target.blinkPeriod <= 0) {
+          nextBlinkAt = Infinity;
+          return;
+        }
+        const jitter = (Math.random() - 0.5) * target.blinkJitter;
+        nextBlinkAt = time + Math.max(2.4, target.blinkPeriod + jitter) * 1000;
+      }
+
+      function aperturePath(
+        centerX,
+        centerY,
+        length,
+        rotation,
+        curve,
+        fold = 0,
+        foldBias = 0
+      ) {
+        const radians = rotation * Math.PI / 180;
+        const rotatePoint = (x, y) => ({
+          x: centerX + x * Math.cos(radians) - y * Math.sin(radians),
+          y: centerY + x * Math.sin(radians) + y * Math.cos(radians)
+        });
+        const middleX = clamp(foldBias, -0.7, 0.7) * length * 0.24;
+        const middleY = curve + fold;
+        const controlY = curve + fold * 0.15;
+        const start = rotatePoint(-length / 2, 0);
+        const middle = rotatePoint(middleX, middleY);
+        const end = rotatePoint(length / 2, 0);
+        const firstControl = rotatePoint((-length / 2 + middleX) / 2, controlY);
+        const secondControl = rotatePoint((middleX + length / 2) / 2, controlY);
+        return [
+          "M", start.x.toFixed(2), start.y.toFixed(2),
+          "Q", firstControl.x.toFixed(2), firstControl.y.toFixed(2),
+          middle.x.toFixed(2), middle.y.toFixed(2),
+          "Q", secondControl.x.toFixed(2), secondControl.y.toFixed(2),
+          end.x.toFixed(2), end.y.toFixed(2)
+        ].join(" ");
+      }
+
+      function inboundDashPath(side, progress) {
+        const centerX = side * lerp(28, 8, progress);
+        const length = lerp(8, 3, progress);
+        return aperturePath(centerX, 0, length, 0, 0);
+      }
+
+      function focusCornerPath(index, morph, spread) {
+        const initialCenterX = [-22, -7, 7, 22][index];
+        const initialPoints = [
+          { x: initialCenterX - 3, y: 0 },
+          { x: initialCenterX, y: 0 },
+          { x: initialCenterX + 3, y: 0 }
+        ];
+        const right = index % 2 === 1;
+        const bottom = index >= 2;
+        const outerX = (right ? 18 : -18) * spread;
+        const innerX = (right ? 12 : -12) * spread;
+        const outerY = (bottom ? 10 : -10) * spread;
+        const innerY = (bottom ? 4 : -4) * spread;
+        const finalPoints = [
+          { x: innerX, y: outerY },
+          { x: outerX, y: outerY },
+          { x: outerX, y: innerY }
+        ];
+        const points = initialPoints.map((point, pointIndex) => ({
+          x: lerp(point.x, finalPoints[pointIndex].x, morph),
+          y: lerp(point.y, finalPoints[pointIndex].y, morph)
+        }));
+        return [
+          "M", points[0].x.toFixed(2), points[0].y.toFixed(2),
+          "L", points[1].x.toFixed(2), points[1].y.toFixed(2),
+          "L", points[2].x.toFixed(2), points[2].y.toFixed(2)
+        ].join(" ");
+      }
+
+      function smoothPath(points) {
+        const commands = ["M", points[0].x.toFixed(2), points[0].y.toFixed(2)];
+        for (let index = 0; index < points.length - 1; index += 1) {
+          const previous = points[index - 1] || points[index];
+          const currentPoint = points[index];
+          const next = points[index + 1];
+          const following = points[index + 2] || next;
+          const firstControl = {
+            x: currentPoint.x + (next.x - previous.x) / 6,
+            y: currentPoint.y + (next.y - previous.y) / 6
+          };
+          const secondControl = {
+            x: next.x - (following.x - currentPoint.x) / 6,
+            y: next.y - (following.y - currentPoint.y) / 6
+          };
+          commands.push(
+            "C",
+            firstControl.x.toFixed(2),
+            firstControl.y.toFixed(2),
+            secondControl.x.toFixed(2),
+            secondControl.y.toFixed(2),
+            next.x.toFixed(2),
+            next.y.toFixed(2)
+          );
+        }
+        return commands.join(" ");
+      }
+
+      function breathWavePath(length, amplitude, waveCenter) {
+        const points = [];
+        const halfLength = length / 2;
+        const spread = length * 0.17;
+        for (let index = 0; index <= 20; index += 1) {
+          const x = lerp(-halfLength, halfLength, index / 20);
+          const distance = (x - waveCenter) / spread;
+          const envelope = Math.exp(-distance * distance * 1.25);
+          points.push({
+            x,
+            y: Math.sin(distance * Math.PI) * envelope * amplitude
+          });
+        }
+        return smoothPath(points);
+      }
+
+      function motionSnapshot(source) {
+        const snapshot = {};
+        motionKeys.forEach((key) => {
+          snapshot[key] = source[key];
+        });
+        return snapshot;
+      }
+
+      function renderMotionFrame(from, to, progress) {
+        motionKeys.forEach((key) => {
+          current[key] = lerp(from[key], to[key], progress);
+        });
+      }
+
+      function composeTarget() {
+        return states[stateName];
+      }
+
+      function setState(nextState, options = {}) {
+        if (!states[nextState] || nextState === stateName) return;
+        stateName = nextState;
+        document.querySelectorAll("[data-state]").forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.state === nextState));
+        });
+        transitionToSelection(options);
+      }
+
+      function transitionToSelection(options = {}) {
+        const now = performance.now();
+        const target = composeTarget();
+        const immediate = options.immediate || reduceMotionQuery.matches;
+        if (immediate) {
+          transition = null;
+          renderMotionFrame(target, target, 1);
+          stateStartedAt = now;
+          Object.assign(lastActionPose, { y: 0, scaleX: 1, scaleY: 1, angle: 0 });
+          Object.assign(lastBlinkPose, { y: 0, scaleX: 1, scaleY: 1 });
+          Object.assign(lastGlyphOverlay, {
+            meter: 0,
+            meterProgress: 0,
+            ring: 0,
+            ringRadius: 16,
+            glyphReveal: 1
+          });
+        } else {
+          const from = motionSnapshot(current);
+          from.y += lastActionPose.y;
+          from.scaleX *= lastActionPose.scaleX;
+          from.scaleY *= lastActionPose.scaleY;
+          from.angle += lastActionPose.angle;
+          if (lastGlyphOverlay.meter > from.meter) {
+            from.meter = lastGlyphOverlay.meter;
+            from.meterProgress = lastGlyphOverlay.meterProgress;
+          }
+          if (lastGlyphOverlay.ring > from.ring) {
+            from.ring = lastGlyphOverlay.ring;
+            from.ringRadius = lastGlyphOverlay.ringRadius;
+          }
+          from.apertureOpacity *= lastGlyphOverlay.glyphReveal;
+          transition = {
+            startedAt: now,
+            endsAt: now + TRANSITION_MS,
+            from,
+            fromBlink: { ...lastBlinkPose }
+          };
+          stateStartedAt = now;
+        }
+        blinkStartedAt = -Infinity;
+        queuedBlinkAt = Infinity;
+        const blinkScheduleAt = transition?.endsAt ?? now;
+        if (target.entryBlink === "double") {
+          nextBlinkAt = blinkScheduleAt + 180;
+          queuedBlinkAt = blinkScheduleAt + 430;
+        } else {
+          scheduleNextBlink(blinkScheduleAt, target);
+        }
+        stateLabel.textContent = target.label;
+        announcement.textContent = `Loop: ${target.label}`;
+        if (options.fromUser && autoplay) toggleAutoplay(false);
+      }
+
+      function toggleAutoplay(force) {
+        autoplay = typeof force === "boolean" ? force : !autoplay;
+        autoButton.setAttribute("aria-pressed", String(autoplay));
+        autoButton.textContent = autoplay ? "Ⅱ" : "▶";
+        autoButton.setAttribute(
+          "aria-label",
+          autoplay ? "Pause autoplay" : "Autoplay expressions"
+        );
+        clearInterval(autoplayTimer);
+        if (autoplay) {
+          let index = stateNames.indexOf(stateName);
+          autoplayTimer = window.setInterval(() => {
+            index = (index + 1) % stateNames.length;
+            setState(stateNames[index]);
+          }, 2800);
+        }
+      }
+
+      function updatePointer(event) {
+        const rect = stage.getBoundingClientRect();
+        pointer.x = clamp(((event.clientX - rect.left) / rect.width) * 2 - 1, -1, 1);
+        pointer.y = clamp(((event.clientY - rect.top) / rect.height) * 2 - 1, -1, 1);
+        pointerActive = true;
+      }
+
+      function triggerTouch(clientX) {
+        const rect = stage.getBoundingClientRect();
+        touchDirection = clientX < rect.left + rect.width / 2 ? 1 : -1;
+        touchStartedAt = performance.now();
+      }
+
+      function render(time) {
+        const target = composeTarget();
+        let isTransitioning = false;
+        let transitionProgress = 1;
+        let actionReveal = 1;
+
+        if (reduceMotionQuery.matches && transition) {
+          renderMotionFrame(target, target, 1);
+          transition = null;
+        } else if (transition) {
+          if (time < transition.endsAt) {
+            transitionProgress = smootherStep(
+              (time - transition.startedAt) / TRANSITION_MS
+            );
+            renderMotionFrame(transition.from, target, transitionProgress);
+            isTransitioning = true;
+            actionReveal = transitionProgress;
+          } else {
+            renderMotionFrame(target, target, 1);
+            transition = null;
+          }
+        } else {
+          renderMotionFrame(target, target, 1);
+        }
+
+        if (!reduceMotionQuery.matches && !isTransitioning && time >= nextBlinkAt) {
+          blinkStartedAt = time;
+          if (Number.isFinite(queuedBlinkAt)) {
+            nextBlinkAt = queuedBlinkAt;
+            queuedBlinkAt = Infinity;
+          } else {
+            scheduleNextBlink(time, target);
+          }
+        }
+
+        const blinkProgress = clamp(
+          (time - blinkStartedAt) / (target.blinkDuration * 1000),
+          0,
+          1
+        );
+        const blink = !isTransitioning && blinkStartedAt > 0 && blinkProgress < 1
+          ? Math.sin(blinkProgress * Math.PI)
+          : 0;
+
+        const breath = reduceMotionQuery.matches
+          ? 0
+          : Math.sin((time / 1000) * (Math.PI * 2 / current.breathPeriod)) * current.breathAmplitude;
+
+        const rawStateElapsed = (time - stateStartedAt) / 1000;
+        const stateElapsed = Math.max(0, rawStateElapsed);
+        const actionName = rawStateElapsed >= 0 ? target.action : null;
+        let actionY = 0;
+        let actionScaleX = 1;
+        let actionScaleY = 1;
+        let actionAngle = 0;
+
+        if (!reduceMotionQuery.matches && ["success", "complete", "record"].includes(actionName)) {
+          actionY = singleArc(stateElapsed, target.actionDuration, target.actionHeight);
+          const loadProgress = clamp(stateElapsed / 0.14, 0, 1);
+          const load = Math.sin(loadProgress * Math.PI) * 0.022;
+          actionScaleX += load;
+          actionScaleY -= load;
+        } else if (!reduceMotionQuery.matches && actionName === "drop") {
+          const progress = clamp(stateElapsed / target.actionDuration, 0, 1);
+          const drop = easeOutQuint(progress);
+          actionY = -18 * (1 - drop);
+          const impact = Math.sin(clamp((progress - 0.62) / 0.38, 0, 1) * Math.PI) * 0.035;
+          actionScaleX += impact;
+          actionScaleY -= impact;
+        } else if (!reduceMotionQuery.matches && actionName) {
+          const progress = clamp(stateElapsed / target.actionDuration, 0, 1);
+          const remainder = 1 - easeOutQuint(progress);
+          if (actionName === "attend") {
+            actionAngle = -4 * remainder;
+            actionY = 3 * Math.sin(progress * Math.PI);
+          } else if (actionName === "nod") {
+            actionY = Math.sin(progress * Math.PI) * 5;
+            actionAngle = Math.sin(progress * Math.PI) * -1.5;
+          } else if (actionName === "settle") {
+            actionY = -7 * remainder;
+          } else if (actionName === "lift") {
+            actionY = singleArc(stateElapsed, target.actionDuration, target.actionHeight);
+          } else if (actionName === "rise") {
+            actionY = 10 * remainder;
+            actionScaleY -= 0.018 * remainder;
+          } else if (actionName === "open") {
+            actionScaleX -= 0.06 * remainder;
+            actionScaleY -= 0.06 * remainder;
+          } else if (actionName === "release") {
+            actionY = -8 * remainder;
+            actionScaleX -= 0.035 * remainder;
+            actionScaleY += 0.018 * remainder;
+          } else if (actionName === "set") {
+            actionY = 9 * remainder;
+            actionScaleX += 0.035 * remainder;
+            actionScaleY -= 0.045 * remainder;
+          } else if (actionName === "sink") {
+            actionY = -12 * remainder;
+            actionAngle = -2 * remainder;
+          } else if (actionName === "shortfall") {
+            actionY = -5 * remainder;
+          }
+        }
+
+        actionY *= actionReveal;
+        actionAngle *= actionReveal;
+        actionScaleX = lerp(1, actionScaleX, actionReveal);
+        actionScaleY = lerp(1, actionScaleY, actionReveal);
+        Object.assign(lastActionPose, {
+          y: actionY,
+          scaleX: actionScaleX,
+          scaleY: actionScaleY,
+          angle: actionAngle
+        });
+
+        const touchElapsed = (time - touchStartedAt) / 1000;
+        const touchProgress = clamp(touchElapsed / 0.42, 0, 1);
+        const touchArc = reduceMotionQuery.matches ? 0 : Math.sin(touchProgress * Math.PI);
+        let performanceGazeX = 0;
+        let performanceGazeY = 0;
+        if (!reduceMotionQuery.matches && stateName === "thinking") {
+          performanceGazeX = Math.sin(stateElapsed * 0.9) * 0.9 * actionReveal;
+          performanceGazeY = Math.cos(stateElapsed * 0.72) * 0.45 * actionReveal;
+        } else if (!reduceMotionQuery.matches && stateName === "listening") {
+          performanceGazeX = Math.sin(stateElapsed * 1.2) * 0.32 * actionReveal;
+        }
+        const gazeX = current.gazeX
+          + performanceGazeX
+          + (pointerActive ? pointer.x * 9 * current.pointerGainX : 0);
+        const gazeY = current.gazeY
+          + performanceGazeY
+          + (pointerActive ? pointer.y * 6 * current.pointerGainY : 0);
+        const faceX = FACE_X + current.x + touchDirection * touchArc * 5;
+        const faceY = FACE_Y + current.y + breath + actionY + touchArc * 3;
+        const faceAngle = current.angle + actionAngle + touchDirection * touchArc * 2;
+        const faceScaleX = FACE_SCALE * current.scaleX * actionScaleX * (1 + touchArc * 0.018);
+        const faceScaleY = FACE_SCALE * current.scaleY * actionScaleY * (1 - touchArc * 0.018);
+
+        coreGroup.setAttribute(
+          "transform",
+          `translate(${faceX.toFixed(2)} ${faceY.toFixed(2)}) rotate(${faceAngle.toFixed(2)}) scale(${faceScaleX.toFixed(3)} ${faceScaleY.toFixed(3)})`
+        );
+
+        coreHalo.setAttribute("opacity", current.haloEnergy.toFixed(2));
+
+        const blinkMode = target.blinkMode;
+        let blinkScaleX = blinkMode === "line"
+          ? 1 - blink * 0.22
+          : blinkMode === "closed"
+            ? 1 - blink * 0.06
+            : 1;
+        let blinkScaleY = blinkMode === "vertical"
+          ? 1 - blink * 0.82
+          : blinkMode === "pair"
+            ? 1 - blink * 0.68
+            : blinkMode === "heavy"
+              ? 1 - blink * 0.45
+              : blinkMode === "line"
+                ? 1 - blink * 0.42
+                : 1;
+        let blinkY = blinkMode === "closed"
+          ? blink * 1.2
+          : blinkMode === "heavy"
+            ? blink * 0.8
+            : 0;
+        if (transition) {
+          blinkScaleX = lerp(
+            transition.fromBlink.scaleX,
+            blinkScaleX,
+            transitionProgress
+          );
+          blinkScaleY = lerp(
+            transition.fromBlink.scaleY,
+            blinkScaleY,
+            transitionProgress
+          );
+          blinkY = lerp(
+            transition.fromBlink.y,
+            blinkY,
+            transitionProgress
+          );
+        }
+        const apertureAngle = current.apertureAngle
+          + (pointerActive ? pointer.x * 4 * current.pointerGainX : 0);
+        const split = clamp(current.split, 0, 1);
+        const ring = clamp(current.ring, 0, 1);
+        const twinLength = Math.max(8, (current.apertureWidth - current.eyeGap) / 2);
+        const baseEyeLength = lerp(current.apertureWidth, twinLength, split);
+        const lengthBalance = clamp(current.eyeLengthBalance, -0.42, 0.42);
+        const blinkLengthScale = blinkMode === "line" ? 1 - blink * 0.24 : 1;
+        Object.assign(lastBlinkPose, {
+          y: blinkY,
+          scaleX: blinkScaleX * blinkLengthScale,
+          scaleY: blinkScaleY
+        });
+        const leftEyeLength = baseEyeLength * (1 + lengthBalance) * blinkLengthScale;
+        const rightEyeLength = baseEyeLength * (1 - lengthBalance) * blinkLengthScale;
+        const eyeOffset = split * (current.eyeGap + baseEyeLength) / 2;
+        const eyeRotation = current.eyeRotation * split;
+        const eyeSplay = current.eyeSplay * split;
+        const leftEyeY = -current.eyeOffsetY * split;
+        const rightEyeY = current.eyeOffsetY * split;
+        const leftCurve = current.apertureCurve + current.eyeCurveBalance * split;
+        const rightCurve = current.apertureCurve - current.eyeCurveBalance * split;
+        const renderedFold = current.apertureFold * (1 - split);
+        const recordProgress = actionName === "record"
+          ? clamp(stateElapsed / target.actionDuration, 0, 1)
+          : 1;
+        const recordRing = actionName === "record" && !reduceMotionQuery.matches
+          ? Math.sin(clamp((recordProgress - 0.08) / 0.62, 0, 1) * Math.PI)
+            * actionReveal
+          : 0;
+        const ringBlink = blinkMode === "ring" ? blink : 0;
+        const renderedRing = Math.max(ring, recordRing);
+        const ringLineOpacity = ring * ringBlink;
+        let glyphReveal = 1;
+        let eventMeterOpacity = 0;
+        let eventMeterProgress = current.meterProgress;
+
+        if (!reduceMotionQuery.matches && actionName === "complete") {
+          const fill = easeOutQuint(clamp(stateElapsed / 0.3, 0, 1));
+          const handoff = easeOutQuint(clamp((stateElapsed - 0.26) / 0.28, 0, 1));
+          eventMeterOpacity = (1 - handoff) * actionReveal;
+          eventMeterProgress = lerp(0.45, 1, fill);
+          glyphReveal = lerp(1, handoff, actionReveal);
+        } else if (!reduceMotionQuery.matches && actionName === "record") {
+          const fill = easeOutQuint(clamp(stateElapsed / 0.28, 0, 1));
+          const handoff = easeOutQuint(clamp((stateElapsed - 0.42) / 0.22, 0, 1));
+          eventMeterOpacity = (
+            1 - easeOutQuint(clamp((stateElapsed - 0.24) / 0.18, 0, 1))
+          ) * actionReveal;
+          eventMeterProgress = lerp(0.68, 1.12, fill);
+          glyphReveal = lerp(1, handoff, actionReveal);
+        }
+
+        let meterProgress = current.meterProgress;
+        if (stateName === "rest") {
+          meterProgress = reduceMotionQuery.matches
+            ? 0.62
+            : clamp(0.08 + stateElapsed / 8 * 0.92, 0.08, 1);
+        } else if (stateName === "missed" && !reduceMotionQuery.matches) {
+          meterProgress = lerp(
+            0.12,
+            current.meterProgress,
+            easeOutQuint(clamp(stateElapsed / states.missed.actionDuration, 0, 1))
+          );
+        }
+        if (eventMeterOpacity > 0) meterProgress = eventMeterProgress;
+
+        const meterOpacity = Math.max(current.meter, eventMeterOpacity);
+        const lineOpacity = Math.max(1 - renderedRing, ringLineOpacity)
+          * current.apertureOpacity
+          * glyphReveal;
+        lastGlyphOverlay.meter = meterOpacity;
+        lastGlyphOverlay.meterProgress = meterProgress;
+        lastGlyphOverlay.glyphReveal = glyphReveal;
+
+        apertureGroup.setAttribute(
+          "transform",
+          `translate(${(gazeX * 0.8).toFixed(2)} ${(current.apertureY + gazeY * 0.55 + blinkY).toFixed(2)}) rotate(${apertureAngle.toFixed(2)}) scale(${blinkScaleX.toFixed(3)} ${blinkScaleY.toFixed(3)})`
+        );
+        const meterWidth = current.apertureWidth;
+        const meterFillWidth = Math.max(3, meterWidth * clamp(meterProgress, 0.04, 1.16));
+        const meterCenterX = -meterWidth / 2 + meterFillWidth / 2;
+        apertureTrack.setAttribute(
+          "d",
+          aperturePath(
+            0,
+            0,
+            meterWidth,
+            0,
+            0,
+            current.apertureFold,
+            current.foldBias
+          )
+        );
+        apertureMeter.setAttribute(
+          "d",
+          aperturePath(
+            meterCenterX,
+            0,
+            meterFillWidth,
+            0,
+            0,
+            current.apertureFold * clamp(meterProgress, 0, 1),
+            current.foldBias
+          )
+        );
+        apertureTrack.setAttribute("stroke-width", current.apertureThickness.toFixed(2));
+        apertureMeter.setAttribute("stroke-width", current.apertureThickness.toFixed(2));
+        apertureTrack.setAttribute("opacity", (meterOpacity * 0.16).toFixed(3));
+        apertureMeter.setAttribute("opacity", meterOpacity.toFixed(3));
+        apertureMain.setAttribute("stroke-width", current.apertureThickness.toFixed(2));
+        apertureSecond.setAttribute("stroke-width", current.apertureThickness.toFixed(2));
+        apertureRing.setAttribute("stroke-width", current.apertureThickness.toFixed(2));
+        const watchingPulse = stateName === "watching" && !reduceMotionQuery.matches
+          ? Math.sin(stateElapsed * 1.35) * 0.45 * actionReveal
+          : 0;
+        const recordRadius = lerp(15, 22, recordRing);
+        const ringRadius = recordRing > ring
+          ? recordRadius
+          : current.ringRadius + watchingPulse - ringBlink * 1.2;
+        lastGlyphOverlay.ring = renderedRing * (1 - ringBlink);
+        lastGlyphOverlay.ringRadius = ringRadius;
+        apertureRing.setAttribute(
+          "r",
+          ringRadius.toFixed(2)
+        );
+        apertureRing.setAttribute(
+          "opacity",
+          (renderedRing * (1 - ringBlink)).toFixed(3)
+        );
+        const renderedSpinner = current.spinner;
+        const circumference = Math.PI * 2 * ringRadius;
+        if (renderedSpinner > 0.01) {
+          apertureRing.setAttribute(
+            "stroke-dasharray",
+            `${(circumference * 0.73).toFixed(2)} ${(circumference * 0.27).toFixed(2)}`
+          );
+        } else {
+          apertureRing.setAttribute("stroke-dasharray", "none");
+        }
+        const spinnerAngle = reduceMotionQuery.matches
+          ? 0
+          : stateElapsed * 220 * renderedSpinner;
+        apertureRing.setAttribute(
+          "transform",
+          `rotate(${spinnerAngle.toFixed(2)}) scale(${(1 - ringBlink * 0.08).toFixed(3)})`
+        );
+        apertureMain.setAttribute(
+          "d",
+          aperturePath(
+            -eyeOffset,
+            leftEyeY,
+            leftEyeLength,
+            eyeRotation + eyeSplay,
+            leftCurve,
+            renderedFold,
+            current.foldBias * (1 - split)
+          )
+        );
+        apertureSecond.setAttribute(
+          "d",
+          aperturePath(eyeOffset, rightEyeY, rightEyeLength, eyeRotation - eyeSplay, rightCurve)
+        );
+        apertureMain.setAttribute("opacity", lineOpacity.toFixed(3));
+        apertureSecond.setAttribute(
+          "opacity",
+          (lineOpacity * clamp(split * 1.35, 0, 1)).toFixed(3)
+        );
+
+        const breathWaveMorph = clamp(current.breathWave, 0, 1);
+        const waveCycle = stateElapsed % 7.2;
+        const waveTravel = clamp(waveCycle / 2.8, 0, 1);
+        const waveCenter = stateName === "recovery"
+          ? reduceMotionQuery.matches
+            ? 0
+            : lerp(-current.apertureWidth * 0.8, current.apertureWidth * 0.8, waveTravel)
+          : current.apertureWidth * 0.8;
+        recoveryWave.setAttribute(
+          "d",
+          breathWavePath(
+            current.apertureWidth,
+            lerp(0, reduceMotionQuery.matches ? 2.4 : 3.4, breathWaveMorph),
+            waveCenter
+          )
+        );
+        recoveryWave.setAttribute(
+          "stroke-width",
+          lerp(current.apertureThickness * 0.78, 4, breathWaveMorph).toFixed(2)
+        );
+        recoveryWave.setAttribute(
+          "opacity",
+          (breathWaveMorph * glyphReveal * (1 - renderedRing)).toFixed(3)
+        );
+
+        const focusMorph = clamp(current.focusReticle, 0, 1);
+        const focusTurn = focusMorph * focusMorph * (3 - 2 * focusMorph);
+        const focusArrival = stateName === "focused"
+          ? easeOutQuint(clamp(stateElapsed / 0.52, 0, 1))
+          : 1;
+        const focusSpread = reduceMotionQuery.matches
+          ? 1
+          : lerp(1.18, 1, focusArrival);
+        focusReticle.setAttribute(
+          "opacity",
+          (focusMorph * glyphReveal * (1 - renderedRing)).toFixed(3)
+        );
+        focusCorners.forEach((corner, index) => {
+          corner.setAttribute(
+            "d",
+            focusCornerPath(index, focusTurn, focusSpread)
+          );
+          corner.setAttribute(
+            "stroke-width",
+            lerp(current.apertureThickness * 0.72, 4.2, focusTurn).toFixed(2)
+          );
+        });
+
+        const inboundMorph = clamp(current.inboundSignal, 0, 1);
+        const inboundCycle = reduceMotionQuery.matches
+          ? 0.72
+          : (stateElapsed % 2.4) / 2.4;
+        const inboundTravel = smootherStep(clamp(inboundCycle / 0.62, 0, 1));
+        const inboundAbsorb = Math.sin(
+          clamp((inboundCycle - 0.52) / 0.24, 0, 1) * Math.PI
+        );
+        const inboundAppear = smootherStep(clamp(inboundCycle / 0.1, 0, 1));
+        const inboundFade = inboundAppear
+          * (1 - smootherStep(clamp((inboundCycle - 0.48) / 0.18, 0, 1)));
+        const inboundOpacity = inboundMorph * glyphReveal * (1 - renderedRing);
+        inboundSignalGlyph.setAttribute("opacity", inboundOpacity.toFixed(3));
+        inboundLeft.setAttribute("d", inboundDashPath(-1, inboundTravel));
+        inboundRight.setAttribute("d", inboundDashPath(1, inboundTravel));
+        inboundLeft.setAttribute("opacity", inboundFade.toFixed(3));
+        inboundRight.setAttribute("opacity", inboundFade.toFixed(3));
+        inboundCenter.setAttribute(
+          "d",
+          aperturePath(0, 0, 13 + inboundAbsorb * 9, 0, 0)
+        );
+        inboundCenter.setAttribute(
+          "stroke-width",
+          lerp(current.apertureThickness * 0.78, 5.5 + inboundAbsorb, inboundMorph).toFixed(2)
+        );
+
+        const soundBarMorph = clamp(current.soundBars, 0, 1);
+        const soundBarTurn = soundBarMorph * soundBarMorph * (3 - 2 * soundBarMorph);
+        soundBarsGroup.setAttribute(
+          "opacity",
+          (soundBarMorph * glyphReveal * (1 - renderedRing)).toFixed(3)
+        );
+        soundBars.forEach((bar, index) => {
+          const isActivelySpeaking = stateName === "speaking" && !reduceMotionQuery.matches;
+          const primaryWave = Math.sin(
+            stateElapsed * (2.25 + index * 0.08) + index * 1.13
+          );
+          const secondaryWave = Math.sin(stateElapsed * 1.1 + index * 0.71);
+          const liveLevel = isActivelySpeaking
+            ? 0.9 + primaryWave * 0.1 + secondaryWave * 0.045
+            : 1;
+          const height = lerp(7, soundBarHeights[index] * liveLevel, soundBarTurn);
+          const rotation = lerp(0, 90, soundBarTurn);
+          bar.setAttribute(
+            "d",
+            aperturePath(soundBarCenters[index], 0, height, rotation, 0)
+          );
+          bar.setAttribute(
+            "stroke-width",
+            lerp(current.apertureThickness * 0.78, 5.5, soundBarTurn).toFixed(2)
+          );
+        });
+
+        const typingMorph = clamp(current.typingDots, 0, 1);
+        const typingTurn = typingMorph * typingMorph * (3 - 2 * typingMorph);
+        typingGlyph.setAttribute(
+          "opacity",
+          (typingMorph * glyphReveal * (1 - renderedRing)).toFixed(3)
+        );
+        typingDots.forEach((dot, index) => {
+          const typingPhase = stateElapsed * 1.05 - index * 0.17;
+          const typingLift = stateName === "typing" && !reduceMotionQuery.matches
+            ? Math.max(0, Math.sin(typingPhase * Math.PI * 2))
+            : 0;
+          const initialX = -18 + index * 18;
+          const dotX = lerp(initialX, -14 + index * 14, typingTurn);
+          const dotY = -4.2 * typingLift * typingTurn;
+          dot.setAttribute(
+            "d",
+            aperturePath(dotX, dotY, lerp(8, 0.4, typingTurn), 0, 0)
+          );
+          dot.setAttribute(
+            "stroke-width",
+            lerp(current.apertureThickness * 0.78, 8, typingTurn).toFixed(2)
+          );
+        });
+
+        const scanPhase = (stateElapsed % 1.7) / 1.7;
+        const scanOpacity = reduceMotionQuery.matches
+          ? 0
+          : current.scan * Math.sin(scanPhase * Math.PI) * lineOpacity;
+        apertureSignal.setAttribute(
+          "cx",
+          lerp(-current.apertureWidth * 0.42, current.apertureWidth * 0.42, scanPhase).toFixed(2)
+        );
+        apertureSignal.setAttribute("opacity", scanOpacity.toFixed(3));
+
+        requestAnimationFrame(render);
+      }
+
+      stateStrip.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-state]");
+        if (button) setState(button.dataset.state, { fromUser: true });
+      });
+
+      autoButton.addEventListener("click", () => toggleAutoplay());
+      stage.addEventListener("pointermove", updatePointer);
+      stage.addEventListener("pointerenter", updatePointer);
+      stage.addEventListener("pointerleave", () => {
+        pointerActive = false;
+        pointer.x = 0;
+        pointer.y = 0;
+      });
+      stage.addEventListener("pointerdown", (event) => {
+        updatePointer(event);
+        triggerTouch(event.clientX);
+      });
+
+      window.addEventListener("keydown", (event) => {
+        if (event.key === " ") {
+          event.preventDefault();
+          toggleAutoplay();
+          return;
+        }
+        const number = Number(event.key);
+        if (number >= 1 && number <= stateNames.length) {
+          setState(stateNames[number - 1], { fromUser: true });
+        }
+      });
+
+      reduceMotionQuery.addEventListener?.("change", () => {
+        if (reduceMotionQuery.matches) {
+          touchStartedAt = -Infinity;
+        }
+      });
+
+      window.LoopMascot = Object.freeze({
+        setState,
+        play: () => toggleAutoplay(true),
+        pause: () => toggleAutoplay(false),
+        react: () => triggerTouch(window.innerWidth / 2),
+        states: [...stateNames]
+      });
+
+      transitionToSelection({ immediate: true });
+      requestAnimationFrame(render);
+    })();
+  </script>
+</body>
+</html>
