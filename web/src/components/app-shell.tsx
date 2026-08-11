@@ -1,6 +1,6 @@
 'use client';
 
-import { UserButton, useUser } from '@clerk/nextjs';
+import { UserButton, useClerk, useUser } from '@clerk/nextjs';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -19,6 +19,7 @@ const navigation = [
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { signOut } = useClerk();
   const { user } = useUser();
 
   return (
@@ -34,7 +35,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="sidebar-account">
           <UserButton />
-          <div><strong>{user?.fullName ?? 'Your account'}</strong><span>{user?.primaryEmailAddress?.emailAddress}</span></div>
+          <div className="sidebar-account-copy"><strong>{user?.fullName ?? 'Your account'}</strong><span>{user?.primaryEmailAddress?.emailAddress}</span></div>
+          <button className="sidebar-sign-out" onClick={() => void signOut({ redirectUrl: '/sign-in' })} type="button">Sign out</button>
         </div>
       </aside>
       <main className={pathname === '/app/chat' ? 'app-main app-main-chat' : 'app-main'}><ProfileGate>{children}</ProfileGate></main>

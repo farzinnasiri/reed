@@ -83,9 +83,11 @@ h2 { font-size: 1.35rem; font-weight: 560; letter-spacing: -.025em; }
 .nav-link:hover { background: #101219; color: var(--text); }
 .nav-link-active { background: #121620; color: var(--text); }
 .sidebar-account { align-items: center; border-top: 1px solid var(--line); display: flex; gap: 11px; margin-top: auto; padding: 22px 4px 0; min-width: 0; }
-.sidebar-account div { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sidebar-account-copy { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 0; }
 .sidebar-account strong { font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-account span { color: var(--quiet); font-size: .67rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-sign-out { background: transparent; border: 0; color: var(--quiet); cursor: pointer; font: inherit; font-size: .7rem; padding: 8px 0 8px 8px; transition: color .14s ease; white-space: nowrap; }
+.sidebar-sign-out:hover { color: var(--ink); }
 .app-main { min-width: 0; padding: 52px clamp(30px, 5vw, 78px) 100px; }
 .app-main-chat { height: 100vh; overflow: hidden; padding: 0; }
 .page-stack { display: flex; flex-direction: column; gap: 26px; margin: 0 auto; max-width: 1260px; }
@@ -286,7 +288,8 @@ h2 { font-size: 1.35rem; font-weight: 560; letter-spacing: -.025em; }
   .app-nav { flex-direction: row; }
   .nav-link { padding: 9px 11px; white-space: nowrap; }
   .sidebar-account { border: 0; margin: 0 0 0 auto; padding: 0; }
-  .sidebar-account div { display: none; }
+  .sidebar-account-copy { display: none; }
+  .sidebar-sign-out { padding: 8px 0; }
   .app-main { padding-top: 36px; }
   .app-main.app-main-chat { height: calc(100dvh - 65px); padding: 0; }
   .reed-chat-header { height: 66px; }
