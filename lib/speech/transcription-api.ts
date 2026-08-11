@@ -1,4 +1,3 @@
-import { authClient } from '@/lib/auth-client';
 import { appEnv } from '@/lib/env';
 import { sizeBucket, startClientWideEvent } from '@/lib/client-observability';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -34,6 +33,7 @@ export class SpeechTranscriptionError extends Error {
 
 export async function transcribeLocalSpeechRecording(args: {
   actor: SpeechTranscriptionActor;
+  getToken: () => Promise<string | null>;
   recording: LocalSpeechRecording;
 }): Promise<SpeechTranscriptionResponse> {
   const event = startClientWideEvent('speech.transcription', {
@@ -79,6 +79,7 @@ export async function transcribeLocalSpeechRecording(args: {
 
 async function transcribeOnce(args: {
   actor: SpeechTranscriptionActor;
+  getToken: () => Promise<string | null>;
   recording: LocalSpeechRecording;
 }, setAttrs: (attrs: Record<string, string | number | boolean | null | undefined>) => void) {
   if (!appEnv.convexSiteUrl) {
@@ -86,8 +87,7 @@ async function transcribeOnce(args: {
   }
 
   setAttrs({ 'speech.step': 'auth_token' });
-  const tokenResult = await authClient.convex.token({ fetchOptions: { throw: false } });
-  const token = tokenResult.data?.token;
+  const token = await args.getToken();
   if (!token) {
     throw new SpeechTranscriptionError('You need to be signed in to transcribe audio.', 'unauthorized', false);
   }

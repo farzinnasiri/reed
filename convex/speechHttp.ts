@@ -1,13 +1,11 @@
-import type { GenericCtx } from '@convex-dev/better-auth';
-import type { DataModel } from './_generated/dataModel';
-import { authComponent } from './auth';
+import type { ActionCtx } from './_generated/server';
 import { SpeechServiceError, transcribeSpeech, type SpeechActor } from './speech';
 
 const ALLOWED_ACTORS = new Set(['chat', 'session_notes']);
 
-export async function transcribeSpeechHttp(ctx: GenericCtx<DataModel>, request: Request) {
-  const authUser = await authComponent.safeGetAuthUser(ctx);
-  if (!authUser) {
+export async function transcribeSpeechHttp(ctx: ActionCtx, request: Request) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
     return jsonResponse({ error: 'Not authenticated.', code: 'unauthorized' }, 401);
   }
 

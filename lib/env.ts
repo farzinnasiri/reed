@@ -1,9 +1,11 @@
 const publicEnv = {
+  clerkPublishableKey: process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY ?? '',
   convexUrl: process.env.EXPO_PUBLIC_CONVEX_URL ?? '',
   convexSiteUrl: process.env.EXPO_PUBLIC_CONVEX_SITE_URL ?? '',
 } as const;
 
 export const missingPublicEnv = Object.entries({
+  EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY: publicEnv.clerkPublishableKey,
   EXPO_PUBLIC_CONVEX_URL: publicEnv.convexUrl,
   EXPO_PUBLIC_CONVEX_SITE_URL: publicEnv.convexSiteUrl,
 }).reduce<string[]>((missing, [key, value]) => {

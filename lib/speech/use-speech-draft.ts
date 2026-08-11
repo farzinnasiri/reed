@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useAuth } from '@clerk/expo';
 import { RecordingPresets, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import {
   clearLocalSpeechRecording,
@@ -27,6 +28,7 @@ export function useSpeechDraft(
   options: { onError?: (message: string) => void } = {},
 ) {
   const { onError } = options;
+  const { getToken } = useAuth();
   const recorder = useAudioRecorder(SPEECH_RECORDING_OPTIONS);
   const recorderState = useAudioRecorderState(recorder, 80);
   const recordingStartedAtRef = useRef(0);
@@ -40,7 +42,7 @@ export function useSpeechDraft(
   const transcribeRecording = useCallback(async (recording: LocalSpeechRecording) => {
     setState({ error: null, status: 'transcribing' });
     try {
-      const result = await transcribeLocalSpeechRecording({ actor, recording });
+      const result = await transcribeLocalSpeechRecording({ actor, getToken, recording });
       onText(result.text);
       await clearLocalSpeechRecording(recording);
       if (cachedRecordingRef.current?.uri === recording.uri) {
@@ -52,7 +54,7 @@ export function useSpeechDraft(
       onError?.(message);
       setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
     }
-  }, [actor, onError, onText]);
+  }, [actor, getToken, onError, onText]);
 
   const start = useCallback(async () => {
     if (state.status === 'listening' || state.status === 'transcribing') return;

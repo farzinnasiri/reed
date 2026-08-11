@@ -1,22 +1,24 @@
 import { Stack } from 'expo-router';
+import { useAuth, useUser } from '@clerk/expo';
 import { Platform } from 'react-native';
-import { useQuery } from 'convex/react';
+import { useConvexAuth, useQuery } from 'convex/react';
 import { AppShell } from '@/components/home/app-shell';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { api } from '@/convex/_generated/api';
 import { useReedTheme } from '@/design/provider';
-import { authClient } from '@/lib/auth-client';
 
 export default function AuthenticatedAppLayout() {
   const { theme } = useReedTheme();
-  const { data: session, isPending: isAuthPending } = authClient.useSession();
-  const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
+  const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const { user } = useUser();
+  const viewer = useQuery(api.profiles.viewer, isAuthenticated ? {} : 'skip');
 
-  if (isAuthPending) {
+  if (!isClerkLoaded || isConvexAuthLoading) {
     return null;
   }
 
-  if (!session) {
+  if (!isSignedIn || !isAuthenticated) {
     return null;
   }
 
@@ -30,7 +32,7 @@ export default function AuthenticatedAppLayout() {
 
   return (
     <ScreenBackdrop>
-      <AppShell displayName={viewer.displayName ?? session.user.name ?? 'there'}>
+      <AppShell displayName={viewer.displayName ?? user?.fullName ?? 'there'}>
         <Stack
           screenOptions={{
             animation: Platform.OS === 'web' ? 'none' : 'fade',

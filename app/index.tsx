@@ -1,9 +1,9 @@
 import { Redirect, useLocalSearchParams } from 'expo-router';
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { useAuth, useSignIn, useSignUp } from '@clerk/expo';
+import { useSSO } from '@clerk/expo/experimental';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
-import { authClient } from '@/lib/auth-client';
 import { analytics } from '@/lib/analytics';
 import { api } from '@/convex/_generated/api';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
@@ -16,13 +16,19 @@ import type { AuthMode } from '@/components/home/types';
 
 export default function HomeScreen() {
   const params = useLocalSearchParams<{ mode?: string }>();
-  const { data: session, isPending: isAuthPending } = authClient.useSession();
+  const { isLoaded: isAuthLoaded, isSignedIn, userId } = useAuth();
+  const { signIn } = useSignIn();
+  const { signUp } = useSignUp();
+  const { startSSOFlow } = useSSO();
+  const session = isSignedIn;
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
   const ensureViewerProfile = useMutation(api.profiles.ensureViewerProfile);
   const { theme } = useReedTheme();
   const [mode, setMode] = useState<AuthMode>('sign-in');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isAwaitingVerification, setIsAwaitingVerification] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
@@ -39,19 +45,17 @@ export default function HomeScreen() {
       !hasCompletedOnboardingLocally,
   );
   
-  const isPending = isAuthPending;
-
-  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const isPending = !isAuthLoaded;
 
   useEffect(() => {
-    if (!session?.user.id) {
+    if (!userId) {
       return;
     }
 
     void ensureViewerProfile({}).catch(error => {
       setErrorMessage(getErrorMessage(error));
     });
-  }, [ensureViewerProfile, session?.user.id]);
+  }, [ensureViewerProfile, userId]);
 
   useEffect(() => {
     if (!session) {
@@ -83,16 +87,14 @@ export default function HomeScreen() {
       return;
     }
 
-    if (password.length < 8) {
-      setErrorMessage('Password must be at least 8 characters.');
+    if (password.length < 15) {
+      setErrorMessage('Password must be at least 15 characters.');
       return;
     }
 
     await runAuthAction(async () => {
-      const fallbackName = nextEmail.split('@')[0]?.trim() || 'User';
-      const result = await authClient.signUp.email({
-        name: fallbackName,
-        email: nextEmail,
+      const result = await signUp.password({
+        emailAddress: nextEmail,
         password,
       });
 
@@ -100,9 +102,38 @@ export default function HomeScreen() {
         throw result.error;
       }
 
+      const verification = await signUp.verifications.sendEmailCode();
+      if (verification.error) {
+        throw verification.error;
+      }
+
+      setIsAwaitingVerification(true);
+      setFeedback('We sent a verification code to your email.');
+    });
+  }
+
+  async function handleVerifyEmail() {
+    if (!verificationCode.trim()) {
+      setErrorMessage('Enter the verification code from your email.');
+      return;
+    }
+
+    await runAuthAction(async () => {
+      const result = await signUp.verifications.verifyEmailCode({ code: verificationCode.trim() });
+      if (result.error) {
+        throw result.error;
+      }
+
+      const finalized = await signUp.finalize();
+      if (finalized.error) {
+        throw finalized.error;
+      }
+
       analytics.userSignedUp();
       setFeedback('Account created.');
       setPassword('');
+      setVerificationCode('');
+      setIsAwaitingVerification(false);
     });
   }
 
@@ -115,14 +146,18 @@ export default function HomeScreen() {
     }
 
     await runAuthAction(async () => {
-      const result = await authClient.signIn.email({
-        email: nextEmail,
+      const result = await signIn.password({
+        emailAddress: nextEmail,
         password,
-        rememberMe: true,
       });
 
       if (result.error) {
         throw result.error;
+      }
+
+      const finalized = await signIn.finalize();
+      if (finalized.error) {
+        throw finalized.error;
       }
 
       analytics.userSignedIn({ method: 'email' });
@@ -132,25 +167,10 @@ export default function HomeScreen() {
   }
 
   async function handleGoogleSignIn() {
-    if (isExpoGo) {
-      setErrorMessage(
-        'Google OAuth is not supported in Expo Go. Use a development build on your Android device for that path.',
-      );
-      return;
-    }
-
     await runAuthAction(async () => {
-      const result = await authClient.signIn.social({
-        provider: 'google',
-        callbackURL: '/',
-      });
-
-      if (result.error) {
-        throw result.error;
-      }
+      await startSSOFlow({ strategy: 'oauth_google' });
 
       analytics.userSignedIn({ method: 'google' });
-      setFeedback('Google sign-in started in the system browser.');
     });
   }
 
@@ -200,15 +220,23 @@ export default function HomeScreen() {
               email={email}
               errorMessage={errorMessage}
               feedback={feedback}
-              isExpoGo={isExpoGo}
+              isAwaitingVerification={isAwaitingVerification}
               isWorking={isWorking}
               mode={mode}
               onChangeEmail={setEmail}
-              onChangeMode={setMode}
+              onChangeMode={nextMode => {
+                setMode(nextMode);
+                setIsAwaitingVerification(false);
+                setVerificationCode('');
+                void signUp.reset();
+                void signIn.reset();
+              }}
               onChangePassword={setPassword}
+              onChangeVerificationCode={setVerificationCode}
               onGoogleSignIn={handleGoogleSignIn}
-              onSubmit={mode === 'sign-up' ? handleSignUp : handleSignIn}
+              onSubmit={isAwaitingVerification ? handleVerifyEmail : mode === 'sign-up' ? handleSignUp : handleSignIn}
               password={password}
+              verificationCode={verificationCode}
             />
           </ScrollView>
         </KeyboardAvoidingView>

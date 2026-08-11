@@ -5,12 +5,13 @@ import {
   Outfit_900Black,
   useFonts,
 } from '@expo-google-fonts/outfit';
-import { ConvexBetterAuthProvider } from '@convex-dev/better-auth/react';
+import { ClerkProvider, useAuth } from '@clerk/expo';
+import { tokenCache } from '@clerk/expo/token-cache';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { ConvexProvider } from 'convex/react';
+import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { useMutation, useQuery } from 'convex/react';
 import { useEffect, useRef } from 'react';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Platform, StatusBar, StyleSheet, View } from 'react-native';
@@ -18,7 +19,6 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { PostHogErrorBoundary, PostHogProvider } from 'posthog-react-native';
 import { posthog } from '@/lib/posthog';
 import { analytics } from '@/lib/analytics';
-import { authClient } from '@/lib/auth-client';
 import {
   getStartupResult,
   getStartupViewerState,
@@ -33,6 +33,7 @@ import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { ReedThemeProvider, useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+import { appEnv } from '@/lib/env';
 import { convex, missingPublicEnv } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { requestAppCapabilityPermissionsAsync } from '@/lib/app-permissions';
@@ -195,22 +196,24 @@ function RootApp() {
   const convexClient = convex;
 
   return (
-    <ConvexProvider client={convexClient}>
-      <ConvexBetterAuthProvider client={convexClient} authClient={authClient}>
+    <ClerkProvider publishableKey={appEnv.clerkPublishableKey} tokenCache={tokenCache}>
+      <ConvexProviderWithClerk client={convexClient} useAuth={useAuth}>
         <RootNavigator />
-      </ConvexBetterAuthProvider>
-    </ConvexProvider>
+      </ConvexProviderWithClerk>
+    </ClerkProvider>
   );
 }
 
 function RootNavigator() {
   const { theme } = useReedTheme();
-  const { data: session, isPending } = authClient.useSession();
+  const { isLoaded: isClerkLoaded, isSignedIn } = useAuth();
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const session = isSignedIn && isAuthenticated;
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
   const disableNotificationDevice = useMutation(api.notificationDevices.disableCurrentDevice);
   const registerNotificationDevice = useMutation(api.notificationDevices.registerDevice);
   const isAppReady = Boolean(session && viewer?.onboardingCompletedAt);
-  const isRoutingPending = isPending || Boolean(session && viewer === undefined);
+  const isRoutingPending = !isClerkLoaded || isConvexAuthLoading || Boolean(session && viewer === undefined);
   const hasMarkedAuthReady = useRef(false);
   const hasMarkedViewerReady = useRef(false);
 
@@ -224,13 +227,13 @@ function RootNavigator() {
   }, [isRoutingPending, session, viewer]);
 
   useEffect(() => {
-    if (isPending || hasMarkedAuthReady.current) {
+    if (!isClerkLoaded || isConvexAuthLoading || hasMarkedAuthReady.current) {
       return;
     }
 
     hasMarkedAuthReady.current = true;
     markStartupAuthReady(session);
-  }, [isPending, session]);
+  }, [isClerkLoaded, isConvexAuthLoading, session]);
 
   useEffect(() => {
     if (!session || viewer === undefined || hasMarkedViewerReady.current) {

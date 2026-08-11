@@ -46,6 +46,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     favicon: './assets/images/favicon.png',
   },
   plugins: [
+    '@clerk/expo',
     'expo-router',
     'expo-font',
     [

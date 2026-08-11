@@ -16,30 +16,34 @@ type AuthEntryProps = {
   email: string;
   errorMessage: string | null;
   feedback: string | null;
-  isExpoGo: boolean;
+  isAwaitingVerification: boolean;
   isWorking: boolean;
   mode: AuthMode;
   onChangeEmail: (value: string) => void;
   onChangeMode: (mode: AuthMode) => void;
   onChangePassword: (value: string) => void;
+  onChangeVerificationCode: (value: string) => void;
   onGoogleSignIn: () => void;
   onSubmit: () => void;
   password: string;
+  verificationCode: string;
 };
 
 export function AuthEntry({
   email,
   errorMessage,
   feedback,
-  isExpoGo,
+  isAwaitingVerification,
   isWorking,
   mode,
   onChangeEmail,
   onChangeMode,
   onChangePassword,
+  onChangeVerificationCode,
   onGoogleSignIn,
   onSubmit,
   password,
+  verificationCode,
 }: AuthEntryProps) {
   const { theme } = useReedTheme();
 
@@ -52,52 +56,70 @@ export function AuthEntry({
       </View>
 
       <GlassSurface>
-        <SegmentedControl<AuthMode>
-          onChange={onChangeMode}
-          options={AUTH_OPTIONS as unknown as { label: string; value: AuthMode }[]}
-          value={mode}
-        />
+        {isAwaitingVerification ? (
+          <ReedInput
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="number-pad"
+            label="Verification code"
+            onChangeText={onChangeVerificationCode}
+            placeholder="Enter the code from your email"
+            value={verificationCode}
+          />
+        ) : (
+          <>
+            <SegmentedControl<AuthMode>
+              onChange={onChangeMode}
+              options={AUTH_OPTIONS as unknown as { label: string; value: AuthMode }[]}
+              value={mode}
+            />
 
-        <ReedInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          label="Email"
-          onChangeText={onChangeEmail}
-          placeholder="name@example.com"
-          value={email}
-        />
+            <ReedInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              label="Email"
+              onChangeText={onChangeEmail}
+              placeholder="name@example.com"
+              value={email}
+            />
 
-        <ReedInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          label="Password"
-          onChangeText={onChangePassword}
-          placeholder="At least 8 characters"
-          secureTextEntry
-          value={password}
-        />
+            <ReedInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              label="Password"
+              onChangeText={onChangePassword}
+              placeholder="At least 15 characters"
+              secureTextEntry
+              value={password}
+            />
+          </>
+        )}
+
+        {mode === 'sign-up' ? <View nativeID="clerk-captcha" /> : null}
 
         <FeedbackBlock errorMessage={errorMessage} feedback={feedback} />
 
         <ReedButton
           disabled={isWorking}
-          label={isWorking ? 'Working...' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
+          label={isWorking ? 'Working...' : isAwaitingVerification ? 'Verify email' : mode === 'sign-up' ? 'Create account' : 'Sign in'}
           onPress={onSubmit}
         />
-        <ReedButton
-          disabled={isWorking || isExpoGo}
-          label={isExpoGo ? 'Google needs a dev build' : 'Continue with Google'}
-          onPress={onGoogleSignIn}
-          variant="secondary"
-        />
+        {!isAwaitingVerification ? (
+          <ReedButton
+            disabled={isWorking}
+            label="Continue with Google"
+            onPress={onGoogleSignIn}
+            variant="secondary"
+          />
+        ) : null}
       </GlassSurface>
 
       <ReedText
         style={[styles.authFootnote, { color: theme.colors.textMuted }]}
         variant="caption"
       >
-        Google stays for development builds. Email and password remain the fast path in Expo Go.
+        One Reed account works across mobile and web.
       </ReedText>
     </View>
   );

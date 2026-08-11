@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useClerk, useUser } from '@clerk/expo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
@@ -6,10 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
-import { authClient } from '@/lib/auth-client';
 import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
-import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -27,7 +26,8 @@ type SettingsSurfaceProps = {
 };
 
 export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurfaceProps) {
-  const { data: session } = authClient.useSession();
+  const { signOut } = useClerk();
+  const { user } = useUser();
   const { preference, setPreference, theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const glassControls = getGlassControlTokens(theme);
@@ -40,6 +40,7 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
   const registerNotificationDevice = useMutation(api.notificationDevices.registerDevice);
   const updateNotificationPreferences = useMutation(api.notificationPreferences.updatePreferences);
   const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
+  const deleteViewerData = useMutation(api.profiles.deleteViewerData);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const editDraft = useMemo(() => {
     if (onboardingEditorData) {
@@ -49,14 +50,13 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
     if (onboardingEditorData === null) {
       return {
         ...EMPTY_DRAFT,
-        displayName: viewerProfile?.displayName ?? session?.user.name ?? '',
+        displayName: viewerProfile?.displayName ?? user?.fullName ?? '',
         profilingConsent: true,
       };
     }
 
     return null;
-  }, [onboardingEditorData, session?.user.name, viewerProfile?.displayName]);
-  const [deletePassword, setDeletePassword] = useState('');
+  }, [onboardingEditorData, user?.fullName, viewerProfile?.displayName]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isWorking, setIsWorking] = useState(false);
 
@@ -75,11 +75,7 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
 
   async function handleSignOut() {
     await runAction(async () => {
-      const result = await authClient.signOut();
-
-      if (result.error) {
-        throw result.error;
-      }
+      await signOut();
 
       analytics.accountSignedOut();
       analytics.reset();
@@ -105,13 +101,13 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
 
   async function handleDeleteAccount() {
     await runAction(async () => {
-      const result = await authClient.deleteUser({
-        password: deletePassword.trim() || undefined,
-      });
-
-      if (result.error) {
-        throw result.error;
+      if (!user) {
+        throw new Error('Your account is still loading.');
       }
+
+      await deleteViewerData({});
+      await user.delete();
+      analytics.reset();
     });
   }
 
@@ -314,7 +310,7 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
           <ReedText tone="muted" variant="caption">
             Signed in as
           </ReedText>
-          <ReedText variant="bodyStrong">{session?.user.email ?? 'Signed in'}</ReedText>
+          <ReedText variant="bodyStrong">{user?.primaryEmailAddress?.emailAddress ?? 'Signed in'}</ReedText>
         </View>
         <FeedbackBlock errorMessage={errorMessage} />
         <ReedButton disabled={isWorking} label="Sign out" onPress={handleSignOut} />
@@ -328,18 +324,8 @@ export function SettingsSurface({ onBack, onEditingProfileChange }: SettingsSurf
           </ReedText>
         </View>
         <ReedText tone="muted">
-          Email/password accounts should provide the current password. Social accounts may need a
-          fresh sign-in before deletion works.
+          Clerk may ask you to verify again before permanently deleting this account.
         </ReedText>
-        <ReedInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          label="Current password"
-          onChangeText={setDeletePassword}
-          placeholder="Required for email/password accounts"
-          secureTextEntry
-          value={deletePassword}
-        />
         <ReedButton disabled={isWorking} label="Delete account" onPress={confirmDeleteAccount} variant="danger" />
       </GlassSurface>
     </ScrollView>

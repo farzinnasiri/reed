@@ -1,13 +1,13 @@
 import { internalMutation, mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
 import { ConvexError, v } from 'convex/values';
-import { authComponent } from './auth';
 import {
   completeOnboardingArgsFields,
   type CompleteOnboardingPayload,
 } from './profileValidators';
 import type { Id } from './_generated/dataModel';
 import type { QueryCtx, MutationCtx } from './_generated/server';
+import type { UserIdentity } from 'convex/server';
 
 const profileValidator = v.object({
   _creationTime: v.number(),
@@ -50,6 +50,27 @@ function profilePatchFromAuthUser(user: {
   };
 }
 
+function authUserFromIdentity(identity: UserIdentity) {
+  if (!identity.email) {
+    throw new ConvexError('Your Clerk account needs an email address before Reed can continue.');
+  }
+
+  return {
+    _id: identity.tokenIdentifier,
+    email: identity.email,
+    image: identity.pictureUrl,
+    name: identity.name,
+  };
+}
+
+async function requireAuthUser(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new ConvexError('Not authenticated.');
+  }
+  return authUserFromIdentity(identity);
+}
+
 function authSyncPatchForExistingProfile(
   profile: { avatarUrl?: string; displayName?: string; email: string; onboardingCompletedAt?: number },
   user: { email: string; image?: string | null; name?: string | null; _id: string },
@@ -70,9 +91,8 @@ function authSyncPatchForExistingProfile(
     patch.avatarUrl = nextAvatarUrl;
   }
 
-  // Display name becomes app-owned once onboarding has run. Better Auth often
-  // derives a default name from the email local-part on mobile sign-up; syncing
-  // that value on every boot would overwrite the user's chosen Reed name.
+  // Display name becomes app-owned once onboarding has run. The identity
+  // provider's default name must not overwrite the user's chosen Reed name.
   if (!profile.onboardingCompletedAt && !profile.displayName && user.name) {
     patch.displayName = user.name;
   }
@@ -85,26 +105,14 @@ function authSyncPatchForExistingProfile(
 }
 
 async function getProfileForAuthUser(ctx: QueryCtx | MutationCtx, authUser: { email: string; _id: string }) {
-  const byAuthUserId = await ctx.db
+  return await ctx.db
     .query('profiles')
     .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
     .unique();
-
-  if (byAuthUserId) {
-    return byAuthUserId;
-  }
-
-  // Native auth sessions can be recreated while the email remains the durable
-  // account identity. Fall back to email so we don't create a second profile
-  // with the auth provider's default email-local-part name.
-  return await ctx.db
-    .query('profiles')
-    .withIndex('by_email', q => q.eq('email', authUser.email))
-    .first();
 }
 
 export async function requireViewerProfile(ctx: QueryCtx | MutationCtx) {
-  const authUser = await authComponent.getAuthUser(ctx);
+  const authUser = await requireAuthUser(ctx);
   const profile = await getProfileForAuthUser(ctx, authUser);
 
   if (!profile) {
@@ -118,12 +126,13 @@ export const viewer = query({
   args: {},
   returns: v.union(v.null(), profileValidator),
   handler: async ctx => {
-    const authUser = await authComponent.safeGetAuthUser(ctx);
+    const identity = await ctx.auth.getUserIdentity();
 
-    if (!authUser) {
+    if (!identity) {
       return null;
     }
 
+    const authUser = authUserFromIdentity(identity);
     return await getProfileForAuthUser(ctx, authUser);
   },
 });
@@ -131,10 +140,11 @@ export const viewer = query({
 export const viewerTrainingProfile = query({
   args: {},
   handler: async ctx => {
-    const authUser = await authComponent.safeGetAuthUser(ctx);
-    if (!authUser) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
       return null;
     }
+    const authUser = authUserFromIdentity(identity);
     const profile = await ctx.db
       .query('profiles')
       .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
@@ -168,10 +178,11 @@ export const bodyWeightTrend = query({
     rangeDays: v.number(),
   },
   handler: async (ctx, args) => {
-    const authUser = await authComponent.safeGetAuthUser(ctx);
-    if (!authUser) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
       return [];
     }
+    const authUser = authUserFromIdentity(identity);
     const profile = await ctx.db
       .query('profiles')
       .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
@@ -265,11 +276,28 @@ export const upsertTodayBodyWeight = mutation({
   },
 });
 
+export const updateViewerBasics = mutation({
+  args: { displayName: v.string() },
+  returns: profileValidator,
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const displayName = args.displayName.trim();
+    if (displayName.length < 2 || displayName.length > 60) {
+      throw new ConvexError('Name must be between 2 and 60 characters.');
+    }
+
+    await ctx.db.patch(profile._id, { displayName, updatedAt: Date.now() });
+    const updated = await ctx.db.get(profile._id);
+    if (!updated) throw new ConvexError('Profile was not saved.');
+    return updated;
+  },
+});
+
 export const ensureViewerProfile = mutation({
   args: {},
   returns: profileValidator,
   handler: async ctx => {
-    const authUser = await authComponent.getAuthUser(ctx);
+    const authUser = await requireAuthUser(ctx);
     const existingProfile = await ctx.db
       .query('profiles')
       .withIndex('by_auth_user_id', q => q.eq('authUserId', authUser._id))
@@ -290,29 +318,6 @@ export const ensureViewerProfile = mutation({
         await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: updatedProfile._id });
       }
       return updatedProfile;
-    }
-
-    const existingEmailProfile = await ctx.db
-      .query('profiles')
-      .withIndex('by_email', q => q.eq('email', authUser.email))
-      .first();
-
-    if (existingEmailProfile) {
-      await ctx.db.patch(existingEmailProfile._id, {
-        ...authSyncPatchForExistingProfile(existingEmailProfile, authUser),
-        authUserId: authUser._id,
-        updatedAt: Date.now(),
-      });
-      const linkedProfile = await ctx.db.get(existingEmailProfile._id);
-
-      if (!linkedProfile) {
-        throw new ConvexError('Profile disappeared during account linking');
-      }
-
-      if (linkedProfile.onboardingCompletedAt) {
-        await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: linkedProfile._id });
-      }
-      return linkedProfile;
     }
 
     const patch = profilePatchFromAuthUser(authUser);
@@ -797,30 +802,44 @@ export const deleteByAuthUserId = internalMutation({
   args: { authUserId: v.string() },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const profile = await ctx.db
-      .query('profiles')
-      .withIndex('by_auth_user_id', q => q.eq('authUserId', args.authUserId))
-      .unique();
-
-    if (profile) {
-      const trainingProfile = await ctx.db
-        .query('trainingProfiles')
-        .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
-        .unique();
-
-      if (trainingProfile) {
-        await ctx.db.delete(trainingProfile._id);
-      }
-      await deleteAllBodyMeasurementsForProfile(ctx, profile._id);
-      await deleteAllStrengthAssessmentsForProfile(ctx, profile._id);
-      await deleteAllCardioAssessmentsForProfile(ctx, profile._id);
-
-      await ctx.db.delete(profile._id);
-    }
-
+    await deleteProfileOwnedData(ctx, args.authUserId);
     return null;
   },
 });
+
+export const deleteViewerData = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    const authUser = await requireAuthUser(ctx);
+    await deleteProfileOwnedData(ctx, authUser._id);
+    return null;
+  },
+});
+
+async function deleteProfileOwnedData(ctx: MutationCtx, authUserId: string) {
+  const profile = await ctx.db
+    .query('profiles')
+    .withIndex('by_auth_user_id', q => q.eq('authUserId', authUserId))
+    .unique();
+
+  if (!profile) {
+    return;
+  }
+
+  const trainingProfile = await ctx.db
+    .query('trainingProfiles')
+    .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
+    .unique();
+
+  if (trainingProfile) {
+    await ctx.db.delete(trainingProfile._id);
+  }
+  await deleteAllBodyMeasurementsForProfile(ctx, profile._id);
+  await deleteAllStrengthAssessmentsForProfile(ctx, profile._id);
+  await deleteAllCardioAssessmentsForProfile(ctx, profile._id);
+  await ctx.db.delete(profile._id);
+}
 
 const DELETE_BATCH_SIZE = 128;
 
