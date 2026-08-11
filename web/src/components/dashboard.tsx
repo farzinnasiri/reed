@@ -9,13 +9,16 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DASHBOARD_WINDOW_END = Date.now() + 1;
 const DASHBOARD_WINDOW = { windowEndAt: DASHBOARD_WINDOW_END, windowStartAt: DASHBOARD_WINDOW_END - 28 * DAY_MS };
 
+type DashboardGoal = { _id: string; title: string; status: string; progressSummary: { current: number; required: number; currentLabel: string }; endsAt: number };
+type DashboardSession = { sessionId: string; startedAt: number; exerciseCount: number; exercises: Array<{ exerciseName: string }> };
+
 export function Dashboard() {
   const viewer = useQuery(api.profiles.viewer, {});
   const insight = useQuery(api.profileInsight.getCurrent, {});
   const consistency = useQuery(api.trainingKnowledge.getConsistency, {});
   const progress = useQuery(api.trainingKnowledge.summarizeWindow, DASHBOARD_WINDOW);
-  const goals = useQuery(api.trainingTargets.list, { includeArchived: false });
-  const history = useQuery(api.workout.sessions.listEndedSummaries, { limit: 4 });
+  const goals = useQuery(api.trainingTargets.list, { includeArchived: false }) as DashboardGoal[] | undefined;
+  const history = useQuery(api.workout.sessions.listEndedSummaries, { limit: 4 }) as { summaries: DashboardSession[] } | undefined;
   const activeGoals = goals?.filter(goal => goal.status === 'active') ?? [];
 
   return (
@@ -60,6 +63,6 @@ export function Dashboard() {
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="metric"><strong>{value}</strong><span>{label}</span></div>; }
 function ConsistencyGrid({ weeks }: { weeks: Array<{ weekStartAt: number; days: Array<{ active: boolean; isFuture: boolean }> }> }) { return <div className="consistency-grid">{weeks.map(week => <div className="consistency-week" key={week.weekStartAt}>{week.days.map((day, index) => <i className={day.isFuture ? 'future' : day.active ? 'active' : ''} key={index} />)}</div>)}</div>; }
-function GoalPreview({ goal }: { goal: { _id: string; title: string; progressSummary: { current: number; required: number; currentLabel: string }; endsAt: number } }) { const ratio = goal.progressSummary.required > 0 ? Math.min(1, goal.progressSummary.current / goal.progressSummary.required) : 0; return <div className="goal-preview"><div><strong>{goal.title}</strong><span>Due {formatDate(goal.endsAt)}</span></div><div className="progress-track"><i style={{ width: `${ratio * 100}%` }} /></div><small>{goal.progressSummary.currentLabel}</small></div>; }
-function SessionPreview({ session }: { session: { sessionId: string; startedAt: number; exerciseCount: number; exercises: Array<{ exerciseName: string }> } }) { return <div className="session-preview"><time>{formatDate(session.startedAt)}</time><strong>{session.exercises.slice(0, 3).map(item => item.exerciseName).join(', ') || 'Training session'}</strong><span>{session.exerciseCount} exercise{session.exerciseCount === 1 ? '' : 's'}</span></div>; }
+function GoalPreview({ goal }: { goal: DashboardGoal }) { const ratio = goal.progressSummary.required > 0 ? Math.min(1, goal.progressSummary.current / goal.progressSummary.required) : 0; return <div className="goal-preview"><div><strong>{goal.title}</strong><span>Due {formatDate(goal.endsAt)}</span></div><div className="progress-track"><i style={{ width: `${ratio * 100}%` }} /></div><small>{goal.progressSummary.currentLabel}</small></div>; }
+function SessionPreview({ session }: { session: DashboardSession }) { return <div className="session-preview"><time>{formatDate(session.startedAt)}</time><strong>{session.exercises.slice(0, 3).map(item => item.exerciseName).join(', ') || 'Training session'}</strong><span>{session.exerciseCount} exercise{session.exerciseCount === 1 ? '' : 's'}</span></div>; }
 function formatDate(value: number) { return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(value); }

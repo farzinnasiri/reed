@@ -4,8 +4,18 @@ import { useMutation, useQuery } from 'convex/react';
 import { useState, type FormEvent } from 'react';
 import { api } from '@/lib/api';
 
+type GoalProgress = { current: number; required: number; valueLabel?: string };
+type TrainingTarget = {
+  _id: string;
+  endsAt: number;
+  previewText: string;
+  progressSummary: GoalProgress & { currentLabel: string; overall?: GoalProgress };
+  status: string;
+  title: string;
+};
+
 export function Goals() {
-  const targets = useQuery(api.trainingTargets.list, { includeArchived: false });
+  const targets = useQuery(api.trainingTargets.list, { includeArchived: false }) as TrainingTarget[] | undefined;
   const create = useMutation(api.trainingTargets.create);
   const complete = useMutation(api.trainingTargets.completeManually);
   const archive = useMutation(api.trainingTargets.archive);
@@ -48,7 +58,7 @@ export function Goals() {
   </div>;
 }
 
-function GoalCard({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: NonNullable<ReturnType<typeof useQuery<typeof api.trainingTargets.list>>>[number] }) {
+function GoalCard({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: TrainingTarget }) {
   const progress = target.progressSummary.overall ?? target.progressSummary;
   const ratio = progress.required > 0 ? Math.min(1, progress.current / progress.required) : 0;
   return <article className="goal-card"><div className="goal-card-top"><div><strong>{target.title}</strong><span>{target.previewText}</span></div><span className={`status status-${target.status}`}>{target.status}</span></div><div className="progress-track"><i style={{ width: `${ratio * 100}%` }} /></div><div className="goal-card-meta"><span>{'valueLabel' in progress ? progress.valueLabel : target.progressSummary.currentLabel}</span><span>Due {new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' }).format(target.endsAt)}</span></div><div className="goal-actions">{onComplete ? <button className="text-button" onClick={onComplete}>Mark complete</button> : null}<button className="text-button text-button-muted" onClick={onArchive}>Archive</button></div></article>;

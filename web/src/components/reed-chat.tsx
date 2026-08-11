@@ -9,10 +9,12 @@ import { api } from '@/lib/api';
 import { LoopMark } from './loop-mark';
 
 type PendingImage = { file: File; previewUrl: string };
+type ChatMessage = { _id: string; role: 'assistant' | 'user'; content: string; status: 'failed' | 'pending' | 'sent'; createdAt: number; attachments: Array<{ _id: string; url: string }> };
+type QuickAction = { id: string; label: string; prompt: string };
 
 export function ReedChat() {
-  const result = useQuery(api.reed.listMessages, { limit: 120 });
-  const quickActions = useQuery(api.reed.listQuickActions, {});
+  const result = useQuery(api.reed.listMessages, { limit: 120 }) as { messages: ChatMessage[] } | undefined;
+  const quickActions = useQuery(api.reed.listQuickActions, {}) as QuickAction[] | undefined;
   const sendMessage = useMutation(api.reed.sendMessage);
   const generateUploadUrl = useMutation(api.reed.generateImageUploadUrl);
   const [draft, setDraft] = useState('');
@@ -87,7 +89,7 @@ export function ReedChat() {
   );
 }
 
-function Message({ message }: { message: { _id: string; role: 'assistant' | 'user'; content: string; status: 'failed' | 'pending' | 'sent'; createdAt: number; attachments: Array<{ _id: string; url: string }> } }) {
+function Message({ message }: { message: ChatMessage }) {
   return <article className={`message message-${message.role}`}><div className="message-meta">{message.role === 'assistant' ? 'Reed' : 'You'} · {new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(message.createdAt)}</div>{message.attachments.length ? <div className="message-images">{message.attachments.map(image => <img alt="Conversation attachment" key={image._id} src={image.url} />)}</div> : null}<p>{message.status === 'pending' && !message.content ? 'Thinking…' : message.content}</p></article>;
 }
 

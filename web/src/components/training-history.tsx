@@ -7,10 +7,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const HISTORY_WINDOW_END = Date.now() + 1;
 const HISTORY_WINDOW = { windowEndAt: HISTORY_WINDOW_END, windowStartAt: HISTORY_WINDOW_END - 90 * DAY_MS };
 
+type RecordHighlight = { exerciseName: string; label: string; displayValue: string };
+type TrainingExercise = { exerciseName: string; setCount: number; lastLoggedSummary?: string | null };
+type TrainingSession = { sessionId: string; startedAt: number; endedAt: number; exerciseCount: number; userNotes?: string | null; exercises: TrainingExercise[] };
+
 export function TrainingHistory() {
-  const history = useQuery(api.workout.sessions.listEndedSummaries, { limit: 12 });
+  const history = useQuery(api.workout.sessions.listEndedSummaries, { limit: 12 }) as { summaries: TrainingSession[] } | undefined;
   const summary = useQuery(api.trainingKnowledge.summarizeWindow, HISTORY_WINDOW);
-  const records = useQuery(api.trainingKnowledge.getRecordHighlights, { limit: 4 });
+  const records = useQuery(api.trainingKnowledge.getRecordHighlights, { limit: 4 }) as { totalRecords: number; highlights: RecordHighlight[] } | undefined;
 
   return (
     <div className="page-stack">
