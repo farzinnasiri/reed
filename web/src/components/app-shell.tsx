@@ -37,7 +37,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div><strong>{user?.fullName ?? 'Your account'}</strong><span>{user?.primaryEmailAddress?.emailAddress}</span></div>
         </div>
       </aside>
-      <main className="app-main"><ProfileGate>{children}</ProfileGate></main>
+      <main className={pathname === '/app/chat' ? 'app-main app-main-chat' : 'app-main'}><ProfileGate>{children}</ProfileGate></main>
     </div>
   );
 }
