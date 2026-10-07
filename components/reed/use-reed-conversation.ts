@@ -1,34 +1,15 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
+import { useConvexConnectionState, useMutation, useQuery } from 'convex/react';
+import * as haptics from '@/design/haptics';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { startClientWideEvent } from '@/lib/client-observability';
+import { isThinkingPrelude } from '@/domains/reed/message-semantics';
+import { useFiveMinuteNow } from '@/components/home/use-five-minute-now';
+import type { ReedMessageContext } from '@/convex/reedSessionContext';
 import type { ComposerSource, ReedMessage } from './reed.types';
 
-const INITIAL_MESSAGE_LIMIT = 20;
-const MESSAGE_PAGE_SIZE = 30;
-const RECENT_MESSAGES_STORAGE_KEY = 'reed.recentMessages.v1';
-const RECENT_MESSAGES_CACHE_LIMIT = INITIAL_MESSAGE_LIMIT;
-
-type ServerReedMessage = {
-  _id: string;
-  attachments?: Array<{
-    _id: string;
-    mediaType: 'image/jpeg';
-    sortOrder: number;
-    status: 'pending' | 'analyzed' | 'failed';
-    url: string;
-  }>;
-  clientNonce?: string;
-  completedAt?: number;
-  content: string;
-  createdAt: number;
-  error?: string;
-  role: 'assistant' | 'user';
-  source: 'background_coach' | 'quick-action' | 'typed' | 'voice' | 'system';
-  status: 'failed' | 'pending' | 'sent';
-};
+import { useReedHistory, type ServerReedMessage } from './use-reed-history';
 
 function getRenderMessageId(message: ServerReedMessage, lastUserNonce: string | null) {
   if (message.role === 'user' && message.clientNonce) return `optimistic-user-${message.clientNonce}`;
@@ -36,43 +17,27 @@ function getRenderMessageId(message: ServerReedMessage, lastUserNonce: string | 
   return message._id;
 }
 
-export function useReedConversation({
-  markOnline,
-}: {
-  displayName: string;
-  markOnline: () => void;
-  runtime: unknown;
-  shouldDelayAssistantStart: () => boolean;
-}) {
-  const messagesPage = usePaginatedQuery(
-    api.reed.listMessagesPaginated,
-    {},
-    { initialNumItems: INITIAL_MESSAGE_LIMIT },
-  );
-  const [cachedMessages, setCachedMessages] = useState<ServerReedMessage[] | null>(null);
-  const fetchedMessages = messagesPage.status === 'LoadingFirstPage'
-    ? undefined
-    : ([...messagesPage.results].reverse() as ServerReedMessage[]);
-  const fetchedMessagesCacheKey = fetchedMessages
-    ? fetchedMessages.map(message => `${message._id}:${message.status}:${message.completedAt ?? ''}`).join('|')
-    : '';
-  const effectiveFetchedMessages = fetchedMessages ?? cachedMessages ?? undefined;
-  const fetchedHasMore = messagesPage.status === 'CanLoadMore';
+export function useReedConversation() {
+  const globalSettings = useQuery(api.aiSettings.get, {});
+  const now = useFiveMinuteNow();
+  const presence = useQuery(api.reed.getPresence, { now });
+  const history = useReedHistory(presence);
+  const { fetchedMessages } = history;
+  const effectiveFetchedMessages = fetchedMessages;
   const sendReedMessage = useMutation(api.reed.sendMessage);
   const retryReedAssistantMessage = useMutation(api.reed.retryAssistantMessage);
   const [optimisticMessages, setOptimisticMessages] = useState<ReedMessage[]>([]);
   const [pendingSendNonce, setPendingSendNonce] = useState<string | null>(null);
-  const lastSeenAssistantMessageIdRef = useRef<string | null>(null);
-  const hasEstablishedAssistantBaselineRef = useRef(false);
+  const connection = useConvexConnectionState();
+  const pendingRef = useRef<string | null>(null);
+  const attempts = useRef(new Map<string, { text: string; source: ComposerSource; attachments: Array<{ storageId: Id<'_storage'> }>; createdAt: number; context?: ReedMessageContext }>());
 
-  const [revealedAgentThinkingIds, setRevealedAgentThinkingIds] = useState<Set<string>>(() => new Set());
-  const agentThinkingTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const persistedMessages = useMemo<ReedMessage[]>(() => {
     if (!effectiveFetchedMessages) return [];
 
     let lastUserNonce: string | null = null;
-    return effectiveFetchedMessages.map((message: ServerReedMessage) => {
+    return effectiveFetchedMessages.filter(message => !(isThinkingPrelude(message))).map((message: ServerReedMessage) => {
       if (message.role === 'user') {
         lastUserNonce = message.clientNonce ?? null;
       }
@@ -82,14 +47,13 @@ export function useReedConversation({
       }
 
       const rawSource = message.source;
-      const isAgentThinkingMessage =
-        rawSource === 'system' &&
-        message.role === 'assistant' &&
-        message.status === 'sent' &&
-        Boolean(message.content && message.content.trim().length > 0);
+      // Real replies are also stored as `system` (created pending, completed later). Only the prelude
+      // is inserted already sent, so it is the one whose completion time equals its creation time.
+      const isAgentThinkingMessage = isThinkingPrelude(message);
 
       return {
         createdAt: message.createdAt,
+        chapterId: message.chapterId,
         attachments: message.attachments?.map(attachment => ({
           id: attachment._id,
           mediaType: attachment.mediaType,
@@ -98,17 +62,23 @@ export function useReedConversation({
         })),
         id: renderId,
         isAgentThinkingMessage,
+        isCoachNote: rawSource === 'background_coach',
+        relatedSession: message.relatedSession ?? null,
+        replies: message.replies,
+        replyRecovery: message.replyRecovery,
         role: message.role,
+        reaction: message.reaction,
         serverId: message._id,
         source: rawSource === 'system' || rawSource === 'background_coach' ? 'typed' : (rawSource as ComposerSource),
         status: message.status,
         text: message.content || (message.status === 'pending' ? '' : message.error ?? ''),
+        widget: message.widget,
       };
     });
   }, [effectiveFetchedMessages]);
 
   const messages = useMemo(() => {
-    if (messagesPage.status === 'LoadingFirstPage' && !cachedMessages) return optimisticMessages;
+    if (history.isLoadingInitialMessages) return optimisticMessages;
     if (!effectiveFetchedMessages) return persistedMessages;
 
     const visibleOptimistic = optimisticMessages.filter(message => {
@@ -123,238 +93,91 @@ export function useReedConversation({
     });
 
     return persistedMessages.concat(visibleOptimistic).sort((left, right) => left.createdAt - right.createdAt);
-  }, [cachedMessages, effectiveFetchedMessages, messagesPage.status, optimisticMessages, persistedMessages]);
+  }, [effectiveFetchedMessages, history.isLoadingInitialMessages, optimisticMessages, persistedMessages]);
 
   const pendingRunId = useMemo(() => {
     const pending = messages.find(message => message.role === 'assistant' && message.status === 'pending');
-    return pending?.id ?? pendingSendNonce;
-  }, [messages, pendingSendNonce]);
+    const acknowledged = pendingSendNonce && fetchedMessages?.some(row => row.clientNonce === pendingSendNonce);
+    return pending?.id ?? (acknowledged ? null : pendingSendNonce);
+  }, [fetchedMessages, messages, pendingSendNonce]);
+  useEffect(() => { pendingRef.current = pendingRunId; }, [pendingRunId]);
 
-  const AGENT_THINKING_PRELUDE_DELAY_MS = 820;
+  const [previousFetchedMessages, setPreviousFetchedMessages] = useState(fetchedMessages);
+  if (previousFetchedMessages !== fetchedMessages) {
+    setPreviousFetchedMessages(fetchedMessages);
+    const acknowledged = new Set(fetchedMessages?.flatMap(row => row.clientNonce ? [row.clientNonce] : []) ?? []);
+    if (pendingSendNonce && acknowledged.has(pendingSendNonce)) setPendingSendNonce(null);
+    const remaining = optimisticMessages.filter(row => !acknowledged.has(row.id.replace(/^optimistic-(user|assistant)-/, '')));
+    if (remaining.length !== optimisticMessages.length) setOptimisticMessages(remaining);
+  }
 
-  const visibleMessages = useMemo(() => {
-    const result: ReedMessage[] = [];
-    for (let i = 0; i < messages.length; i += 1) {
-      const m = messages[i];
-      const isPrelude = Boolean(m.isAgentThinkingMessage);
-      const revealed = isPrelude && revealedAgentThinkingIds.has(m.id);
-
-      if (isPrelude && !revealed) {
-        // Display as thinking bubble using the usual pending UI
-        result.push({ ...m, status: 'pending' as const, text: '' });
-        // Suppress the immediately following real pending assistant to avoid stacked thinking bubbles
-        if (i + 1 < messages.length) {
-          const next = messages[i + 1];
-          if (next.role === 'assistant' && next.status === 'pending') {
-            i += 1;
-          }
-        }
-        continue;
-      }
-      result.push(m);
-    }
-    return result;
-  }, [messages, revealedAgentThinkingIds]);
-
-  // Schedule a brief "thinking" delay before revealing agent prelude templates (e.g. "on it.", "give me a sec.").
-  // Purely UX layer: backend still sends immediately. We show the standard typing bubble first,
-  // then the phrase, then the agentic work continues (its own pending bubble).
-  useEffect(() => {
-    const nowTs = Date.now();
-
-    messages.forEach((m) => {
-      if (!m.isAgentThinkingMessage) return;
-      if (revealedAgentThinkingIds.has(m.id)) return;
-
-      const age = nowTs - (m.createdAt ?? nowTs);
-      const isRecent = age < 15000;
-
-      if (!isRecent) {
-        // Loaded from history: reveal immediately, avoid stuck dots on old messages.
-        setRevealedAgentThinkingIds((prev) => {
-          if (prev.has(m.id)) return prev;
-          const next = new Set(prev);
-          next.add(m.id);
-          return next;
-        });
-        return;
-      }
-
-      if (agentThinkingTimersRef.current[m.id]) return;
-
-      const timer = setTimeout(() => {
-        setRevealedAgentThinkingIds((prev) => {
-          const next = new Set(prev);
-          next.add(m.id);
-          return next;
-        });
-        delete agentThinkingTimersRef.current[m.id];
-      }, AGENT_THINKING_PRELUDE_DELAY_MS);
-
-      agentThinkingTimersRef.current[m.id] = timer;
+  const submitAttempt = useCallback((nonce: string) => {
+    const attempt = attempts.current.get(nonce);
+    if (!attempt) return;
+    pendingRef.current = nonce;
+    setPendingSendNonce(nonce);
+    setOptimisticMessages(current => current.filter(message => message.id !== `optimistic-assistant-${nonce}`).map(message => message.id === `optimistic-user-${nonce}` ? { ...message, status: 'pending' as const } : message).concat({
+      createdAt: attempt.createdAt + 1, id: `optimistic-assistant-${nonce}`, role: 'assistant', source: 'typed', status: 'pending', text: '',
+    }));
+    const event = startClientWideEvent('reed.message_send', {
+      'attachment.count': attempt.attachments.length, 'message.has_attachments': attempt.attachments.length > 0,
+      'message.has_text': attempt.text.length > 0, 'message.source': attempt.source, 'screen.name': 'reed', 'send.step': 'convex_mutation',
     });
-
-    // Prune timers belonging to messages no longer present
-    const liveIds = new Set(messages.map((m) => m.id));
-    Object.keys(agentThinkingTimersRef.current).forEach((id) => {
-      if (!liveIds.has(id)) {
-        clearTimeout(agentThinkingTimersRef.current[id]);
-        delete agentThinkingTimersRef.current[id];
-      }
+    void sendReedMessage({
+      clientNonce: nonce, clientNow: Date.now(), clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      content: attempt.text, attachments: attempt.attachments, source: attempt.source, ...(attempt.context ? { context: attempt.context } : {}),
+    }).then(() => {
+      event.end({ 'send.step': 'saved' });
+      attempts.current.delete(nonce);
+    }).catch(error => {
+      event.fail(error, 'reed-message-send-convex-mutation-failed', { 'send.step': 'failed' });
+      if (pendingRef.current === nonce) pendingRef.current = null;
+      setPendingSendNonce(current => current === nonce ? null : current);
+      setOptimisticMessages(current => current.filter(message => message.id !== `optimistic-assistant-${nonce}`).map(message => message.id === `optimistic-user-${nonce}` ? { ...message, status: 'failed' as const } : message));
+      haptics.warning();
     });
-  }, [messages, revealedAgentThinkingIds]);
+  }, [sendReedMessage]);
 
-  // Cleanup any pending reveal timers on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(agentThinkingTimersRef.current).forEach((t) => clearTimeout(t));
-      agentThinkingTimersRef.current = {};
-    };
-  }, []);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    void AsyncStorage.getItem(RECENT_MESSAGES_STORAGE_KEY)
-      .then(value => {
-        if (!isMounted || !value) return;
-        const parsed = JSON.parse(value) as ServerReedMessage[];
-        if (Array.isArray(parsed)) {
-          setCachedMessages(parsed);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!fetchedMessages || fetchedMessages.length === 0) return;
-    const recent = fetchedMessages.slice(-RECENT_MESSAGES_CACHE_LIMIT);
-    setCachedMessages(current => {
-      if (
-        current?.length === recent.length &&
-        current.every((message, index) =>
-          message._id === recent[index]?._id &&
-          message.status === recent[index]?.status &&
-          message.completedAt === recent[index]?.completedAt &&
-          message.content === recent[index]?.content
-        )
-      ) {
-        return current;
-      }
-      return recent;
-    });
-    void AsyncStorage.setItem(RECENT_MESSAGES_STORAGE_KEY, JSON.stringify(recent));
-  }, [fetchedMessagesCacheKey]);
-
-  useEffect(() => {
-    const latest = messages.at(-1);
-    if (latest?.role !== 'assistant' || latest.status !== 'sent') return;
-    if (lastSeenAssistantMessageIdRef.current === latest.id) return;
-
-    lastSeenAssistantMessageIdRef.current = latest.id;
-
-    if (!hasEstablishedAssistantBaselineRef.current) {
-      hasEstablishedAssistantBaselineRef.current = true;
-      return;
-    }
-
-    markOnline();
-    setPendingSendNonce(current => (current === null ? current : null));
-    setOptimisticMessages(current => (current.length === 0 ? current : []));
-  }, [markOnline, messages]);
-
-  const hasMoreMessages = fetchedHasMore;
-  const loadOlderMessages = useCallback(() => {
-    if (messagesPage.status !== 'CanLoadMore') return;
-    messagesPage.loadMore(MESSAGE_PAGE_SIZE);
-  }, [messagesPage]);
-
-  const sendPrompt = useCallback((prompt: string, source: ComposerSource, attachments: Array<{ storageId: Id<'_storage'> }> = []) => {
+  const sendPrompt = useCallback((prompt: string, source: ComposerSource, attachments: Array<{ storageId: Id<'_storage'> }> = [], context?: ReedMessageContext) => {
     const text = prompt.trim();
-    if ((!text && attachments.length === 0) || pendingRunId) return false;
-
+    if ((!text && attachments.length === 0) || pendingRef.current) return false;
     const now = Date.now();
     const nonce = `${now}-${Math.random().toString(36).slice(2)}`;
-    const event = startClientWideEvent('reed.message_send', {
-      'attachment.count': attachments.length,
-      'message.has_attachments': attachments.length > 0,
-      'message.has_text': text.length > 0,
-      'message.source': source,
-      'screen.name': 'reed',
-      'send.step': 'optimistic',
-    });
-    setPendingSendNonce(nonce);
-    const nextOptimisticMessages: ReedMessage[] = [
-      {
-        createdAt: now,
-        id: `optimistic-user-${nonce}`,
-        role: 'user',
-        source,
-        status: 'sent',
-        text: attachments.length > 0
-          ? `${text || 'Attached images'}\n${attachments.length} image${attachments.length === 1 ? '' : 's'}`
-          : text,
-      },
-    ];
-    nextOptimisticMessages.push({
-      createdAt: now + 1,
-      id: `optimistic-assistant-${nonce}`,
-      role: 'assistant',
-      source: 'typed',
-      status: 'pending',
-      text: '',
-    });
-    setOptimisticMessages(current => current.concat(nextOptimisticMessages));
-    markOnline();
+    attempts.current.set(nonce, { text, source, attachments, createdAt: now, context });
+    setOptimisticMessages(current => current.concat({
+      createdAt: now, id: `optimistic-user-${nonce}`, role: 'user', source, status: 'pending',
+      text: text || `Attached ${attachments.length} image${attachments.length === 1 ? '' : 's'}`,
+    }));
+    submitAttempt(nonce);
+    return `optimistic-user-${nonce}`;
+  }, [submitAttempt]);
 
-    event.set({ 'send.step': 'convex_mutation' });
-    void sendReedMessage({
-      clientNonce: nonce,
-      clientNow: now,
-      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      content: text,
-      attachments,
-      source,
-    })
-      .then(() => {
-        event.end({ 'send.step': 'saved' });
-        markOnline();
-      })
-      .catch(error => {
-        event.fail(error, 'reed-message-send-convex-mutation-failed', { 'send.step': 'failed' });
-        setPendingSendNonce(current => (current === nonce ? null : current));
-        setOptimisticMessages(current => current.concat({
-          createdAt: Date.now(),
-          id: `error-${nonce}`,
-          role: 'assistant',
-          source: 'typed',
-          status: 'sent',
-          text: 'I could not send that. Check your connection and try again.',
-        }));
-      });
-
-    return true;
-  }, [markOnline, pendingRunId, sendReedMessage]);
+  const retryUserMessage = useCallback((message: ReedMessage) => {
+    if (message.role !== 'user' || message.status !== 'failed' || pendingRef.current) return;
+    submitAttempt(message.id.replace(/^optimistic-user-/, ''));
+  }, [submitAttempt]);
 
   const retryAssistantMessage = useCallback((message: ReedMessage) => {
     if (message.role !== 'assistant' || message.status !== 'failed' || !message.serverId || pendingRunId) return;
-    markOnline();
     void retryReedAssistantMessage({
       assistantMessageId: message.serverId as Id<'reedMessages'>,
       clientNow: Date.now(),
       clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    }).catch(() => {});
-  }, [markOnline, pendingRunId, retryReedAssistantMessage]);
+    }).catch(error => {
+      const operation = startClientWideEvent('reed.retry');
+      operation.fail(error, 'reed-assistant-retry-failed');
+      haptics.warning();
+    });
+  }, [pendingRunId, retryReedAssistantMessage]);
 
   return {
-    hasMoreMessages,
-    isLoadingInitialMessages: messagesPage.status === 'LoadingFirstPage',
-    loadOlderMessages,
-    messages: visibleMessages,
+    ...history,
+    globalSettings,
+    presence,
+    messages,
+    isOffline: !connection.isWebSocketConnected,
+    hasSendError: messages.at(-1)?.status === 'failed' || optimisticMessages.some(message => message.role === 'user' && message.status === 'failed'),
+    retryUserMessage,
     pendingRunId,
     sendPrompt,
     retryAssistantMessage,

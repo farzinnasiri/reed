@@ -4,6 +4,7 @@ import * as Application from 'expo-application';
 import * as SecureStore from 'expo-secure-store';
 import { router } from 'expo-router';
 import { Platform } from 'react-native';
+import { appPulseRoute, appYouRoute } from '@/components/home/app-routes';
 import { requestAppNotificationPermissionsAsync } from '@/lib/background-alerts';
 import { startClientWideEvent } from '@/lib/client-observability';
 
@@ -31,7 +32,6 @@ export type PushDeviceRegistrationStatus =
   | 'unavailable_web';
 
 let responseHandlerInstalled = false;
-let tokenListenerInstalled = false;
 
 export async function registerPushDeviceAsync({
   disableDevice,
@@ -59,7 +59,7 @@ export async function registerPushDeviceAsync({
     const permissionStatus = await requestAppNotificationPermissionsAsync();
     event.set({ 'push.permission.status': permissionStatus });
     if (permissionStatus !== 'granted') {
-      await disableDevice({ clientInstallId, reason: 'permission_denied' }).catch(() => null);
+      await disableDevice({ clientInstallId, reason: 'permission_denied' });
       event.end({ 'push.status': permissionStatus });
       return 'permission_denied';
     }
@@ -93,7 +93,6 @@ export async function registerPushDeviceAsync({
     });
 
     installNotificationResponseHandler();
-    installPushTokenRotationListener(registerDevice, clientInstallId);
     event.end({ 'push.status': 'registered' });
     return 'registered';
   } catch (error) {
@@ -102,7 +101,7 @@ export async function registerPushDeviceAsync({
   }
 }
 
-export async function disablePushDeviceAsync(disableDevice: DisableDevice) {
+export async function disablePushDeviceAsync(disableDevice: DisableDevice, reason: 'logout' | 'user_disabled') {
   const event = startClientWideEvent('push_device_disable', {
     'push.platform': Platform.OS,
   });
@@ -114,10 +113,11 @@ export async function disablePushDeviceAsync(disableDevice: DisableDevice) {
     }
 
     const clientInstallId = await getClientInstallIdAsync();
-    await disableDevice({ clientInstallId, reason: 'user_disabled' });
+    await disableDevice({ clientInstallId, reason });
     event.end({ 'push.status': 'disabled' });
   } catch (error) {
     event.fail(error, 'push_device_disable_failed');
+    throw new Error('Could not disable account notifications. Check your connection and try again.');
   }
 }
 
@@ -131,21 +131,6 @@ function installNotificationResponseHandler() {
     if (destination) {
       router.push(destination);
     }
-  });
-}
-
-function installPushTokenRotationListener(registerDevice: RegisterDevice, clientInstallId: string) {
-  if (tokenListenerInstalled) return;
-  tokenListenerInstalled = true;
-
-  Notifications.addPushTokenListener(token => {
-    if (Platform.OS !== 'android' && Platform.OS !== 'ios') return;
-    void registerDevice({
-      appVersion: Application.nativeApplicationVersion ?? Constants.expoConfig?.version,
-      clientInstallId,
-      expoPushToken: token.data,
-      platform: Platform.OS,
-    }).catch(() => null);
   });
 }
 
@@ -172,9 +157,10 @@ function getNotificationDestination(data: Notifications.NotificationContent['dat
   const screen = typeof data.screen === 'string' ? data.screen : null;
 
   if (screen === 'goals') return '/(app)/goals' as const;
-  if (screen === 'home') return '/(app)/(tabs)/home' as const;
-  if (screen === 'profile') return '/(app)/(tabs)/profile' as const;
-  if (screen === 'reed') return '/(app)/(tabs)/reed' as const;
+  // Home was folded into Reed; Progress is the Pulse and Profile is the You sheet. Old payloads still route sensibly.
+  if (screen === 'home' || screen === 'reed') return '/(app)/(tabs)/reed' as const;
+  if (screen === 'profile' || screen === 'you') return appYouRoute;
+  if (screen === 'progress') return appPulseRoute;
   if (screen === 'workout') return '/(app)/(tabs)/workout' as const;
 
   return null;

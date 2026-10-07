@@ -1,0 +1,24 @@
+{
+  "assetVersion": "3.0.0",
+  "project": "Blender Studio and community Human Base Meshes",
+  "release": "1.4.1",
+  "sourceUrl": "https://download.blender.org/demo/asset-bundles/human-base-meshes/human-base-meshes-bundle-v1.4.1.zip",
+  "sourceReleaseSha256": "811f43accbb31a88266d932f8f5563b2d13586fca0ba2693aad1f5fe582b3515",
+  "license": "CC0-1.0",
+  "licenseEvidence": "https://www.blender.org/download/demo-files/",
+  "bundleReadmeQuote": "All provided assets are public domain under the CC0 license.",
+  "usedObjects": [
+    "GEO-body_male_realistic",
+    "GEO-body_female_realistic"
+  ],
+  "preparation": "Multiresolution level 1; restrained continuous muscle relief, male chest profile refinement, smooth 28-degree forearm/hand pronation, toe separation, shared midpoint decimation to 28000 triangles, barycentric transfer of male/female variations, UDIM repacking to one atlas.",
+  "tool": "Blender 5.2.2 LTS",
+  "archivedBaseSha256": "5ca141bbf4cebdd1b5fee67c5408b72bb357212238c5b22cd75d707aa90c1eef",
+  "sourceArchiveSha256": "f30432bcd017878cef8217d18069ee715a0e8c0cda7dddd82cf1a94961943658",
+  "referenceOnly": [
+    {
+      "url": "https://www.blendkit.com/asset-gallery-detail/9a06aa97-fe13-42a3-87e4-00d11a310056/",
+      "use": "Visual inspiration only. No geometry, texture, or paid asset data incorporated."
+    }
+  ]
+}

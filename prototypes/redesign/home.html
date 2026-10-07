@@ -1,0 +1,593 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Home (Companion direction)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script src="kit.js"></script>
+<style>
+  .frames + .frames { margin-top: 90px }
+  .c {
+    --bg: #121110; --raise: #1c1a18; --raise-2: #26231f; --raise-3: #302c27; --shade: #1a1816;
+    --line: rgba(255, 240, 220, .07); --line-2: rgba(255, 240, 220, .14);
+    --ink: #f4efe8; --ink-2: #b8afa4; --ink-3: #938a7f;
+    --accent: #3d66f2; --accent-ink: #aec2ff; --accent-soft: rgba(61, 102, 242, .16); --warm: #e5a36f;
+    --sans: "Figtree", system-ui, sans-serif;
+    --spring: cubic-bezier(.32, .72, 0, 1);
+  }
+  .c .screen { background: var(--bg); color: var(--ink); font-family: var(--sans) }
+  .c .glow { position: absolute; left: 50%; top: -140px; width: 540px; height: 440px; margin-left: -270px; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(61, 102, 242, .18), rgba(61, 102, 242, .05) 55%, transparent) }
+  .c .status { z-index: 40 }
+
+  /* ---------- the stage: thread + dock, which recedes when a layer opens ---------- */
+  .c .stage { position: absolute; inset: 0; display: flex; flex-direction: column; padding-top: 118px; transition: transform .55s var(--spring), opacity .4s; transform-origin: 50% 30% }
+  .c .is-pulse .stage, .c .is-settings .stage { transform: scale(.955); opacity: .55 }
+  .c .scrim { position: absolute; inset: 0; background: rgba(6, 5, 4, .5); opacity: 0; pointer-events: none; transition: opacity .4s; z-index: 15 }
+  .c .is-pulse .scrim, .c .is-settings .scrim { opacity: 1; pointer-events: auto }
+
+  .c .thread { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 0 18px 14px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 46px); mask-image: linear-gradient(to bottom, transparent 0, #000 46px) }
+  .c .turn { display: flex; flex-direction: column; gap: 12px }
+  .c .hero { display: flex; flex-direction: column; align-items: center; padding-top: 4px }
+  .c .greet { font: 600 26px/1.2 var(--sans); letter-spacing: -.02em; text-align: center; text-wrap: balance; margin-top: 14px }
+  .c .voice { font: 400 16.5px/1.55 var(--sans); color: var(--ink-2); text-wrap: pretty }
+  .c .voice.center { text-align: center; padding: 0 10px }
+  .c .voice strong { color: var(--ink); font-weight: 500 }
+  .c .lead { display: flex; gap: 10px; align-items: flex-start }
+  .c .lead .voice { padding-top: 6px }
+  .c .you { align-self: flex-end; max-width: 80%; background: var(--raise-2); padding: 11px 15px; border-radius: 22px 22px 8px 22px; font-size: 15.5px; line-height: 1.45 }
+  .c .past { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px 0 8px; border-radius: 23px; background: var(--raise); font-size: 14.5px; color: var(--ink-2) }
+  .c .past .tag { width: 32px; height: 32px; border-radius: 16px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-3) }
+  .c .past .tag .ic { width: 16px; height: 16px }
+  .c .past .meta { margin-left: auto; color: var(--ink-3); font-size: 13.5px }
+  .c .past > .ic { width: 15px; height: 15px; color: var(--ink-3) }
+  .c .past.live { background: var(--accent-soft); color: var(--accent-ink) }
+  .c .past.live .tag { background: rgba(61, 102, 242, .22); color: var(--accent-ink) }
+
+  /* widgets Reed brings out */
+  .c .card { background: var(--raise); border-radius: 26px; padding: 16px 18px 18px }
+  .c .card-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap: 12px }
+  .c .card-hd b { font-size: 17.5px; font-weight: 600; letter-spacing: -.01em }
+  .c .card-hd span { font-size: 13px; color: var(--ink-3) }
+  .c .origin { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); margin-bottom: 8px }
+  .c .origin::before { content: ""; width: 6px; height: 6px; border-radius: 3px; background: var(--accent) }
+  .c .items { list-style: none }
+  .c .items li { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 15.5px }
+  .c .items .dot { width: 26px; height: 26px; border-radius: 13px; background: var(--raise-2); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--ink-3) }
+  .c .items .num { margin-left: auto; color: var(--ink-3); font-size: 14.5px }
+  .c .items.tight li { padding: 6px 0; font-size: 15px }
+  .c .cta { margin-top: 10px; width: 100%; height: 52px; border-radius: 26px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px }
+  .c .row-btns { display: flex; gap: 8px; margin-top: 12px }
+  .c .soft { height: 38px; padding: 0 15px; border-radius: 19px; background: var(--accent-soft); color: var(--accent-ink); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px }
+  .c .ghost { height: 38px; padding: 0 12px; color: var(--ink-3); font-size: 14px }
+  .c .chips { display: flex; gap: 8px; flex-wrap: wrap }
+  .c .chips.center { justify-content: center }
+  .c .chips button { height: 36px; padding: 0 15px; border-radius: 18px; background: var(--raise); font-size: 14px; color: var(--ink-2); transition: transform .1s }
+  .c .chips button:active, .c .qgrid button:active, .c .soft:active, .c .cta:active { transform: scale(.97) }
+  .c .bigstats { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; padding: 8px 0 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line) }
+  .c .bigstats b { display: block; font-size: 26px; font-weight: 600; letter-spacing: -.03em }
+  .c .bigstats span { font-size: 12.5px; color: var(--ink-3) }
+  .c .badge { font-size: 12px; font-weight: 700; color: var(--accent-ink); background: var(--accent-soft); padding: 3px 8px; border-radius: 10px; margin-right: 8px }
+
+  .c .weigh { display: flex; align-items: center; gap: 10px; margin-top: 6px }
+  .c .step { width: 44px; height: 44px; border-radius: 22px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2) }
+  .c .weigh .val { flex: 1; text-align: center; font-size: 36px; font-weight: 600; letter-spacing: -.03em }
+  .c .weigh .val small { font-size: 15px; font-weight: 500; color: var(--ink-3); margin-left: 4px; letter-spacing: 0 }
+  .c .qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px }
+  .c .qgrid button { height: 44px; border-radius: 16px; background: var(--raise-2); font-size: 14.5px; color: var(--ink); transition: transform .1s }
+  .c .qgrid button.more { background: transparent; box-shadow: inset 0 0 0 1px var(--line-2); color: var(--ink-3) }
+  .c .swapline { display: flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 6px 0 2px }
+  .c .swapline s { color: var(--ink-3) }
+  .c .swapline .ic { width: 17px; height: 17px; color: var(--ink-3) }
+
+  /* dock: session button + composer, always within thumb reach */
+  .c .dock { flex: none; display: flex; gap: 8px; padding: 6px 14px 30px; align-items: center }
+  .c .act { flex: none; width: 56px; height: 56px; border-radius: 28px; background: var(--accent); color: #fff; display: grid; place-items: center }
+  .c .act .ic { width: 24px; height: 24px }
+  .c .act.live { width: auto; padding: 0 18px 0 14px; display: flex; gap: 8px; font-size: 15px; font-weight: 600 }
+  .c .composer { flex: 1; height: 56px; border-radius: 28px; background: var(--raise); display: flex; align-items: center; gap: 10px; padding: 0 8px 0 16px; color: var(--ink-3); font-size: 16px }
+  .c .composer span { flex: 1 }
+  .c .composer .mic { width: 40px; height: 40px; border-radius: 20px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2) }
+  .c .live-dot { width: 8px; height: 8px; border-radius: 4px; background: #fff; animation: live 1.6s ease-in-out infinite }
+  @keyframes live { 50% { opacity: .35 } }
+
+  /* ---------- the pulse: a glanceable strip that grows into the stats ---------- */
+  .c .pulse { position: absolute; top: 58px; left: 14px; right: 68px; height: 52px; border-radius: 26px; background: var(--raise); z-index: 20; overflow: hidden; cursor: pointer;
+    transition: top .55s var(--spring), left .55s var(--spring), right .55s var(--spring), height .55s var(--spring), border-radius .55s var(--spring), background .3s }
+  .c .is-pulse .pulse { top: 52px; left: 8px; right: 8px; height: 748px; border-radius: 36px; background: var(--shade); cursor: default }
+  .c .pulse-mini { height: 52px; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px; transition: opacity .18s }
+  .c .is-pulse .pulse-mini { opacity: 0; pointer-events: none }
+  .c .pm { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; white-space: nowrap }
+  .c .pm small { font-size: 12.5px; font-weight: 500; color: var(--ink-3) }
+  .c .days { display: flex; gap: 3px }
+  .c .days i { width: 6px; height: 14px; border-radius: 3px; background: var(--raise-3) }
+  .c .days i.done { background: var(--accent) }
+  .c .days i.is-today { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent) }
+  .c .sep { width: 1px; height: 18px; background: var(--line-2) }
+  .c .pulse-mini > .ic { margin-left: auto; width: 16px; height: 16px; color: var(--ink-3) }
+  .c .pulse.live { background: var(--accent-soft); box-shadow: inset 0 0 0 1px rgba(61, 102, 242, .35) }
+  .c .pulse.live .pm { color: var(--accent-ink) }
+  .c .pulse.live .live-dot { background: var(--accent) }
+
+  .c .pulse-full { position: absolute; inset: 0; overflow-y: auto; scrollbar-width: none; padding: 18px 16px 28px; opacity: 0; transform: translateY(-14px); transition: opacity .2s, transform .45s var(--spring); pointer-events: none }
+  .c .is-pulse .pulse-full { opacity: 1; transform: none; transition-delay: .12s; pointer-events: auto }
+  .c .pf-head { display: flex; align-items: center; justify-content: space-between; padding: 0 4px 0 6px }
+  .c .pf-head b { display: block; font-size: 24px; font-weight: 600; letter-spacing: -.02em }
+  .c .pf-head span { font-size: 13.5px; color: var(--ink-3) }
+  .c .close { width: 40px; height: 40px; border-radius: 20px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2) }
+  .c .pf-reed { display: flex; gap: 10px; align-items: flex-start; padding: 16px 6px 18px }
+  .c .pf-reed p { font-size: 15.5px; line-height: 1.5; color: var(--ink-2); padding-top: 3px }
+  .c .pf-link { width: 100%; display: flex; align-items: center; gap: 12px; background: var(--raise); border-radius: 22px; padding: 12px 14px; margin-bottom: 10px; text-align: left }
+  .c .pf-link .tag { width: 36px; height: 36px; border-radius: 18px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2) }
+  .c .pf-link b { display: block; font-size: 15.5px; font-weight: 600 }
+  .c .pf-link small { font-size: 13px; color: var(--ink-3) }
+  .c .pf-link > .ic { margin-left: auto; width: 16px; height: 16px; color: var(--ink-3) }
+  .c .top-ex { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line) }
+  .c .top-ex .lbl { font-size: 12.5px; color: var(--ink-3); margin-bottom: 4px }
+  .c .top-ex div { display: flex; justify-content: space-between; font-size: 14.5px; padding: 5px 0 }
+  .c .top-ex div span { color: var(--ink-3) }
+  .c .pf-sec { background: var(--raise); border-radius: 26px; padding: 16px 16px 18px; margin-bottom: 10px }
+  .c .pf-sec h3 { font-size: 16.5px; font-weight: 600; display: flex; justify-content: space-between; align-items: baseline }
+  .c .pf-sec h3 span { font-size: 13px; font-weight: 500; color: var(--ink-3) }
+  .c .seg { display: flex; background: var(--bg); border-radius: 18px; padding: 4px; margin: 12px 0 14px }
+  .c .seg button { flex: 1; height: 32px; border-radius: 14px; font-size: 13.5px; color: var(--ink-3) }
+  .c .seg button.on { background: var(--raise-3); color: var(--ink); font-weight: 600 }
+  .c .stats3 { display: grid; grid-template-columns: repeat(3, 1fr) }
+  .c .stats3 b { display: block; font-size: 24px; font-weight: 600; letter-spacing: -.03em }
+  .c .stats3 span { font-size: 12.5px; color: var(--ink-3) }
+  .c .split { display: flex; align-items: center; gap: 18px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line) }
+  .c .legend { list-style: none; flex: 1 }
+  .c .legend li { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 14.5px }
+  .c .legend li i { width: 8px; height: 8px; border-radius: 4px }
+  .c .legend li span { margin-left: auto; color: var(--ink-3); font-size: 13.5px }
+  .c .weeks { display: flex; gap: 6px; margin-top: 14px; align-items: flex-end }
+  .c .wk { flex: 1; display: flex; flex-direction: column-reverse; gap: 3px }
+  .c .wk i { height: 9px; border-radius: 3px; background: var(--raise-3) }
+  .c .wk i.f { background: var(--accent) }
+  .c .wk.now i.f { background: var(--accent-ink) }
+  .c .wk-axis { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; color: var(--ink-3) }
+  .c .bw { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 10px }
+  .c .bw b { font-size: 34px; font-weight: 600; letter-spacing: -.03em }
+  .c .bw b small { font-size: 14px; color: var(--ink-3); font-weight: 500; margin-left: 3px; letter-spacing: 0 }
+  .c .bw-delta { font-size: 13.5px; color: var(--ink-2); text-align: right; line-height: 1.4 }
+  .c .goal { padding: 10px 0 2px }
+  .c .goal + .goal { border-top: 1px solid var(--line); margin-top: 8px }
+  .c .goal-top { display: flex; justify-content: space-between; font-size: 15px }
+  .c .goal-top span { color: var(--ink-3); font-size: 13.5px }
+  .c .bar { height: 6px; border-radius: 3px; background: var(--raise-3); margin-top: 9px; overflow: hidden }
+  .c .bar i { display: block; height: 100%; border-radius: 3px; background: var(--accent) }
+
+  /* ---------- you: settings + profile as one sheet ---------- */
+  .c .you-btn { position: absolute; top: 58px; right: 14px; width: 48px; height: 52px; border-radius: 26px; background: var(--raise); display: grid; place-items: center; z-index: 20; font-weight: 600; font-size: 15px; color: var(--ink-2); transition: opacity .3s }
+  .c .is-pulse .you-btn { opacity: 0; pointer-events: none }
+  .c .sheet { position: absolute; left: 0; right: 0; bottom: 0; padding-bottom: 40px !important; background: var(--shade); border-radius: 36px 36px 0 0; z-index: 30; transform: translateY(104%); transition: transform .55s var(--spring); padding: 10px 16px 0; overflow: hidden }
+  .c .is-settings .sheet { transform: none }
+  .c .is-settings .pulse, .c .is-settings .you-btn { opacity: .35; transition: opacity .4s }
+  .c .grab { width: 38px; height: 5px; border-radius: 3px; background: var(--raise-3); margin: 0 auto 16px }
+  .c .me { display: flex; align-items: center; gap: 14px; padding: 0 6px 18px }
+  .c .me .av { width: 56px; height: 56px; border-radius: 28px; background: var(--raise-2); display: grid; place-items: center; font-size: 22px; font-weight: 600 }
+  .c .me b { display: block; font-size: 22px; font-weight: 600; letter-spacing: -.02em }
+  .c .me span { font-size: 13.5px; color: var(--ink-3) }
+  .c .me .close { margin-left: auto }
+  .c .group { background: var(--raise); border-radius: 24px; padding: 4px 16px; margin-bottom: 10px }
+  .c .group-label { font-size: 13px; color: var(--ink-3); padding: 6px 8px 8px }
+  .c .srow { display: flex; align-items: center; gap: 12px; min-height: 52px; font-size: 15.5px }
+  .c .srow + .srow { border-top: 1px solid var(--line) }
+  .c .srow .v { margin-left: auto; color: var(--ink-3); font-size: 14.5px; text-align: right }
+  .c .srow > .ic { width: 15px; height: 15px; color: var(--ink-3) }
+  .c .srow.stack { flex-direction: column; align-items: flex-start; gap: 3px; padding: 12px 0 }
+  .c .srow.stack small { font-size: 13.5px; color: var(--ink-3); line-height: 1.4 }
+  .c .tog { margin-left: auto; width: 46px; height: 28px; border-radius: 14px; background: var(--accent); position: relative; flex: none }
+  .c .tog::after { content: ""; position: absolute; right: 3px; top: 3px; width: 22px; height: 22px; border-radius: 11px; background: #fff }
+  .c .units { margin-left: auto; display: flex; background: var(--bg); border-radius: 14px; padding: 3px }
+  .c .units button { height: 28px; padding: 0 12px; border-radius: 11px; font-size: 13.5px; color: var(--ink-3) }
+  .c .units button.on { background: var(--raise-3); color: var(--ink); font-weight: 600 }
+  .c .quiet { display: flex; justify-content: space-between; padding: 12px 10px; font-size: 14.5px }
+  .c .quiet .out { color: var(--ink-2) }
+  .c .quiet .del { color: #f0a3a3 }
+
+  /* ---------- two modes: today (hero) and chat (Reed in the corner) ---------- */
+  .c .today { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 0 18px 14px }
+  .c .mode-chat .today, .c .mode-today .thread, .c .mode-today .presence { display: none }
+  .c .thread.top { justify-content: flex-start; -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent); mask-image: linear-gradient(to bottom, #000 80%, transparent) }
+  .c .presence { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px 2px 8px; height: 104px }
+  .c .presence .chips { flex-wrap: nowrap; overflow: hidden }
+  .c .hint { font-size: 13.5px; color: var(--ink-3) }
+  .c .say { display: block; color: var(--ink); font-weight: 600; font-size: 19px; letter-spacing: -.01em; margin-bottom: 3px }
+  .c .enter { animation: enter .55s var(--spring) both }
+  @keyframes enter { from { opacity: 0; transform: translateY(12px) } }
+  .c .loading { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; color: var(--ink-3); padding: 2px 0 6px }
+  .c .spin { width: 14px; height: 14px; border-radius: 7px; border: 2px solid var(--raise-3); border-top-color: var(--ink-2); animation: spin .8s linear infinite }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .c .daydiv { text-align: center; font-size: 12.5px; color: var(--ink-3); padding: 6px 0 0 }
+  .c .jump { position: absolute; left: 50%; transform: translateX(-50%); bottom: 150px; height: 36px; padding: 0 14px 0 12px; border-radius: 18px; background: var(--raise-3); font-size: 13.5px; font-weight: 600; display: flex; align-items: center; gap: 6px; z-index: 5; box-shadow: 0 10px 30px rgba(0, 0, 0, .45) }
+  .c .jump .ic { width: 15px; height: 15px }
+  .c .flyer { position: absolute; z-index: 25; pointer-events: none; transform-origin: 0 0; transition: transform .75s var(--spring) }
+  .c .composer .typed { color: var(--ink) }
+  .frame-label button { margin-left: 12px; color: #aec2ff; letter-spacing: inherit; font: inherit; text-transform: inherit }
+
+</style>
+</head>
+<body>
+<section class="intro">
+  <div class="kicker">Reed · Home · Companion direction</div>
+  <h1>One screen: the Pulse, the thread, the dock</h1>
+  <p><b>The Pulse</b> (top) is a glanceable strip showing your week, bodyweight and your nearest goal. Tap it and it grows into today's Progress view. During a session it becomes a live activity. <b>The dock</b> (bottom) never changes: a session button and the composer.</p>
+  <p><b>The middle has two modes.</b> When you open the app you see <b>today</b>: Reed as the hero, the decision, and whatever it's bringing you (plan, weigh-in, quick log, summary). No old chats. The moment you talk, Reed <b>glides into the bottom-left corner</b> and the screen becomes one endless chat. Replies have no avatars; Reed is the presence in the corner, thinking or speaking. Scroll up and older conversations load in.</p>
+  <p><b>Frame 01 is live:</b> tap a chip or the composer to watch the transition. The other frames are interactive too: tap the Pulse, "F", the weight steppers.</p>
+</section>
+
+<div class="frames" id="row1"></div>
+<div class="frames" id="row2"></div>
+<div class="frames" id="row3"></div>
+
+
+<script>
+const icon = (name, stroke) => reedIcon(name, stroke);
+
+// week: one char per day Mon..Sun, d = trained, t = today, . = nothing yet
+function pulseMini({ week = 'd..t...', weight = '73.1', live = null }) {
+  if (live) {
+    return `<div class="pulse-mini">
+      <span class="pm"><span class="live-dot"></span>${live.title}</span><span class="pm num">${live.time}</span>
+      <span class="sep"></span><span class="pm"><small>${live.now}</small></span>${icon('chevron')}</div>`;
+  }
+  const days = [...week].map(c => `<i class="${{ d: 'done', t: 'is-today' }[c] || ''}"></i>`).join('');
+  const count = [...week].filter(c => c === 'd').length;
+  return `<div class="pulse-mini">
+    <span class="pm"><span class="days">${days}</span>${count}<small>of 3</small></span>
+    <span class="sep"></span><span class="pm num">${weight}<small>kg</small></span>
+    <span class="sep"></span><span class="pm"><svg width="18" height="18" viewBox="0 0 20 20"><circle cx="10" cy="10" r="7.5" fill="none" stroke="#302c27" stroke-width="3"/><circle cx="10" cy="10" r="7.5" fill="none" stroke="#3d66f2" stroke-width="3" stroke-dasharray="37.7 47.1" stroke-linecap="round" transform="rotate(-90 10 10)"/></svg>8<small>/10</small></span>
+    ${icon('chevron-down')}</div>`;
+}
+
+const weeksData = [1, 2, 3, 0, 1, 3, 1, 0, 3, 2, 2, 1];
+const weeks = weeksData.map((n, i) => `<div class="wk${i === 11 ? ' now' : ''}">${[0, 1, 2].map(k => `<i class="${k < n ? 'f' : ''}"></i>`).join('')}</div>`).join('');
+
+const pulseFull = `<div class="pulse-full">
+  <div class="pf-head"><div><b>This week</b><span>Sep 28 – Oct 4</span></div><button class="close" data-close>${icon('chevron-up')}</button></div>
+  <div class="pf-reed"><reed-mascot size="30" mood="speak"></reed-mascot><p>One session so far, and it was all legs. Two upper days would round the week out.</p></div>
+  <button class="pf-link"><span class="tag">${icon('barbell', 2)}</span><span><b>Sessions</b><small>History, summaries, records</small></span>${icon('chevron')}</button>
+  <section class="pf-sec">
+    <h3>Training <span>Week</span></h3>
+    <div class="seg"><button class="on">Week</button><button>30D</button><button>90D</button></div>
+    <div class="stats3"><div><b class="num">9</b><span>sets</span></div><div><b class="num">75</b><span>reps</span></div><div><b class="num">2,313</b><span>kg load</span></div></div>
+    <div class="split">
+      <svg width="84" height="84" viewBox="0 0 84 84"><circle cx="42" cy="42" r="34" fill="none" stroke="#302c27" stroke-width="10"/>
+        <circle cx="42" cy="42" r="34" fill="none" stroke="#3d66f2" stroke-width="10" stroke-dasharray="138 76" stroke-linecap="round" transform="rotate(-90 42 42)"/>
+        <circle cx="42" cy="42" r="34" fill="none" stroke="#e5a36f" stroke-width="10" stroke-dasharray="62 152" stroke-dashoffset="-146" stroke-linecap="round" transform="rotate(-90 42 42)"/>
+        <text x="42" y="47" text-anchor="middle" fill="#f4efe8" font-family="Figtree" font-weight="600" font-size="17">9</text></svg>
+      <ul class="legend"><li><i style="background:#3d66f2"></i>Legs<span>6 sets</span></li><li><i style="background:#e5a36f"></i>Back<span>3 sets</span></li><li><i style="background:#302c27"></i>Chest, arms<span>0</span></li></ul>
+    </div>
+    <div class="top-ex"><div class="lbl">Top exercises</div><div>Back extension<span>3 sets</span></div><div>Barbell back squat<span>3 sets</span></div><div>Standing calf raise<span>3 sets</span></div></div>
+  </section>
+  <section class="pf-sec">
+    <h3>Consistency <span>2 of last 8 weeks on target</span></h3>
+    <div class="weeks">${weeks}</div>
+    <div class="wk-axis"><span>12 weeks ago</span><span>This week</span></div>
+  </section>
+  <section class="pf-sec">
+    <h3>Bodyweight <span>Trend, not a verdict</span></h3>
+    <div class="bw"><b class="num">73.1<small>kg</small></b><div class="bw-delta">−0.3 since Sep 12<br><span style="color:var(--ink-3)">Last logged Sep 27</span></div></div>
+    <svg width="100%" height="56" viewBox="0 0 300 56" preserveAspectRatio="none" style="margin-top:10px;display:block"><polyline points="0,18 50,12 100,24 150,22 200,30 250,34 300,36" fill="none" stroke="#3d66f2" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"/><circle cx="296" cy="36" r="4" fill="#3d66f2"/></svg>
+    <div class="row-btns"><button class="soft">${icon('plus', 2)}Log weight</button></div>
+  </section>
+  <section class="pf-sec">
+    <h3>Goals <span>1 achieved this year</span></h3>
+    <div class="goal"><div class="goal-top">10 strict pull-ups<span>8 of 10</span></div><div class="bar"><i style="width:80%"></i></div></div>
+    <div class="goal"><div class="goal-top">Bench press 70 kg<span>62.5 kg</span></div><div class="bar"><i style="width:58%"></i></div></div>
+    <div class="goal"><div class="goal-top">5 km under 28 min<span>29:40</span></div><div class="bar"><i style="width:40%"></i></div></div>
+  </section>
+</div>`;
+
+const sheet = `<div class="sheet">
+  <div class="grab"></div>
+  <div class="me"><div class="av">F</div><div><b>Farzin</b><span>farzin@example.com</span></div><button class="close" data-close>${icon('close')}</button></div>
+  <div class="group-label">What Reed knows about you</div>
+  <div class="group">
+    <div class="srow">Body<span class="v">73.1 kg · 178 cm</span>${icon('chevron')}</div>
+    <div class="srow">Goals<span class="v">3 active</span>${icon('chevron')}</div>
+    <div class="srow stack" style="flex-direction:row;align-items:center"><div>Training setup<br><small>Intermediate · 3 sessions a week · watch lower back, neck, left knee</small></div>${icon('chevron')}</div>
+  </div>
+  <div class="group-label">Preferences</div>
+  <div class="group">
+    <div class="srow stack" style="flex-direction:row;align-items:center"><div>Coach updates<br><small>Reed can message you between sessions</small></div><span class="tog"></span></div>
+  </div>
+  <div class="quiet"><button class="out">Sign out</button><button class="del">Delete account</button></div>
+</div>`;
+
+const dock = (live) => `<footer class="dock">
+  ${live ? `<button class="act live"><span class="live-dot"></span>Resume</button>` : `<button class="act">${icon('barbell', 2)}</button>`}
+  <div class="composer">${icon('plus')}<span>Talk to Reed</span><button class="mic">${icon('mic')}</button></div>
+</footer>`;
+
+const planCard = (title, time, items, cta) => `<div class="card">
+  <div class="card-hd"><b>${title}</b><span>${time}</span></div>
+  <ul class="items">${items.map(([n, s], i) => `<li><span class="dot">${i + 1}</span>${n}<span class="num">${s}</span></li>`).join('')}</ul>
+  <button class="cta">${cta}${icon('arrow')}</button></div>`;
+const pastRow = (label, meta) => `<div class="past"><span class="tag">${icon('barbell', 2)}</span>${label}<span class="meta">${meta}</span>${icon('chevron')}</div>`;
+
+// What you see when you open the app: Reed as hero, no history.
+const today = {
+  morning: `
+    <div class="turn">
+      <div class="hero"><reed-mascot size="112"></reed-mascot><h2 class="greet">Upper body today.</h2></div>
+      <p class="voice center">Monday was all legs, so today evens it out. About <strong>45 minutes</strong>, rows first.</p>
+    </div>
+    ${planCard('Upper body', '~45 min', [['Seated cable row', '3 × 10'], ['Bench press', '3 × 8'], ['Lat pulldown', '3 × 10'], ['Pallof press', '2 × 12']], 'Start upper body')}
+    <div class="chips center"><button data-say="shorter">Make it shorter</button><button data-say="swap">Swap bench</button><button data-say="skip">Not today</button></div>`,
+
+  after: `
+    <div class="turn">
+      <div class="hero"><reed-mascot size="100" mood="happy"></reed-mascot><h2 class="greet">Bench is moving again.</h2></div>
+      <div class="card">
+        <div class="card-hd"><b>Upper body</b><span>Today · 47 min</span></div>
+        <div class="bigstats"><div><b class="num">11</b><span>sets</span></div><div><b class="num">108</b><span>reps</span></div><div><b class="num">4,970</b><span>kg moved</span></div></div>
+        <ul class="items tight">
+          <li>Seated cable row<span class="num">55 × 10</span></li>
+          <li>Bench press<span class="num"><span class="badge">+2.5 kg</span>62.5 × 8</span></li>
+          <li>Lat pulldown<span class="num">50 × 10</span></li>
+          <li>Pallof press<span class="num">15 × 12</span></li>
+        </ul>
+      </div>
+      <p class="voice">62.5 for all eight, and the last rep didn't look like a grind. <strong>How did your neck hold up?</strong></p>
+      <div class="chips"><button>Felt fine</button><button>A bit stiff</button><button>Sore</button></div>
+    </div>`,
+
+  rest: `
+    <div class="turn">
+      <div class="hero"><reed-mascot size="100"></reed-mascot><h2 class="greet">Rest day.</h2></div>
+      <p class="voice center">Your back will thank you for a walk or ten minutes of mobility today.</p>
+    </div>
+    <div class="card">
+      <div class="origin">Weigh-ins are best before breakfast</div>
+      <div class="card-hd"><b>Morning weigh-in</b><span>Last 73.1 · Sep 27</span></div>
+      <div class="weigh"><button class="step" data-step="-0.1">${icon('minus', 2)}</button><span class="val num" data-val="73.1">73.1<small>kg</small></span><button class="step" data-step="0.1">${icon('plus', 2)}</button><button class="soft" style="height:44px;border-radius:22px">Save</button></div>
+    </div>
+    <div class="card">
+      <div class="card-hd"><b>Moving anyway?</b><span>Logs straight to today</span></div>
+      <div class="qgrid"><button>Walk</button><button>Mobility</button><button>Stretching</button><button>Pull-ups</button><button>Cycle</button><button class="more">More</button></div>
+    </div>`,
+};
+
+// Once you talk: the morning becomes the start of the thread, and Reed answers without an avatar.
+const morningOpening = `
+  <p class="voice"><span class="say">Upper body today.</span>Monday was all legs, so today evens it out. About 45 minutes, rows first.</p>
+  ${pastRow('Plan · Upper body', '~45 min · 4 exercises')}`;
+
+const exchanges = {
+  shorter: {
+    you: 'Make it shorter, I only have 30 minutes.',
+    reply: `<p class="voice">Done. Three exercises, two sets each, and shorter rests. Rows still go first.</p>
+      ${planCard('Upper body', '~30 min', [['Seated cable row', '2 × 10'], ['Bench press', '2 × 8'], ['Lat pulldown', '2 × 10']], 'Start 30-minute version')}`,
+    chips: ['Start now', 'Keep 45 min'],
+  },
+  swap: {
+    you: 'Swap bench for something else.',
+    reply: `<p class="voice">Swapped for dumbbell bench press. Same pattern, and each arm moves on its own, which is kinder to your shoulders.</p>
+      ${planCard('Upper body', '~45 min', [['Seated cable row', '3 × 10'], ['DB bench press', '3 × 8'], ['Lat pulldown', '3 × 10'], ['Pallof press', '2 × 12']], 'Start upper body')}`,
+    chips: ['Start now', 'Why dumbbells?'],
+  },
+  skip: {
+    you: "Not today, I'm wiped.",
+    reply: `<p class="voice">Fair. Rest today and we'll move upper body to tomorrow. If you feel like it later, a 20-minute walk still helps your back.</p>`,
+    chips: ['Log a walk', 'Move it to Saturday'],
+  },
+};
+
+const chat = {
+  thinking: `${morningOpening}<div class="you">${exchanges.shorter.you}</div>`,
+  replied: `${morningOpening}<div class="you">${exchanges.shorter.you}</div>${exchanges.shorter.reply}`,
+  history: `
+    <div class="loading"><span class="spin"></span>Loading earlier</div>
+    <div class="daydiv">Sat, Sep 26</div>
+    <div class="you">Lower back is a bit tight after Friday. Should I skip Monday?</div>
+    <p class="voice">No need to skip. Keep squats, swap good mornings for back extensions, and stop a rep early if it starts talking back.</p>
+    <div class="daydiv">Mon, Sep 28</div>
+    ${pastRow('Mon · Lower body', '55 min · 9 sets')}
+    <p class="voice">Squats held at 80 for all three sets. How's the back?</p>
+    <div class="you">All good, no tightness.</div>
+    <p class="voice">Then we keep the plan. Upper body is next.</p>
+    <div class="daydiv">Today</div>
+    <p class="voice"><span class="say">Upper body today.</span>Monday was all legs, so today evens it out.</p>`,
+  live: `
+    ${pastRow('Plan · Upper body', 'started 18:02')}
+    <div class="you">Left shoulder feels pinchy on bench. Swap it?</div>
+    <p class="voice">Don't push through that. Finish with a <strong>dumbbell floor press</strong>: same effort, shorter range, easier on the shoulder.</p>
+    <div class="card">
+      <div class="origin">Changes your live session</div>
+      <div class="swapline"><s>Bench press</s>${icon('arrow')}<b style="font-weight:600">DB floor press</b></div>
+      <ul class="items tight"><li>Set 3<span class="num">2 × 24 kg · 8 reps</span></li></ul>
+      <div class="row-btns"><button class="soft">${icon('swap', 2)}Swap and go back</button><button class="ghost">Keep bench</button></div>
+    </div>
+    <p class="voice">I'll make a note of the shoulder and check in after.</p>`,
+};
+
+const chipRow = chips => `<div class="chips">${chips.map(c => `<button>${c}</button>`).join('')}</div>`;
+const presence = {
+  thinking: `<reed-mascot size="96" mood="thinking"></reed-mascot><span class="hint">Reed is thinking</span>`,
+  replied: `<reed-mascot size="96"></reed-mascot>${chipRow(exchanges.shorter.chips)}`,
+  watch: `<reed-mascot size="96" mood="watch"></reed-mascot>`,
+  speak: `<reed-mascot size="96" mood="speak"></reed-mascot>`,
+};
+
+const frames = [
+  { row: 'row1', label: '01 · Open the app · today', today: 'morning', pulse: {}, interactive: true, notes: [
+    'Opening the app shows <b>today, not history</b>. Reed is the hero: one decision, the plan, three replies.',
+    'The Pulse answers "how am I doing" without opening anything. The barbell button starts an empty session any time; the composer\'s + holds quick log.',
+    '<b>Tap a chip or the composer</b> to see the switch to chat.',
+  ] },
+  { row: 'row1', label: '02 · You talk · Reed moves to the corner', chat: 'thinking', presence: 'thinking', pulse: {}, notes: [
+    'The hero mascot <b>glides to the bottom-left corner</b> and stays there for the rest of the chat. It is Reed\'s presence, not an avatar.',
+    "This morning's greeting becomes the first line of the thread, and the plan card shrinks to a row.",
+    'While Reed works, the corner mascot shows its thinking face. That replaces typing bubbles.',
+  ] },
+  { row: 'row1', label: '03 · Reed replies · no avatars', chat: 'replied', presence: 'replied', pulse: {}, notes: [
+    'Replies are <b>plain text, full width</b>. You know it\'s Reed because you didn\'t write it, and Reed is right there in the corner.',
+    'Widgets still arrive inline, like the updated plan card here.',
+    'Follow-up chips sit <b>next to the mascot</b>, so the corner reads as "Reed is offering this".',
+  ] },
+  { row: 'row2', label: '04 · Scroll up · earlier chats load', chat: 'history', presence: 'watch', pulse: {}, top: true, jump: true, notes: [
+    'One endless chat. Scrolling up <b>loads older days in pages</b>, separated by quiet day labels.',
+    'Past sessions appear as rows in the conversation where they happened. Tap one to open the session sheet you already like.',
+    'A "Today" pill jumps back down. The mascot stays in the corner, watching.',
+  ] },
+  { row: 'row2', label: '05 · Pulse, expanded', today: 'morning', pulse: {}, state: 'is-pulse', notes: [
+    'The strip <b>grows into your current Progress view</b>: training split, top exercises, consistency, bodyweight, goals. Same data, one sheet, no page.',
+    'It opens with one line from Reed reading the numbers, then a <b>Sessions</b> row into the history page you already have.',
+    'Collapse it with the chevron or by tapping outside.',
+  ] },
+  { row: 'row2', label: '06 · You: settings + profile', today: 'morning', pulse: {}, state: 'is-settings', notes: [
+    'The "F" button opens <b>one sheet</b> that merges profile and settings. No nested pages.',
+    'Grouped as <b>"What Reed knows about you"</b> (the existing Body, Goals and Training setup sections and their editors) and preferences. No new settings.',
+    'Sign out and delete are quiet text at the bottom.',
+  ] },
+  { row: 'row3', label: '07 · During · asking Reed mid-session', chat: 'live', presence: 'speak', pulse: { live: { title: 'Upper', time: '23:14', now: 'Bench · set 3' } }, live: true, notes: [
+    'While a session runs, <b>the Pulse becomes the live activity</b> and the dock button becomes Resume.',
+    'Reed can change the live session from chat: the swap card writes into the session you return to.',
+    'The capture page and swipe card themselves are unchanged.',
+  ] },
+  { row: 'row3', label: '08 · After · Reed opens a new moment', today: 'after', pulse: { week: 'd..d...' }, notes: [
+    'Finishing a session counts as a <b>new "today" moment</b>: Reed comes back as the hero with the summary.',
+    'The Pulse has already updated to <b>2 of 3</b>.',
+    'Answer the question and you\'re back in chat mode, with Reed in the corner.',
+  ] },
+  { row: 'row3', label: '09 · Rest day · Reed brings the logs', today: 'rest', pulse: { week: 'd..dt..' }, notes: [
+    '<b>Proactive quick logs</b>: a weigh-in card and the activities Reed thinks fit today.',
+    'They appear because of context (rest day, morning, last weigh-in 5 days ago), not because you asked.',
+    'They disappear once done (you weighed in, you logged something). Dismissing hides a card for the rest of the day.',
+  ] },
+];
+
+function screenHtml(f) {
+  const mode = f.today ? 'mode-today' : 'mode-chat';
+  return `<div class="screen ${mode} ${f.state || ''}">
+    <div class="status"></div>
+    <div class="glow"></div>
+    <div class="stage">
+      <main class="today">${today[f.today] || ''}</main>
+      <main class="thread${f.top ? ' top' : ''}">${chat[f.chat] || ''}</main>
+      <div class="presence">${presence[f.presence] || ''}</div>
+      ${dock(f.live)}
+    </div>
+    ${f.jump ? `<button class="jump">${icon('chevron-down', 2)}Today</button>` : ''}
+    <div class="scrim"></div>
+    <div class="pulse${f.pulse.live ? ' live' : ''}">${pulseMini(f.pulse)}${f.pulse.live ? '' : pulseFull}</div>
+    <button class="you-btn">F</button>
+    ${sheet}
+  </div>`;
+}
+
+frames.forEach((f, i) => {
+  document.getElementById(f.row).insertAdjacentHTML('beforeend', `<div class="frame">
+    <div class="frame-label">${f.label}${f.interactive ? '<button data-replay>Replay</button>' : ''}</div>
+    <div class="phone c" data-frame="${i}">${screenHtml(f)}</div>
+    <ul class="notes">${f.notes.map(n => `<li>${n}</li>`).join('')}</ul>
+  </div>`);
+});
+
+// Frame 01: send a message, fly the hero mascot into the corner, then let Reed answer.
+function rectIn(el, screen) {
+  const r = el.getBoundingClientRect(), s = screen.getBoundingClientRect();
+  return { x: r.left - s.left, y: r.top - s.top, w: r.width };
+}
+
+function send(screen, key) {
+  if (screen.dataset.busy) return;
+  screen.dataset.busy = '1';
+  const ex = exchanges[key];
+  const hero = screen.querySelector('.today reed-mascot');
+  const from = rectIn(hero, screen);
+
+  screen.querySelector('.thread').innerHTML = `${morningOpening}<div class="you enter">${ex.you}</div>`;
+  screen.querySelector('.presence').innerHTML = presence.thinking;
+  screen.classList.replace('mode-today', 'mode-chat');
+
+  const corner = screen.querySelector('.presence reed-mascot');
+  const hint = screen.querySelector('.presence .hint');
+  const to = rectIn(corner, screen);
+  corner.style.visibility = 'hidden';
+  hint.style.opacity = 0;
+
+  const flyer = document.createElement('reed-mascot');
+  flyer.className = 'flyer';
+  flyer.setAttribute('size', String(from.w));
+  flyer.setAttribute('mood', 'thinking');
+  flyer.style.left = `${from.x}px`;
+  flyer.style.top = `${from.y}px`;
+  screen.appendChild(flyer);
+  flyer.getBoundingClientRect();
+  flyer.style.transform = `translate(${to.x - from.x}px, ${to.y - from.y}px) scale(${to.w / from.w})`;
+  flyer.addEventListener('transitionend', () => {
+    flyer.remove();
+    corner.style.visibility = '';
+    hint.style.transition = 'opacity .3s';
+    hint.style.opacity = 1;
+  }, { once: true });
+
+  setTimeout(() => {
+    screen.querySelector('.thread').insertAdjacentHTML('beforeend', ex.reply.replace(/class="(voice|card)"/g, 'class="$1 enter"'));
+    screen.querySelector('.presence').innerHTML = `<reed-mascot size="96" mood="speak"></reed-mascot>`;
+    setTimeout(() => {
+      screen.querySelector('.presence').innerHTML = `<reed-mascot size="96"></reed-mascot><div class="chips enter">${ex.chips.map(c => `<button>${c}</button>`).join('')}</div>`;
+      delete screen.dataset.busy;
+    }, 1300);
+  }, 1900);
+}
+
+function typeThenSend(screen) {
+  if (screen.dataset.busy) return;
+  const field = screen.querySelector('.composer span');
+  const text = exchanges.shorter.you;
+  screen.dataset.busy = '1';
+  field.classList.add('typed');
+  let i = 0;
+  const tick = setInterval(() => {
+    field.textContent = text.slice(0, ++i);
+    if (i < text.length) return;
+    clearInterval(tick);
+    setTimeout(() => {
+      field.textContent = 'Talk to Reed';
+      field.classList.remove('typed');
+      delete screen.dataset.busy;
+      send(screen, 'shorter');
+    }, 350);
+  }, 28);
+}
+
+document.addEventListener('click', e => {
+  const replay = e.target.closest('[data-replay]');
+  if (replay) {
+    const phone = replay.closest('.frame').querySelector('.phone');
+    phone.innerHTML = screenHtml(frames[Number(phone.dataset.frame)]);
+    phone.querySelector('.status').innerHTML = document.querySelector('.status').innerHTML;
+    phone.querySelector('.screen').insertAdjacentHTML('beforeend', '<i class="home-ind"></i>');
+    return;
+  }
+  const screen = e.target.closest('.screen');
+  if (!screen) return;
+  const isLive = frames[Number(screen.parentElement.dataset.frame)].interactive;
+  if (isLive && screen.classList.contains('mode-today') && !screen.matches('.is-pulse, .is-settings')) {
+    const chip = e.target.closest('[data-say]');
+    if (chip) return send(screen, chip.dataset.say);
+    if (e.target.closest('.composer')) return typeThenSend(screen);
+  }
+  const step = e.target.closest('[data-step]');
+  if (step) {
+    const val = screen.querySelector('[data-val]');
+    const next = (parseFloat(val.dataset.val) + parseFloat(step.dataset.step)).toFixed(1);
+    val.dataset.val = next;
+    val.innerHTML = `${next}<small>kg</small>`;
+    return;
+  }
+  if (e.target.closest('[data-close]') || e.target.closest('.scrim')) { screen.classList.remove('is-pulse', 'is-settings'); return; }
+  const pulse = e.target.closest('.pulse');
+  if (pulse && !pulse.classList.contains('live') && !screen.classList.contains('is-pulse')) { screen.classList.add('is-pulse'); return; }
+  if (e.target.closest('.you-btn')) screen.classList.add('is-settings');
+});
+</script>
+</body>
+</html>

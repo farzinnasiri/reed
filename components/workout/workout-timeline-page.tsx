@@ -1,12 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { BlurView } from 'expo-blur';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, PanResponder, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatExerciseSetupLabel } from '@/domains/workout/modifier-formatting';
-import { GlassSurface } from '@/components/ui/glass-surface';
-import { canUseGlassBlur, getGlassControlTokens, getGlassPaneTokens, getGlassScrimTokens } from '@/components/ui/glass-material';
+import { ReedButton } from '@/components/ui/reed-button';
+import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedText } from '@/components/ui/reed-text';
 import {
   createTiming,
@@ -18,92 +18,67 @@ import {
 } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { workoutSemanticPalette } from '@/design/system';
-import { styles } from './workout-surface.styles';
-import type { TimelineRow, TimelineSet } from './workout-surface.types';
+import { styles } from './workout-timeline-page.styles';
+import type { RestCard, TimelineRow, TimelineSet } from './workout-surface.types';
 import { formatClock } from './workout-surface.utils';
+import { useRestCountdown } from './use-rest-countdown';
+import { useCompactElapsedLabel } from './use-compact-elapsed-label';
 
-type TimelinePageProps = {
-  activeRestAfterSetNumber: number | null;
-  activeRestExerciseId: Id<'liveSessionExercises'> | null;
-  activeRestSeconds: number | null;
-  elapsedLabel: string | null;
-  errorMessage: string | null;
-  headerSubtitle?: string;
-  isReadOnly?: boolean;
-  isConfirmingFinishSession: boolean;
-  isWorking: boolean;
-  hasNotes?: boolean;
-  onAddExercise: () => void;
-  onBack?: () => void;
-  onClearFinishSessionConfirm: () => void;
+type ExerciseCommands = {
   onDeleteSet: (setLogId: Id<'activityLogs'>) => void;
-  onFinishSession: () => void;
   onOpenExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
-  onOpenInsights?: () => void;
-  onOpenNotes?: () => void;
   onOpenSet: (sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) => void;
   onReorderTimeline: (orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) => Promise<boolean>;
   onRemoveExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
+};
+type TimelineEditor = {
+  isWorking: boolean;
+  isConfirmingFinishSession: boolean;
+  onAddExercise: () => void;
+  onClearFinishSessionConfirm: () => void;
+  onFinishSession: () => void;
   onToggleFinishSessionConfirm: () => void;
-  showHeader?: boolean;
-  title?: string;
+} & ({ kind: 'draft'; exercises?: never } | { kind: 'active'; exercises: ExerciseCommands });
+
+type TimelinePageProps = {
+  activeRestCard: RestCard | null;
+  elapsedLabel: string | null;
+  sessionStartedAt?: number;
+  errorMessage: string | null;
+  hasNotes?: boolean;
+  onOpenNotes?: () => void;
   contentTopInset?: number;
   timeline: TimelineRow[];
+  /** Absence means read-only. Drafts cannot expose commands for persisted exercises. */
+  editor?: TimelineEditor;
 };
 
 const TIMELINE_ROW_GAP = 10;
 
 function getTimelineSetDotColor(setEntry: TimelineSet, theme: ReturnType<typeof useReedTheme>['theme']) {
   if ((setEntry.setOutcomeDetails?.failedReps ?? 0) > 0) {
-    return theme.colors.dangerText;
+    return theme.colors.dangerInk;
   }
 
   if (setEntry.warmup) {
-    return theme.mode === 'dark'
-      ? workoutSemanticPalette.warmup.activeBorderDark
-      : workoutSemanticPalette.warmup.activeBorderLight;
+    return workoutSemanticPalette.warmup.activeBorder;
   }
 
-  return theme.colors.controlBorder;
+  return theme.colors.line;
 }
 
 function getTimelineSetupLabel(item: TimelineRow) {
   return formatExerciseSetupLabel(item.exerciseSetupModifiers);
 }
 
-export function TimelinePage({
-  activeRestAfterSetNumber,
-  activeRestExerciseId,
-  activeRestSeconds,
-  elapsedLabel,
-  errorMessage,
-  headerSubtitle,
-  hasNotes = false,
-  isReadOnly = false,
-  isConfirmingFinishSession,
-  isWorking,
-  onAddExercise,
-  onBack,
-  onClearFinishSessionConfirm,
-  onDeleteSet,
-  onFinishSession,
-  onOpenExercise,
-  onOpenInsights,
-  onOpenNotes,
-  onOpenSet,
-  onReorderTimeline,
-  onRemoveExercise,
-  onToggleFinishSessionConfirm,
-  showHeader = true,
-  contentTopInset,
-  title = 'Timeline',
-  timeline,
-}: TimelinePageProps) {
-  const { reducedTransparency, theme } = useReedTheme();
-  const pane = getGlassPaneTokens(theme);
-  const glassControls = getGlassControlTokens(theme);
-  const scrim = getGlassScrimTokens(theme);
-  const canUseBlur = canUseGlassBlur() && !reducedTransparency;
+export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNotes = false,
+  onOpenNotes, sessionStartedAt, contentTopInset, timeline, editor }: TimelinePageProps) {
+  const isReadOnly = !editor;
+  const isWorking = editor?.isWorking ?? false;
+  const isConfirmingFinishSession = editor?.isConfirmingFinishSession ?? false;
+  const exercises = editor?.kind === 'active' ? editor.exercises : null;
+  const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
   const [confirmExerciseDeleteId, setConfirmExerciseDeleteId] = useState<Id<'liveSessionExercises'> | null>(null);
   const [displayTimeline, setDisplayTimeline] = useState(timeline);
@@ -112,37 +87,24 @@ export function TimelinePage({
   const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null);
   const [highlightedSetIds, setHighlightedSetIds] = useState<Record<string, boolean>>({});
   const [insertedExerciseIds, setInsertedExerciseIds] = useState<Record<string, boolean>>({});
-  const pendingOrderRef = useRef<string | null>(null);
+  const [pendingOrder, setPendingOrder] = useState<string | null>(null);
   const rowLayoutsRef = useRef<Record<string, { height: number; y: number }>>({});
-  const dragTranslationY = useRef(new Animated.Value(0)).current;
+  const [dragTranslationY] = useState(() => new Animated.Value(0));
   const previousExerciseIdsRef = useRef<string[]>([]);
   const previousSetCountsRef = useRef<Record<string, number>>({});
   const isEmptySession = displayTimeline.length === 0;
   const isFinishActionDisabled = isWorking || Boolean(draggingExerciseId);
-  const draggingRowHeight = useMemo(() => {
-    if (!draggingExerciseId) {
-      return 0;
-    }
-
-    return rowLayoutsRef.current[draggingExerciseId as string]?.height ?? 0;
-  }, [draggingExerciseId]);
+  const hasLoggedSets = displayTimeline.some(item => item.setCount > 0);
+  const [draggingRowHeight, setDraggingRowHeight] = useState(0);
   const draggingRowSize = draggingRowHeight > 0 ? draggingRowHeight + TIMELINE_ROW_GAP : 0;
 
-  useEffect(() => {
-    const timelineSignature = timeline.map(item => item.sessionExerciseId).join('|');
-
-    if (pendingOrderRef.current) {
-      if (timelineSignature === pendingOrderRef.current) {
-        pendingOrderRef.current = null;
-        setDisplayTimeline(timeline);
-      }
-      return;
-    }
-
-    if (!draggingExerciseId) {
-      setDisplayTimeline(timeline);
-    }
-  }, [draggingExerciseId, timeline]);
+  const [previousTimeline, setPreviousTimeline] = useState(timeline);
+  if (previousTimeline !== timeline) {
+    setPreviousTimeline(timeline);
+    const signature = timeline.map(item => item.sessionExerciseId).join('|');
+    if (pendingOrder === signature) { setPendingOrder(null); setDisplayTimeline(timeline); }
+    else if (!pendingOrder && !draggingExerciseId) setDisplayTimeline(timeline);
+  }
 
   useEffect(() => {
     const previousExerciseIds = previousExerciseIdsRef.current;
@@ -217,23 +179,14 @@ export function TimelinePage({
     return () => clearTimeout(timeout);
   }, [highlightedSetIds]);
 
-  useEffect(() => {
-    if (!confirmExerciseDeleteId) {
-      return;
-    }
-
-    const stillExists = displayTimeline.some(item => item.sessionExerciseId === confirmExerciseDeleteId);
-
-    if (!stillExists) {
-      setConfirmExerciseDeleteId(null);
-    }
-  }, [confirmExerciseDeleteId, displayTimeline]);
+  if (confirmExerciseDeleteId && !displayTimeline.some(item => item.sessionExerciseId === confirmExerciseDeleteId)) setConfirmExerciseDeleteId(null);
 
   function handleRowLayout(sessionExerciseId: Id<'liveSessionExercises'>, y: number, height: number) {
     rowLayoutsRef.current[sessionExerciseId as string] = { height, y };
   }
 
   function handleDragStart(sessionExerciseId: Id<'liveSessionExercises'>) {
+    setDraggingRowHeight(rowLayoutsRef.current[sessionExerciseId]?.height ?? 0);
     const nextIndex = displayTimeline.findIndex(item => item.sessionExerciseId === sessionExerciseId);
     if (nextIndex < 0) {
       return;
@@ -305,12 +258,12 @@ export function TimelinePage({
     runReedLayoutAnimation();
     setDisplayTimeline(reorderedTimeline);
     const orderedSessionExerciseIds = reorderedTimeline.map(item => item.sessionExerciseId);
-    pendingOrderRef.current = orderedSessionExerciseIds.join('|');
+    setPendingOrder(orderedSessionExerciseIds.join('|'));
 
-    const didPersist = await onReorderTimeline(orderedSessionExerciseIds);
+    const didPersist = await exercises?.onReorderTimeline(orderedSessionExerciseIds);
 
     if (!didPersist) {
-      pendingOrderRef.current = null;
+      setPendingOrder(null);
       runReedLayoutAnimation();
       setDisplayTimeline(timeline);
     }
@@ -318,28 +271,6 @@ export function TimelinePage({
 
   return (
     <View style={styles.timelinePage}>
-      {showHeader ? (
-        <Pressable
-          accessibilityLabel={onOpenInsights ? 'Open session insights' : undefined}
-          disabled={!onOpenInsights}
-          onPress={onOpenInsights}
-          style={({ pressed }) => [styles.timelineHeader, getTapScaleStyle(pressed, !onOpenInsights)]}
-        >
-          {onBack ? (
-            <Pressable accessibilityLabel="Back to sessions" onPress={onBack} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
-              <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
-            </Pressable>
-          ) : null}
-          <View style={styles.timelineHeaderCopy}>
-            <ReedText variant="section">{title}</ReedText>
-            <ReedText tone="muted" variant="body">
-              {headerSubtitle ?? `${displayTimeline.length} ${displayTimeline.length === 1 ? 'exercise' : 'exercises'}`}
-            </ReedText>
-          </View>
-          {onOpenInsights ? <Ionicons color={String(theme.colors.textMuted)} name="stats-chart-outline" size={18} /> : null}
-        </Pressable>
-      ) : null}
-
       <ScrollView
         contentContainerStyle={[
           styles.timelineRailContentDocked,
@@ -351,7 +282,7 @@ export function TimelinePage({
       >
         {displayTimeline.length === 0 ? (
           <View style={styles.timelineEmpty}>
-            <ReedText tone="muted">Timeline is empty.</ReedText>
+            <ReedText tone="muted">{editor ? 'Add your first exercise to begin.' : 'Nothing was logged in this session.'}</ReedText>
           </View>
         ) : (
           displayTimeline.map((item, index) => {
@@ -363,10 +294,11 @@ export function TimelinePage({
               (item.setCount > 0 || item.state === 'capture' || item.state === 'rest');
             const isRestingForRow =
               item.state === 'rest' &&
-              activeRestExerciseId === item.sessionExerciseId &&
-              typeof activeRestSeconds === 'number';
+              activeRestCard?.sessionExerciseId === item.sessionExerciseId;
             const hasTimelineStem = !isLast || isExpanded;
             const isDraggingRow = draggingExerciseId === item.sessionExerciseId;
+            // A finished session has no live state: an exercise with sets in it simply reads as done.
+            const markerState = isReadOnly && item.setCount > 0 ? 'logged' : item.state;
             const dragOffsetY = getTimelineRowShift({
               draggedRowSize: draggingRowSize,
               draggingExerciseId,
@@ -397,7 +329,7 @@ export function TimelinePage({
                           style={[
                             styles.timelineRailSegmentTop,
                             {
-                              backgroundColor: theme.colors.controlBorder,
+                              backgroundColor: theme.colors.line,
                             },
                           ]}
                         />
@@ -407,36 +339,38 @@ export function TimelinePage({
                           styles.timelineNodeMarkerFixed,
                           {
                             backgroundColor:
-                              item.state === 'capture'
-                                ? theme.colors.accentPrimary
-                                : item.state === 'rest'
-                                  ? theme.colors.dangerText
-                                  : theme.colors.canvasSecondary,
+                              markerState === 'capture'
+                                ? theme.colors.accent
+                                : markerState === 'rest'
+                                  ? theme.colors.dangerInk
+                                  : theme.colors.surface,
                             borderColor:
-                              item.state === 'idle'
-                                ? theme.colors.controlBorder
-                                : item.state === 'capture'
-                                  ? theme.colors.accentPrimary
-                                  : item.state === 'rest'
-                                    ? theme.colors.dangerText
-                                    : theme.colors.textPrimary,
+                              markerState === 'idle'
+                                ? theme.colors.line
+                                : markerState === 'capture'
+                                  ? theme.colors.accent
+                                  : markerState === 'rest'
+                                    ? theme.colors.dangerInk
+                                    : theme.colors.ink,
                           },
                         ]}
                       >
                         <Ionicons
                           color={
-                            item.state === 'idle'
-                              ? String(theme.colors.textMuted)
-                              : item.state === 'capture'
-                                ? '#ffffff'
-                                : String(theme.colors.canvasSecondary)
+                            markerState === 'idle'
+                              ? String(theme.colors.inkMuted)
+                              : markerState === 'capture'
+                                ? String(theme.colors.accentText)
+                                : markerState === 'logged' || markerState === 'live_tracking'
+                                  ? String(theme.colors.ink)
+                                  : String(theme.colors.surface)
                           }
                           name={
-                            item.state === 'rest'
+                            markerState === 'rest'
                               ? 'timer-outline'
-                              : item.state === 'live_tracking'
+                              : markerState === 'live_tracking'
                                 ? 'pulse'
-                                : item.state === 'logged'
+                                : markerState === 'logged'
                                   ? 'checkmark'
                                   : 'ellipse'
                           }
@@ -448,7 +382,7 @@ export function TimelinePage({
                           style={[
                             styles.timelineRailSegmentBottom,
                             {
-                              backgroundColor: theme.colors.controlBorder,
+                              backgroundColor: theme.colors.line,
                             },
                           ]}
                         />
@@ -459,8 +393,8 @@ export function TimelinePage({
                       style={[
                         styles.timelineLineCopy,
                         {
-                          backgroundColor: glassControls.shellBackgroundColor,
-                          borderColor: glassControls.shellBorderColor,
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.line,
                         },
                       ]}
                     >
@@ -469,13 +403,13 @@ export function TimelinePage({
                         disabled={isWorking || isReadOnly}
                         onPress={() => {
                           setConfirmExerciseDeleteId(null);
-                          onOpenExercise(item.sessionExerciseId);
+                          exercises?.onOpenExercise(item.sessionExerciseId);
                         }}
                         style={({ pressed }) => [getTapScaleStyle(pressed)]}
                       >
                         <View style={styles.timelineLineHeader}>
                           <View style={styles.timelineLineTitleStack}>
-                            <ReedText numberOfLines={1} style={styles.timelineLineTitle} variant="section">
+                            <ReedText numberOfLines={2} style={styles.timelineLineTitle} variant="headline">
                               {item.exerciseName}
                             </ReedText>
                             {getTimelineSetupLabel(item) ? (
@@ -496,10 +430,11 @@ export function TimelinePage({
                                   [exerciseKey]: !isExpanded,
                                 }));
                               }}
+                              hitSlop={4}
                               style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed)]}
                             >
                               <Ionicons
-                                color={String(theme.colors.textMuted)}
+                                color={String(theme.colors.inkMuted)}
                                 name={isExpanded ? 'chevron-up' : 'chevron-down'}
                                 size={18}
                               />
@@ -526,19 +461,20 @@ export function TimelinePage({
 
                                 if (confirmExerciseDeleteId === item.sessionExerciseId) {
                                   setConfirmExerciseDeleteId(null);
-                                  onRemoveExercise(item.sessionExerciseId);
+                                  exercises?.onRemoveExercise(item.sessionExerciseId);
                                   return;
                                 }
 
                                 setConfirmExerciseDeleteId(item.sessionExerciseId);
                               }}
+                              hitSlop={4}
                               style={({ pressed }) => [styles.timelineActionButton, getTapScaleStyle(pressed)]}
                             >
                               <Ionicons
                                 color={String(
                                   confirmExerciseDeleteId === item.sessionExerciseId
-                                    ? theme.colors.dangerText
-                                    : theme.colors.textMuted,
+                                    ? theme.colors.dangerInk
+                                    : theme.colors.inkMuted,
                                 )}
                                 name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
                                 size={18}
@@ -549,18 +485,16 @@ export function TimelinePage({
                       </Pressable>
                       <View style={styles.timelineBadgeRow}>
                         <View style={styles.timelineSetCountInline}>
-                          <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={14} />
+                          <Ionicons color={String(theme.colors.inkMuted)} name="barbell-outline" size={14} />
                           <ReedText tone="muted" variant="body">
                             {item.setCount} {item.setCount === 1 ? 'set' : 'sets'}
                           </ReedText>
                         </View>
 
-                        {isRestingForRow ? (
+                        {isRestingForRow && !isExpanded ? (
                           <View style={styles.timelineSetCountInline}>
-                            <Ionicons color={String(theme.colors.dangerText)} name="time-outline" size={14} />
-                            <ReedText tone="danger" variant="body">
-                              Rest {formatClock(activeRestSeconds)}
-                            </ReedText>
+                            <Ionicons color={String(theme.colors.dangerInk)} name="time-outline" size={14} />
+                            {activeRestCard ? <RestCountdownText card={activeRestCard} tone="danger" /> : null}
                           </View>
                         ) : null}
                       </View>
@@ -575,9 +509,10 @@ export function TimelinePage({
                             item.sets.map(setEntry => {
                               const hasActiveRestForSet =
                                 isRestingForRow &&
-                                activeRestAfterSetNumber === setEntry.setNumber &&
-                                typeof activeRestSeconds === 'number';
-                              const displayedRestSeconds = hasActiveRestForSet ? activeRestSeconds : setEntry.restSeconds;
+                                activeRestCard?.nextSetNumber === setEntry.setNumber + 1;
+                              const restLabel = hasActiveRestForSet && activeRestCard
+                                ? <RestCountdownText card={activeRestCard} tone="danger" />
+                                : setEntry.restSeconds !== null ? `Rest ${formatClock(setEntry.restSeconds)}` : null;
 
                               return (
                                 <TimelineSetRow
@@ -586,9 +521,9 @@ export function TimelinePage({
                                   deleteLocked={isWorking}
                                   highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
                                   key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
-                                  onDelete={() => onDeleteSet(setEntry.setLogId)}
-                                  onOpen={() => onOpenSet(item.sessionExerciseId, setEntry)}
-                                  restLabel={displayedRestSeconds !== null ? `Rest ${formatClock(displayedRestSeconds)}` : null}
+                                  onDelete={() => exercises?.onDeleteSet(setEntry.setLogId)}
+                                  onOpen={() => exercises?.onOpenSet(item.sessionExerciseId, setEntry)}
+                                  restLabel={restLabel}
                                   setEntry={setEntry}
                                   showRestAsActive={hasActiveRestForSet}
                                 />
@@ -607,156 +542,77 @@ export function TimelinePage({
       </ScrollView>
 
       {!isReadOnly || onOpenNotes ? (
-      <View style={[styles.timelineBottomDockWrap, { pointerEvents: 'box-none' }]}>
-        <View
-          style={[
-            styles.timelineBottomDockPanel,
-            {
-              backgroundColor: pane.backgroundColor,
-              borderColor: pane.borderColor,
-            },
-          ]}
-        >
-          <View style={styles.timelineBottomDockContent}>
-            {isReadOnly ? null : (
+        <View style={[styles.dock, { backgroundColor: theme.colors.canvas, paddingBottom: insets.bottom + theme.spacing.xs }]}>
+          <View style={styles.dockRow}>
+            {onOpenNotes ? (
               <Pressable
-                accessibilityLabel={isEmptySession ? 'Close session' : 'Finish workout'}
-                disabled={isFinishActionDisabled}
-                onPress={onToggleFinishSessionConfirm}
+                accessibilityLabel={hasNotes ? 'Edit session notes' : 'Add session notes'}
+                accessibilityRole="button"
+                disabled={isWorking || Boolean(draggingExerciseId)}
+                onPress={() => {
+                  editor?.onClearFinishSessionConfirm();
+                  onOpenNotes();
+                }}
                 style={({ pressed }) => [
-                  styles.timelineBottomPrimaryPressable,
-                  getTapScaleStyle(pressed, isFinishActionDisabled),
+                  isReadOnly ? styles.dockWide : styles.dockIcon,
+                  { backgroundColor: theme.colors.surfaceRaised },
+                  getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
                 ]}
               >
-                <View
-                  style={[
-                    styles.timelineBottomPrimaryGradient,
-                    { backgroundColor: theme.colors.accentPrimary },
-                  ]}
-                >
-                  <Ionicons color={String(theme.colors.accentPrimaryText)} name="flag-outline" size={16} />
-                  <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                    {isEmptySession ? 'Close session' : 'Finish workout'}
-                  </ReedText>
-                </View>
+                <Ionicons
+                  color={String(hasNotes ? theme.colors.accentInk : theme.colors.inkSecondary)}
+                  name={hasNotes ? 'document-text' : 'document-text-outline'}
+                  size={20}
+                />
+                {isReadOnly ? <ReedText variant="bodyStrong">{hasNotes ? 'Session notes' : 'Add notes'}</ReedText> : null}
               </Pressable>
-            )}
+            ) : null}
 
-            <View style={styles.timelineBottomSecondaryRow}>
-              {isReadOnly ? null : (
-                <Pressable
-                  accessibilityLabel="Add exercise"
-                  disabled={isWorking || Boolean(draggingExerciseId)}
-                  onPress={() => {
-                    onClearFinishSessionConfirm();
-                    onAddExercise();
-                  }}
-                  style={({ pressed }) => [
-                    styles.timelineBottomSecondaryButton,
-                    {
-                      backgroundColor: theme.colors.controlActiveFill,
-                      borderColor: theme.colors.controlActiveBorder,
-                      ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
-                    },
-                  ]}
-                >
-                  <Ionicons color={String(theme.colors.textPrimary)} name="add" size={18} />
-                  <ReedText variant="bodyStrong">Add exercise</ReedText>
-                </Pressable>
-              )}
-
-              {onOpenNotes ? (
-                <Pressable
-                  accessibilityLabel={hasNotes ? 'Edit session notes' : 'Add session notes'}
-                  disabled={isWorking || Boolean(draggingExerciseId)}
-                  onPress={() => {
-                    onClearFinishSessionConfirm();
-                    onOpenNotes();
-                  }}
-                  style={({ pressed }) => [
-                    isReadOnly ? styles.timelineBottomSecondaryButton : styles.timelineBottomNotesButton,
-                    {
-                      backgroundColor: hasNotes ? theme.colors.controlActiveFill : theme.colors.controlFill,
-                      borderColor: theme.colors.controlBorder,
-                      ...getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
-                    },
-                  ]}
-                >
-                  <Ionicons
-                    color={String(theme.colors.textPrimary)}
-                    name={hasNotes ? 'document-text' : 'document-text-outline'}
-                    size={17}
+            {isReadOnly ? null : (
+              <>
+                {/* The primary action is the next sensible step: add an exercise until something is logged, then finish. */}
+                <View style={styles.dockFill}>
+                  <ReedButton
+                    disabled={isFinishActionDisabled}
+                    label={isEmptySession ? 'Close session' : 'Finish workout'}
+                    leading={<Ionicons color={String(hasLoggedSets ? theme.colors.accentText : theme.colors.ink)} name="flag-outline" size={16} />}
+                    onPress={editor?.onToggleFinishSessionConfirm}
+                    variant={hasLoggedSets ? 'primary' : 'secondary'}
                   />
-                  <ReedText variant="bodyStrong">Notes</ReedText>
-                </Pressable>
-              ) : null}
-            </View>
+                </View>
+                <View style={styles.dockFill}>
+                  <ReedButton
+                    disabled={isWorking || Boolean(draggingExerciseId)}
+                    label="Add exercise"
+                    leading={<Ionicons color={String(hasLoggedSets ? theme.colors.ink : theme.colors.accentText)} name="add" size={18} />}
+                    onPress={() => {
+                      editor?.onClearFinishSessionConfirm();
+                      editor?.onAddExercise();
+                    }}
+                    variant={hasLoggedSets ? 'secondary' : 'primary'}
+                  />
+                </View>
+              </>
+            )}
           </View>
         </View>
-      </View>
       ) : null}
 
-      {!isReadOnly && isConfirmingFinishSession ? (
-        <View
-          style={[
-            styles.timelineFinishModalOverlay,
-            {
-              left: -theme.spacing.lg,
-              right: -theme.spacing.lg,
-            },
-          ]}
-        >
-          <Pressable onPress={onClearFinishSessionConfirm} style={styles.timelineFinishModalBackdrop}>
-            {canUseBlur ? (
-              <BlurView intensity={scrim.blurIntensity} style={styles.timelineFinishModalBackdropBlur} tint={theme.blur.tint} />
-            ) : null}
-            <View
-              style={[
-                styles.timelineFinishModalBackdropTint,
-                { backgroundColor: scrim.backgroundColor },
-              ]}
-            />
-          </Pressable>
-          <GlassSurface contentStyle={styles.timelineFinishModalCardContent} style={styles.timelineFinishModalCard}>
-            <ReedText style={styles.timelineFinishModalTitle} variant="section">
-              {isEmptySession ? 'Close session?' : 'Finish workout?'}
-            </ReedText>
-            <ReedText style={styles.timelineFinishModalSummary} tone="muted" variant="body">
-              {isEmptySession ? 'No exercises logged. Nothing will be saved.' : getFinishSummaryLabel(displayTimeline.length, elapsedLabel)}
-            </ReedText>
-            <View style={styles.timelineFinishModalActions}>
-              <Pressable
-                onPress={onClearFinishSessionConfirm}
-                style={({ pressed }) => [
-                  styles.timelineFinishModalButton,
-                  {
-                    backgroundColor: glassControls.shellBackgroundColor,
-                    borderColor: glassControls.shellBorderColor,
-                    ...getTapScaleStyle(pressed),
-                  },
-                ]}
-              >
-                <ReedText variant="bodyStrong">Cancel</ReedText>
-              </Pressable>
-              <Pressable
-                disabled={isWorking}
-                onPress={onFinishSession}
-                style={({ pressed }) => [
-                  styles.timelineFinishModalButton,
-                  {
-                    backgroundColor: theme.colors.accentPrimary,
-                    borderColor: theme.colors.accentPrimary,
-                    ...getTapScaleStyle(pressed, isWorking),
-                  },
-                ]}
-              >
-                <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                  {isEmptySession ? 'Close' : 'Finish'}
-                </ReedText>
-              </Pressable>
+      {!isReadOnly ? (
+        <ReedSheet onDismiss={editor?.onClearFinishSessionConfirm} open={isConfirmingFinishSession}>
+          <View style={styles.finishSheet}>
+            <View style={styles.finishCopy}>
+              <ReedText variant="title">{isEmptySession ? 'Close session?' : 'Finish workout?'}</ReedText>
+              {isEmptySession ? (
+                <ReedText tone="muted">No exercises logged. Nothing will be saved.</ReedText>
+              ) : (
+                <FinishSummary exerciseCount={displayTimeline.length} fixedElapsedLabel={elapsedLabel} startedAt={sessionStartedAt} />
+              )}
             </View>
-          </GlassSurface>
-        </View>
+            <ReedButton disabled={isWorking} label={isEmptySession ? 'Close session' : 'Finish workout'} onPress={editor?.onFinishSession} />
+            <ReedButton label="Keep going" onPress={editor?.onClearFinishSessionConfirm} variant="quiet" />
+          </View>
+        </ReedSheet>
       ) : null}
 
       {errorMessage ? (
@@ -798,12 +654,14 @@ function AnimatedSetList({
   children: React.ReactNode;
   expanded: boolean;
 }) {
-  const progress = useRef(new Animated.Value(expanded ? 1 : 0)).current;
+  const [progress] = useState(() => new Animated.Value(expanded ? 1 : 0));
   const [shouldRender, setShouldRender] = useState(expanded);
+  const [previousExpanded, setPreviousExpanded] = useState(expanded);
+  if (previousExpanded !== expanded) { setPreviousExpanded(expanded); if (expanded) setShouldRender(true); }
 
   useEffect(() => {
     if (expanded) {
-      setShouldRender(true);
+
       requestAnimationFrame(() => {
         createTiming(progress, 1, reedMotion.durations.standard, reedEasing.easeOut).start();
       });
@@ -853,7 +711,7 @@ function AnimatedTimelineRow({
   dragOffsetY: number | Animated.Value;
   isDragging: boolean;
 }) {
-  const insertProgress = useRef(new Animated.Value(animateIn ? 0 : 1)).current;
+  const [insertProgress] = useState(() => new Animated.Value(animateIn ? 0 : 1));
 
   useEffect(() => {
     if (!animateIn) {
@@ -905,15 +763,17 @@ function TimelineDragHandle({
   const isActiveRef = useRef(false);
   const startPageYRef = useRef(0);
 
-  function clearActivationTimeout() {
+  const clearActivationTimeout = useCallback(() => {
     if (activationTimeoutRef.current) {
       clearTimeout(activationTimeoutRef.current);
       activationTimeoutRef.current = null;
     }
-  }
+  }, []);
 
   const panResponder = useMemo(
     () =>
+      // PanResponder registers these callbacks; ref reads happen only on pointer events.
+      // eslint-disable-next-line react-hooks/refs
       PanResponder.create({
         onMoveShouldSetPanResponder: () => false,
         onPanResponderGrant: (_, gestureState) => {
@@ -959,14 +819,14 @@ function TimelineDragHandle({
         onStartShouldSetPanResponder: () => !disabled,
         onStartShouldSetPanResponderCapture: () => !disabled,
       }),
-    [disabled, onDragEnd, onDragMove, onDragStart],
+    [clearActivationTimeout, disabled, onDragEnd, onDragMove, onDragStart],
   );
 
   useEffect(
     () => () => {
       clearActivationTimeout();
     },
-    [],
+    [clearActivationTimeout],
   );
 
   return (
@@ -982,7 +842,7 @@ function TimelineDragHandle({
       ]}
     >
       <Ionicons
-        color={String(isDragging ? theme.colors.accentPrimary : theme.colors.textMuted)}
+        color={String(isDragging ? theme.colors.accent : theme.colors.inkMuted)}
         name="reorder-three-outline"
         size={18}
       />
@@ -1050,13 +910,13 @@ function TimelineSetRow({
   highlightOnChange: boolean;
   onDelete: () => void;
   onOpen: () => void;
-  restLabel: string | null;
+  restLabel: ReactNode;
   setEntry: TimelineSet;
   showRestAsActive: boolean;
 }) {
   const { theme } = useReedTheme();
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-  const tickProgress = useRef(new Animated.Value(0)).current;
+  const [tickProgress] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!highlightOnChange) {
@@ -1086,7 +946,7 @@ function TimelineSetRow({
         style={[
           styles.timelineSetFlash,
           {
-            backgroundColor: theme.colors.accentPrimary,
+            backgroundColor: theme.colors.accent,
             opacity: flashOpacity,
           },
         ]}
@@ -1098,9 +958,8 @@ function TimelineSetRow({
             setIsConfirmingDelete(false);
             onOpen();
           }}
-          style={({ pressed }) => [styles.timelineSetPressable, getTapScaleStyle(pressed, !canOpen)]}
+          style={({ pressed }) => [styles.timelineSetPressable, getTapScaleStyle(pressed)]}
         >
-          <View style={[styles.timelineSetBranch, { backgroundColor: theme.colors.controlBorder }]} />
           <View
             style={[
               styles.timelineSetDot,
@@ -1113,41 +972,50 @@ function TimelineSetRow({
             Set {setEntry.setNumber} · {setEntry.summary}
           </ReedText>
         </Pressable>
-        <Pressable
-          accessibilityLabel={isConfirmingDelete ? 'Confirm delete set' : 'Delete set'}
-          disabled={!canDelete || deleteLocked}
-          onPress={() => {
-            if (isConfirmingDelete) {
-              setIsConfirmingDelete(false);
-              onDelete();
-              return;
-            }
-            setIsConfirmingDelete(true);
-          }}
-          style={({ pressed }) => [
-            styles.timelineSetDeleteButton,
-            getTapScaleStyle(pressed, !canDelete),
-          ]}
-        >
-          <Ionicons
-            color={String(isConfirmingDelete ? theme.colors.dangerText : theme.colors.textMuted)}
-            name={isConfirmingDelete ? 'checkmark' : 'trash-outline'}
-            size={16}
-          />
-        </Pressable>
+        {canDelete ? (
+          <Pressable
+            accessibilityLabel={isConfirmingDelete ? 'Confirm delete set' : 'Delete set'}
+            disabled={deleteLocked}
+            hitSlop={4}
+            onPress={() => {
+              if (isConfirmingDelete) {
+                setIsConfirmingDelete(false);
+                onDelete();
+                return;
+              }
+              setIsConfirmingDelete(true);
+            }}
+            style={({ pressed }) => [styles.timelineSetDeleteButton, getTapScaleStyle(pressed)]}
+          >
+            <Ionicons
+              color={String(isConfirmingDelete ? theme.colors.dangerInk : theme.colors.inkMuted)}
+              name={isConfirmingDelete ? 'checkmark' : 'trash-outline'}
+              size={18}
+            />
+          </Pressable>
+        ) : null}
       </View>
       {restLabel ? (
         <View style={styles.timelineRestRow}>
-          <Ionicons
-            color={String(showRestAsActive ? theme.colors.dangerText : theme.colors.textMuted)}
-            name="time-outline"
-            size={14}
-          />
-          <ReedText tone={showRestAsActive ? 'danger' : 'muted'} variant="body">
+          <ReedText tone={showRestAsActive ? 'danger' : 'muted'} variant="caption">
             {restLabel}
           </ReedText>
         </View>
       ) : null}
     </Animated.View>
+  );
+}
+
+function RestCountdownText({ card, tone }: { card: RestCard; tone: 'danger' | 'muted' }) {
+  const remaining = useRestCountdown(card)?.remainingSeconds ?? 0;
+  return <ReedText tone={tone} variant="caption">Rest {formatClock(remaining)}</ReedText>;
+}
+
+function FinishSummary({ exerciseCount, fixedElapsedLabel, startedAt }: { exerciseCount: number; fixedElapsedLabel: string | null; startedAt?: number }) {
+  const liveElapsedLabel = useCompactElapsedLabel(startedAt);
+  return (
+    <ReedText tone="muted">
+      {getFinishSummaryLabel(exerciseCount, liveElapsedLabel ?? fixedElapsedLabel)}
+    </ReedText>
   );
 }

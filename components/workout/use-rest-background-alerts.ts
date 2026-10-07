@@ -1,46 +1,47 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { restCompleteAlert } from '@/domains/alerts/alert-definitions';
+import { getRestDeadline } from '@/domains/workout/rest';
+import { restCompleteAlert } from '@/lib/rest-alert-definition';
 import { ensureRestTimerAlertPermissionsAsync } from '@/lib/rest-timer-alerts';
 import { useScheduledAlert } from '@/lib/use-scheduled-alert';
+import { startClientWideEvent } from '@/lib/client-observability';
 import type { RestCard } from './workout-surface.types';
 
 type UseRestBackgroundAlertsParams = {
   cardMode: 'capture' | 'live_cardio' | 'rest';
   onPermissionDenied: () => void;
   restCard: RestCard | null;
-  restRemaining: number;
 };
 
 export function useRestBackgroundAlerts({
   cardMode,
   onPermissionDenied,
   restCard,
-  restRemaining,
 }: UseRestBackgroundAlertsParams) {
   const hasCheckedPermissionRef = useRef(false);
   const loggedAlertKeyRef = useRef<string | null>(null);
   const isRestRunning = cardMode === 'rest' && Boolean(restCard?.isRunning);
-  const scheduledRemainingSeconds = restCard?.remainingSeconds ?? null;
-  const alertKey =
-    isRestRunning && restCard
-      ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${restCard.durationSeconds}:${scheduledRemainingSeconds}:${restCard.isRunning ? 'running' : 'idle'}`
-      : null;
+  const fireAt = restCard ? getRestDeadline(restCard) : null;
+  const alertKey = isRestRunning && restCard && fireAt !== null
+    ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${fireAt}`
+    : null;
+  const exerciseName = restCard?.exerciseName;
+  const nextSetNumber = restCard?.nextSetNumber;
   const payload = useMemo(
     () =>
-      restCard
+      exerciseName !== undefined && nextSetNumber !== undefined
         ? {
-            exerciseName: restCard.exerciseName,
-            nextSetNumber: restCard.nextSetNumber,
+            exerciseName,
+            nextSetNumber,
           }
         : null,
-    [restCard?.exerciseName, restCard?.nextSetNumber],
+    [exerciseName, nextSetNumber],
   );
 
   useScheduledAlert({
     alertKey,
     definition: restCompleteAlert,
-    enabled: isRestRunning && restRemaining > 0,
-    fireInSeconds: restRemaining,
+    enabled: isRestRunning,
+    fireAt,
     onPermissionDenied,
     payload,
   });
@@ -58,11 +59,11 @@ export function useRestBackgroundAlerts({
     loggedAlertKeyRef.current = alertKey;
     console.info('[rest-timer-alerts]', 'schedule-requested', {
       durationSeconds: restCard.durationSeconds,
-      fireInSeconds: restRemaining,
+      fireAt,
       nextSetNumber: restCard.nextSetNumber,
-      scheduledRemainingSeconds,
+
     });
-  }, [alertKey, restCard, restRemaining, scheduledRemainingSeconds]);
+  }, [alertKey, fireAt, restCard]);
 
   useEffect(() => {
     if (!isRestRunning || hasCheckedPermissionRef.current) {
@@ -70,10 +71,12 @@ export function useRestBackgroundAlerts({
     }
 
     hasCheckedPermissionRef.current = true;
+    const event = startClientWideEvent('alert.permission');
     void ensureRestTimerAlertPermissionsAsync().then(status => {
+      event.end({ 'alert.status': status });
       if (status === 'permission_denied') {
         onPermissionDenied();
       }
-    });
+    }).catch(error => event.fail(error, 'alert_permission_failed'));
   }, [isRestRunning, onPermissionDenied]);
 }

@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { paginationOptsValidator } from 'convex/server';
 import { internalMutation, mutation, query } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import type { QueryCtx } from './_generated/server';
@@ -64,81 +65,90 @@ type SupportedExercise = Doc<'exerciseCatalog'> & {
   recipeKey: RecipeKey;
 };
 
-export const searchForAddSheet = query({
-  args: {
-    equipment: optionalMultiFilterValidator,
-    focusAreas: optionalMultiFilterValidator,
-    muscleGroups: optionalMultiFilterValidator,
-    targetAreas: optionalMultiFilterValidator,
-    query: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
+export const getPickerBootstrap = query({
+  args: {},
+  handler: async ctx => {
     const profile = await requireViewerProfile(ctx);
-    const queryText = args.query?.trim().toLowerCase() ?? '';
-    const selectedFocusAreas = normalizeExerciseFocusAreas(args.focusAreas ?? args.muscleGroups);
-    const selectedTargetAreas = normalizeExerciseTargetAreas(args.targetAreas);
-    const selectedEquipment = normalizeMultiFilters(args.equipment);
-    const hasSearchContext =
-      queryText.length > 0 || selectedFocusAreas.length > 0 || selectedTargetAreas.length > 0 || selectedEquipment.length > 0;
-    const exercises: SupportedExercise[] = await loadSearchContextExercises(ctx, queryText, hasSearchContext);
+    const exercises = await loadSupportedExercises(ctx);
     const favoriteDocs = await ctx.db
       .query('exerciseFavorites')
       .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
-      .collect();
+      .take(1000);
     const favoriteIds = new Set(favoriteDocs.map(doc => doc.exerciseCatalogId));
     const exerciseById = new Map<Id<'exerciseCatalog'>, SupportedExercise>(
       exercises.map(exercise => [exercise._id, exercise]),
     );
-    const favorites = hasSearchContext
-      ? ([] as ReturnType<typeof serializeCatalogItem>[])
-      : favoriteDocs
-          .map(doc => getExerciseById(exerciseById, doc.exerciseCatalogId))
-          .filter(isDefined)
-          .map(exercise => serializeCatalogItem(exercise, favoriteIds));
-    const recents = hasSearchContext
-      ? ([] as ReturnType<typeof serializeCatalogItem>[])
-      : await getRecentCatalogItems(ctx, profile._id, exerciseById, favoriteIds);
-    const recentIds = new Set(recents.map(item => item._id));
-    const suggested = hasSearchContext || recents.length > 0 || favorites.length > 0
-      ? ([] as ReturnType<typeof serializeCatalogItem>[])
-      : exercises
+    const favorites = await Promise.all(favoriteDocs
+      .map(doc => getExerciseById(exerciseById, doc.exerciseCatalogId))
+      .filter(isDefined)
+      .map(exercise => serializeCatalogItem(ctx, exercise, favoriteIds)));
+    const recents = await getRecentCatalogItems(ctx, profile._id, exerciseById, favoriteIds);
+    const suggested = recents.length > 0 || favorites.length > 0
+      ? []
+      : await Promise.all(exercises
           .slice()
           .sort((left, right) => left.name.localeCompare(right.name))
           .slice(0, 16)
-          .map(exercise => serializeCatalogItem(exercise, favoriteIds));
-    const filtered = exercises
-      .map(exercise => ({
-        exercise,
-        queryMatchRank: getQueryMatchRank(exercise, queryText),
-      }))
-      .filter(hasQueryMatchRank)
-      .filter(item => matchesBodyAreaFilter(resolveStoredFocusAreas(item.exercise), selectedFocusAreas, selectedTargetAreas))
-      .filter(item => matchesAnyArrayFilter(item.exercise.equipment, selectedEquipment))
-      .sort((left, right) => {
-        if (left.queryMatchRank !== right.queryMatchRank) {
-          return left.queryMatchRank - right.queryMatchRank;
-        }
-
-        const leftPriority = getSearchPriority(left.exercise._id, recentIds);
-        const rightPriority = getSearchPriority(right.exercise._id, recentIds);
-        if (leftPriority !== rightPriority) {
-          return leftPriority - rightPriority;
-        }
-
-        return left.exercise.name.localeCompare(right.exercise.name);
-      })
-      .map(item => serializeCatalogItem(item.exercise, favoriteIds));
-
+          .map(exercise => serializeCatalogItem(ctx, exercise, favoriteIds)));
     return {
       equipmentOptions: collectFilterOptions(exercises.flatMap(exercise => exercise.equipment)),
       focusAreaOptions: collectFocusAreaOptions(exercises),
       favorites,
       muscleGroupOptions: collectFocusAreaOptions(exercises),
       recents,
-      results: filtered,
       suggested,
       targetAreaOptions: collectTargetAreaOptions(exercises),
     };
+  },
+});
+
+export const searchForPicker = query({
+  args: {
+    equipment: optionalMultiFilterValidator,
+    focusAreas: optionalMultiFilterValidator,
+    paginationOpts: paginationOptsValidator,
+    query: v.optional(v.string()),
+    targetAreas: optionalMultiFilterValidator,
+  },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const queryText = args.query?.trim().toLowerCase() ?? '';
+    const selectedFocusAreas = normalizeExerciseFocusAreas(args.focusAreas);
+    const selectedTargetAreas = normalizeExerciseTargetAreas(args.targetAreas);
+    const selectedEquipment = normalizeMultiFilters(args.equipment);
+    const targetCount = Math.max(1, Math.min(args.paginationOpts.numItems, 100));
+    // Convex permits one paginated read per invocation. Filtering may produce a short page;
+    // return its cursor so the picker can request the next page without losing any matches.
+    const page = queryText
+        ? await ctx.db
+            .query('exerciseCatalog')
+            .withSearchIndex('search_text', q =>
+              q.search('searchText', queryText).eq('isSupportedInLiveSession', true),
+            )
+            .paginate({ ...args.paginationOpts, numItems: targetCount })
+        : await ctx.db
+            .query('exerciseCatalog')
+            .withIndex('by_supported_in_live_session_and_name', q => q.eq('isSupportedInLiveSession', true))
+            .paginate({ ...args.paginationOpts, numItems: targetCount });
+    const exercises = page.page.map(resolveSupportedExercise).filter(isDefined);
+    const favoriteDocs = await ctx.db
+      .query('exerciseFavorites')
+      .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
+      .take(1000);
+    const favoriteIds = new Set(favoriteDocs.map(doc => doc.exerciseCatalogId));
+    const resultExercises = exercises
+      .map(exercise => ({ exercise, queryMatchRank: getQueryMatchRank(exercise, queryText) }))
+      .filter(hasQueryMatchRank)
+      .filter(item => matchesBodyAreaFilter(resolveStoredFocusAreas(item.exercise), selectedFocusAreas, selectedTargetAreas))
+      .filter(item => matchesAnyArrayFilter(item.exercise.equipment, selectedEquipment))
+      .sort((left, right) =>
+        left.queryMatchRank - right.queryMatchRank || left.exercise.name.localeCompare(right.exercise.name),
+      );
+    const results = await Promise.all(
+      resultExercises.map(item => serializeCatalogItem(ctx, item.exercise, favoriteIds)),
+    );
+
+    return { continueCursor: page.continueCursor, isDone: page.isDone, page: results };
   },
 });
 
@@ -369,16 +379,15 @@ async function getRecentCatalogItems(
   profileId: Id<'profiles'>,
   exerciseById: Map<Id<'exerciseCatalog'>, SupportedExercise>,
   favoriteIds: Set<Id<'exerciseCatalog'>>,
-): Promise<ReturnType<typeof serializeCatalogItem>[]> {
-  const recentSessionExercises = (
-    await ctx.db
-      .query('liveSessionExercises')
-      .withIndex('by_profile_id_and_added_at', q => q.eq('profileId', profileId))
-      .collect()
-  ).reverse();
+): Promise<Array<Awaited<ReturnType<typeof serializeCatalogItem>>>> {
+  const recentSessionExercises = await ctx.db
+    .query('liveSessionExercises')
+    .withIndex('by_profile_id_and_added_at', q => q.eq('profileId', profileId))
+    .order('desc')
+    .take(200);
 
   const seenRecentExerciseIds = new Set<Id<'exerciseCatalog'>>();
-  return recentSessionExercises
+  return await Promise.all(recentSessionExercises
     .map(entry => {
       if (seenRecentExerciseIds.has(entry.exerciseCatalogId)) {
         return null;
@@ -388,59 +397,26 @@ async function getRecentCatalogItems(
     })
     .filter(isDefined)
     .slice(0, 8)
-    .map(exercise => serializeCatalogItem(exercise, favoriteIds));
-}
-
-async function loadSearchContextExercises(
-  ctx: QueryCtx,
-  queryText: string,
-  hasSearchContext: boolean,
-): Promise<SupportedExercise[]> {
-  const supportedExercises = await loadSupportedExercises(ctx);
-
-  if (hasSearchContext && queryText.length > 0) {
-    const indexedMatches = await ctx.db
-      .query('exerciseCatalog')
-      .withSearchIndex('search_text', q => q.search('searchText', queryText))
-      .take(300);
-    return mergeSupportedExercises([
-      ...indexedMatches.map(resolveSupportedExercise).filter(isDefined),
-      ...supportedExercises,
-    ]);
-  }
-
-  return supportedExercises;
+    .map(exercise => serializeCatalogItem(ctx, exercise, favoriteIds)));
 }
 
 async function loadSupportedExercises(ctx: QueryCtx): Promise<SupportedExercise[]> {
   const supportedExercises = await ctx.db
     .query('exerciseCatalog')
-    .withIndex('by_supported_in_live_session', q => q.eq('isSupportedInLiveSession', true))
-    .collect();
+    .withIndex('by_supported_in_live_session_and_name', q => q.eq('isSupportedInLiveSession', true))
+    .take(2000);
   return supportedExercises.map(resolveSupportedExercise).filter(isDefined);
-}
-
-function mergeSupportedExercises(exercises: SupportedExercise[]): SupportedExercise[] {
-  const seen = new Set<Id<'exerciseCatalog'>>();
-  const merged: SupportedExercise[] = [];
-
-  for (const exercise of exercises) {
-    if (seen.has(exercise._id)) {
-      continue;
-    }
-
-    seen.add(exercise._id);
-    merged.push(exercise);
-  }
-
-  return merged;
 }
 
 function isDefined<T>(value: T | null | undefined): value is T {
   return value != null;
 }
 
-function serializeCatalogItem(exercise: SupportedExercise, favoriteIds: Set<Id<'exerciseCatalog'>>) {
+async function serializeCatalogItem(
+  ctx: QueryCtx,
+  exercise: SupportedExercise,
+  favoriteIds: Set<Id<'exerciseCatalog'>>,
+) {
   const focusAreas = resolveStoredFocusAreas(exercise);
 
   return {
@@ -448,6 +424,7 @@ function serializeCatalogItem(exercise: SupportedExercise, favoriteIds: Set<Id<'
     discoveryTags: exercise.discoveryTags ?? [],
     equipment: exercise.equipment,
     exerciseClass: exercise.exerciseClass,
+    imageUrl: exercise.imageStorageId ? await ctx.storage.getUrl(exercise.imageStorageId) : null,
     isFavorite: favoriteIds.has(exercise._id),
     mainMuscleGroups: exercise.mainMuscleGroups,
     modifierCapabilities: normalizeExerciseModifierCapabilities(
@@ -564,16 +541,6 @@ function collectTargetAreaOptions(exercises: SupportedExercise[]) {
 
 function arraysEqual(left: string[], right: string[]) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
-}
-
-function getSearchPriority(
-  exerciseId: Id<'exerciseCatalog'>,
-  recentIds: Set<Id<'exerciseCatalog'>>,
-) {
-  if (recentIds.has(exerciseId)) {
-    return 0;
-  }
-  return 1;
 }
 
 function hasQueryMatchRank(item: { exercise: SupportedExercise; queryMatchRank: number | null }): item is {

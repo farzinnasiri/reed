@@ -1,0 +1,182 @@
+[
+  {
+    "id": "abdomen",
+    "label": "Abdomen"
+  },
+  {
+    "id": "chest",
+    "label": "Chest"
+  },
+  {
+    "id": "left_ankle",
+    "label": "Left ankle"
+  },
+  {
+    "id": "left_back_knee",
+    "label": "Left back of knee"
+  },
+  {
+    "id": "left_back_thigh",
+    "label": "Left back thigh"
+  },
+  {
+    "id": "left_biceps",
+    "label": "Left biceps"
+  },
+  {
+    "id": "left_calf",
+    "label": "Left calf"
+  },
+  {
+    "id": "left_elbow",
+    "label": "Left elbow"
+  },
+  {
+    "id": "left_foot",
+    "label": "Left foot"
+  },
+  {
+    "id": "left_forearm",
+    "label": "Left forearm"
+  },
+  {
+    "id": "left_front_thigh",
+    "label": "Left front thigh"
+  },
+  {
+    "id": "left_glute",
+    "label": "Left glute"
+  },
+  {
+    "id": "left_groin",
+    "label": "Left groin"
+  },
+  {
+    "id": "left_hand",
+    "label": "Left hand"
+  },
+  {
+    "id": "left_heel",
+    "label": "Left heel"
+  },
+  {
+    "id": "left_hip",
+    "label": "Left hip"
+  },
+  {
+    "id": "left_inner_thigh",
+    "label": "Left inner thigh"
+  },
+  {
+    "id": "left_knee",
+    "label": "Left knee"
+  },
+  {
+    "id": "left_shin",
+    "label": "Left shin"
+  },
+  {
+    "id": "left_shoulder",
+    "label": "Left shoulder"
+  },
+  {
+    "id": "left_triceps",
+    "label": "Left triceps"
+  },
+  {
+    "id": "left_wrist",
+    "label": "Left wrist"
+  },
+  {
+    "id": "lower_back",
+    "label": "Lower back"
+  },
+  {
+    "id": "neck",
+    "label": "Neck"
+  },
+  {
+    "id": "right_ankle",
+    "label": "Right ankle"
+  },
+  {
+    "id": "right_back_knee",
+    "label": "Right back of knee"
+  },
+  {
+    "id": "right_back_thigh",
+    "label": "Right back thigh"
+  },
+  {
+    "id": "right_biceps",
+    "label": "Right biceps"
+  },
+  {
+    "id": "right_calf",
+    "label": "Right calf"
+  },
+  {
+    "id": "right_elbow",
+    "label": "Right elbow"
+  },
+  {
+    "id": "right_foot",
+    "label": "Right foot"
+  },
+  {
+    "id": "right_forearm",
+    "label": "Right forearm"
+  },
+  {
+    "id": "right_front_thigh",
+    "label": "Right front thigh"
+  },
+  {
+    "id": "right_glute",
+    "label": "Right glute"
+  },
+  {
+    "id": "right_groin",
+    "label": "Right groin"
+  },
+  {
+    "id": "right_hand",
+    "label": "Right hand"
+  },
+  {
+    "id": "right_heel",
+    "label": "Right heel"
+  },
+  {
+    "id": "right_hip",
+    "label": "Right hip"
+  },
+  {
+    "id": "right_inner_thigh",
+    "label": "Right inner thigh"
+  },
+  {
+    "id": "right_knee",
+    "label": "Right knee"
+  },
+  {
+    "id": "right_shin",
+    "label": "Right shin"
+  },
+  {
+    "id": "right_shoulder",
+    "label": "Right shoulder"
+  },
+  {
+    "id": "right_triceps",
+    "label": "Right triceps"
+  },
+  {
+    "id": "right_wrist",
+    "label": "Right wrist"
+  },
+  {
+    "id": "upper_back",
+    "label": "Upper back"
+  }
+]

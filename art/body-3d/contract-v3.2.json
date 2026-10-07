@@ -1,0 +1,1233 @@
+{
+  "assetVersion": "3.2.0",
+  "format": "glTF 2.0 GLB",
+  "coordinateConvention": {
+    "units": "meters",
+    "origin": "midpoint between feet on ground plane",
+    "blender": {
+      "up": "+Z",
+      "front": "-Y",
+      "anatomicalLeft": "+X"
+    },
+    "gltf": {
+      "up": "+Y",
+      "front": "+Z",
+      "anatomicalLeft": "+X"
+    },
+    "baseHeightMeters": 1.72,
+    "pose": "Relaxed standing with arms separated from torso and feet apart."
+  },
+  "provenance": {
+    "project": "Blender Studio and community Human Base Meshes",
+    "version": "1.4.1",
+    "source": "https://download.blender.org/demo/asset-bundles/human-base-meshes/human-base-meshes-bundle-v1.4.1.zip",
+    "assetLicense": "CC0-1.0",
+    "licenseEvidence": "https://www.blender.org/download/demo-files/",
+    "sourceArchive": "../../art/body-3d/source-data.zip",
+    "changes": "Shared male/female anatomy with restrained integrated muscle relief, refined male chest profile, relaxed forearm/hand rotation, common 28K mobile topology, fitted coverage, muscle and pain patches, adiposity and muscularity with combined corrective."
+  },
+  "architecture": {
+    "body": "body",
+    "selection": "Raycast body only. Use the final GLB primitive-local triangle index with selectionTriangleRuns. No spatial reclassification after morphing. Torso/arm region boundaries use a separate authored selection field, never the conservative deformation mask.",
+    "triangleRunFormat": [
+      "startTriangleInclusive",
+      "triangleCount",
+      "regionIdOrNull"
+    ],
+    "optimization": "Mapping is generated after export. Accessor compaction preserves triangle and vertex order. Re-export after any geometry changes; do not reorder triangles without regenerating the mapping. Verify the GLB SHA-256.",
+    "highlightAddressing": "pain_<id> and muscle_<id> nodes; each has one primitive. Exact node lists per variant.",
+    "highlightSurfaceOffsetMeters": 0.00035,
+    "highlightEdgeFade": "COLOR_0 alpha, boundary 0 and interior 1; standard glTF vertex color multiplication.",
+    "materials": {
+      "body": "reed_body_matte",
+      "highlight": "reed_highlight",
+      "roughness": 0.88,
+      "metallic": 0,
+      "normalMaps": false,
+      "doubleSided": false
+    },
+    "runtime": "Hide all pain_/muscle_ nodes initially. Clone the shared highlight material per active node; use color and opacity as runtime roles, enable depth test, disable depth write, use FrontSide and polygonOffset factor=-1 units=-1. Render body first. Hide inactive nodes to avoid transparent draw calls.",
+    "painMusclePriority": "Prefer one mode at a time. If both are needed, pain renderOrder=2 above muscle renderOrder=1.",
+    "coverage": "Embedded neutral 1K atlas with softly edged, low-contrast fitted coverage. Female chest coverage fades toward the sides; the back remains continuous matte clay. All coverage follows body morphs.",
+    "backPainPatch": "Dorsal pain patches include only faces that remain back-facing across the authored variants and endpoints. This avoids a tint sliver at the front silhouette; picking catchments remain broader."
+  },
+  "discomfortRegions": [
+    {
+      "id": "abdomen",
+      "label": "Abdomen",
+      "storedAreaLabel": "Abdomen",
+      "highlightNode": "pain_abdomen"
+    },
+    {
+      "id": "chest",
+      "label": "Chest",
+      "storedAreaLabel": "Chest",
+      "highlightNode": "pain_chest"
+    },
+    {
+      "id": "left_ankle",
+      "label": "Left ankle",
+      "storedAreaLabel": "Left ankle",
+      "highlightNode": "pain_left_ankle"
+    },
+    {
+      "id": "left_calf",
+      "label": "Left calf",
+      "storedAreaLabel": "Left calf",
+      "highlightNode": "pain_left_calf"
+    },
+    {
+      "id": "left_elbow",
+      "label": "Left elbow",
+      "storedAreaLabel": "Left elbow",
+      "highlightNode": "pain_left_elbow"
+    },
+    {
+      "id": "left_foot",
+      "label": "Left foot",
+      "storedAreaLabel": "Left foot",
+      "highlightNode": "pain_left_foot"
+    },
+    {
+      "id": "left_hip",
+      "label": "Left hip",
+      "storedAreaLabel": "Left hip",
+      "highlightNode": "pain_left_hip"
+    },
+    {
+      "id": "left_knee",
+      "label": "Left knee",
+      "storedAreaLabel": "Left knee",
+      "highlightNode": "pain_left_knee"
+    },
+    {
+      "id": "left_shoulder",
+      "label": "Left shoulder",
+      "storedAreaLabel": "Left shoulder",
+      "highlightNode": "pain_left_shoulder"
+    },
+    {
+      "id": "left_thigh",
+      "label": "Left thigh",
+      "storedAreaLabel": "Left thigh",
+      "highlightNode": "pain_left_thigh"
+    },
+    {
+      "id": "left_wrist",
+      "label": "Left wrist",
+      "storedAreaLabel": "Left wrist",
+      "highlightNode": "pain_left_wrist"
+    },
+    {
+      "id": "lower_back",
+      "label": "Lower back",
+      "storedAreaLabel": "Lower back",
+      "highlightNode": "pain_lower_back"
+    },
+    {
+      "id": "neck",
+      "label": "Neck",
+      "storedAreaLabel": "Neck",
+      "highlightNode": "pain_neck"
+    },
+    {
+      "id": "right_ankle",
+      "label": "Right ankle",
+      "storedAreaLabel": "Right ankle",
+      "highlightNode": "pain_right_ankle"
+    },
+    {
+      "id": "right_calf",
+      "label": "Right calf",
+      "storedAreaLabel": "Right calf",
+      "highlightNode": "pain_right_calf"
+    },
+    {
+      "id": "right_elbow",
+      "label": "Right elbow",
+      "storedAreaLabel": "Right elbow",
+      "highlightNode": "pain_right_elbow"
+    },
+    {
+      "id": "right_foot",
+      "label": "Right foot",
+      "storedAreaLabel": "Right foot",
+      "highlightNode": "pain_right_foot"
+    },
+    {
+      "id": "right_hip",
+      "label": "Right hip",
+      "storedAreaLabel": "Right hip",
+      "highlightNode": "pain_right_hip"
+    },
+    {
+      "id": "right_knee",
+      "label": "Right knee",
+      "storedAreaLabel": "Right knee",
+      "highlightNode": "pain_right_knee"
+    },
+    {
+      "id": "right_shoulder",
+      "label": "Right shoulder",
+      "storedAreaLabel": "Right shoulder",
+      "highlightNode": "pain_right_shoulder"
+    },
+    {
+      "id": "right_thigh",
+      "label": "Right thigh",
+      "storedAreaLabel": "Right thigh",
+      "highlightNode": "pain_right_thigh"
+    },
+    {
+      "id": "right_wrist",
+      "label": "Right wrist",
+      "storedAreaLabel": "Right wrist",
+      "highlightNode": "pain_right_wrist"
+    },
+    {
+      "id": "upper_back",
+      "label": "Upper back",
+      "storedAreaLabel": "Upper back",
+      "highlightNode": "pain_upper_back"
+    },
+    {
+      "id": "left_biceps",
+      "label": "Left biceps",
+      "storedAreaLabel": "Left biceps",
+      "highlightNode": "pain_left_biceps"
+    },
+    {
+      "id": "left_triceps",
+      "label": "Left triceps",
+      "storedAreaLabel": "Left triceps",
+      "highlightNode": "pain_left_triceps"
+    },
+    {
+      "id": "right_biceps",
+      "label": "Right biceps",
+      "storedAreaLabel": "Right biceps",
+      "highlightNode": "pain_right_biceps"
+    },
+    {
+      "id": "right_triceps",
+      "label": "Right triceps",
+      "storedAreaLabel": "Right triceps",
+      "highlightNode": "pain_right_triceps"
+    }
+  ],
+  "selectionPolicy": {
+    "direct": "Take the nearest front-facing intersection of body. A null mapping is intentionally not selectable, including face/head.",
+    "forgiving": "On a miss, sample nearby screen rays within 22 CSS pixels and choose the closest visible hit. Prefer a visible projected joint anchor within 22 CSS pixels for joint selection; reject an anchor if a nearer body surface occludes it. Evaluate anchor triangle barycentrics on current morphed vertices. Provide a labeled area list as an accessible alternative.",
+    "catchments": "Upper arms have separate biceps and triceps regions. Shoulder catchments cover deltoids; wrist catchments include hand and lower forearm. Calf includes the lower-leg surface. Hip includes the gluteal region.",
+    "meaning": "Self-reported location only. No diagnosis, injured-muscle inference, or intensity-to-pathology mapping."
+  },
+  "muscles": [
+    {
+      "id": "left_abdominals",
+      "label": "Left abdominals",
+      "highlightNode": "muscle_left_abdominals"
+    },
+    {
+      "id": "left_adductors",
+      "label": "Left adductors",
+      "highlightNode": "muscle_left_adductors"
+    },
+    {
+      "id": "left_biceps",
+      "label": "Left biceps",
+      "highlightNode": "muscle_left_biceps"
+    },
+    {
+      "id": "left_calves",
+      "label": "Left calves",
+      "highlightNode": "muscle_left_calves"
+    },
+    {
+      "id": "left_deltoids",
+      "label": "Left deltoids",
+      "highlightNode": "muscle_left_deltoids"
+    },
+    {
+      "id": "left_forearms",
+      "label": "Left forearms",
+      "highlightNode": "muscle_left_forearms"
+    },
+    {
+      "id": "left_glutes",
+      "label": "Left glutes",
+      "highlightNode": "muscle_left_glutes"
+    },
+    {
+      "id": "left_hamstrings",
+      "label": "Left hamstrings",
+      "highlightNode": "muscle_left_hamstrings"
+    },
+    {
+      "id": "left_latissimus_dorsi",
+      "label": "Left latissimus dorsi",
+      "highlightNode": "muscle_left_latissimus_dorsi"
+    },
+    {
+      "id": "left_mid_back",
+      "label": "Left mid back",
+      "highlightNode": "muscle_left_mid_back"
+    },
+    {
+      "id": "left_obliques",
+      "label": "Left obliques",
+      "highlightNode": "muscle_left_obliques"
+    },
+    {
+      "id": "left_pectorals",
+      "label": "Left pectorals",
+      "highlightNode": "muscle_left_pectorals"
+    },
+    {
+      "id": "left_quadriceps",
+      "label": "Left quadriceps",
+      "highlightNode": "muscle_left_quadriceps"
+    },
+    {
+      "id": "left_spinal_erectors",
+      "label": "Left spinal erectors",
+      "highlightNode": "muscle_left_spinal_erectors"
+    },
+    {
+      "id": "left_tibialis_anterior",
+      "label": "Left tibialis anterior",
+      "highlightNode": "muscle_left_tibialis_anterior"
+    },
+    {
+      "id": "left_trapezius",
+      "label": "Left trapezius",
+      "highlightNode": "muscle_left_trapezius"
+    },
+    {
+      "id": "left_triceps",
+      "label": "Left triceps",
+      "highlightNode": "muscle_left_triceps"
+    },
+    {
+      "id": "right_abdominals",
+      "label": "Right abdominals",
+      "highlightNode": "muscle_right_abdominals"
+    },
+    {
+      "id": "right_adductors",
+      "label": "Right adductors",
+      "highlightNode": "muscle_right_adductors"
+    },
+    {
+      "id": "right_biceps",
+      "label": "Right biceps",
+      "highlightNode": "muscle_right_biceps"
+    },
+    {
+      "id": "right_calves",
+      "label": "Right calves",
+      "highlightNode": "muscle_right_calves"
+    },
+    {
+      "id": "right_deltoids",
+      "label": "Right deltoids",
+      "highlightNode": "muscle_right_deltoids"
+    },
+    {
+      "id": "right_forearms",
+      "label": "Right forearms",
+      "highlightNode": "muscle_right_forearms"
+    },
+    {
+      "id": "right_glutes",
+      "label": "Right glutes",
+      "highlightNode": "muscle_right_glutes"
+    },
+    {
+      "id": "right_hamstrings",
+      "label": "Right hamstrings",
+      "highlightNode": "muscle_right_hamstrings"
+    },
+    {
+      "id": "right_latissimus_dorsi",
+      "label": "Right latissimus dorsi",
+      "highlightNode": "muscle_right_latissimus_dorsi"
+    },
+    {
+      "id": "right_mid_back",
+      "label": "Right mid back",
+      "highlightNode": "muscle_right_mid_back"
+    },
+    {
+      "id": "right_obliques",
+      "label": "Right obliques",
+      "highlightNode": "muscle_right_obliques"
+    },
+    {
+      "id": "right_pectorals",
+      "label": "Right pectorals",
+      "highlightNode": "muscle_right_pectorals"
+    },
+    {
+      "id": "right_quadriceps",
+      "label": "Right quadriceps",
+      "highlightNode": "muscle_right_quadriceps"
+    },
+    {
+      "id": "right_spinal_erectors",
+      "label": "Right spinal erectors",
+      "highlightNode": "muscle_right_spinal_erectors"
+    },
+    {
+      "id": "right_tibialis_anterior",
+      "label": "Right tibialis anterior",
+      "highlightNode": "muscle_right_tibialis_anterior"
+    },
+    {
+      "id": "right_trapezius",
+      "label": "Right trapezius",
+      "highlightNode": "muscle_right_trapezius"
+    },
+    {
+      "id": "right_triceps",
+      "label": "Right triceps",
+      "highlightNode": "muscle_right_triceps"
+    }
+  ],
+  "catalogAliases": {
+    "pecs": {
+      "muscleIds": [
+        "left_pectorals",
+        "right_pectorals"
+      ],
+      "representation": "group",
+      "note": "Pectoral regions are not split into upper and lower heads."
+    },
+    "chest": {
+      "muscleIds": [
+        "left_pectorals",
+        "right_pectorals"
+      ],
+      "representation": "group",
+      "note": "Pectoral regions are not split into upper and lower heads."
+    },
+    "pectorals": {
+      "muscleIds": [
+        "left_pectorals",
+        "right_pectorals"
+      ],
+      "representation": "group",
+      "note": "Pectoral regions are not split into upper and lower heads."
+    },
+    "upper chest": {
+      "muscleIds": [
+        "left_pectorals",
+        "right_pectorals"
+      ],
+      "representation": "group",
+      "note": "Pectoral regions are not split into upper and lower heads."
+    },
+    "lower pecs": {
+      "muscleIds": [
+        "left_pectorals",
+        "right_pectorals"
+      ],
+      "representation": "group",
+      "note": "Pectoral regions are not split into upper and lower heads."
+    },
+    "front delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "side delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "rear delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "lateral delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "shoulders": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "front-delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "side-delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "rear-delts": {
+      "muscleIds": [
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "group",
+      "note": "One deltoid surface per side; no separate heads."
+    },
+    "biceps": {
+      "muscleIds": [
+        "left_biceps",
+        "right_biceps"
+      ],
+      "representation": "group"
+    },
+    "brachialis": {
+      "muscleIds": [
+        "left_biceps",
+        "right_biceps"
+      ],
+      "representation": "group"
+    },
+    "triceps": {
+      "muscleIds": [
+        "left_triceps",
+        "right_triceps"
+      ],
+      "representation": "group"
+    },
+    "triceps long head": {
+      "muscleIds": [
+        "left_triceps",
+        "right_triceps"
+      ],
+      "representation": "group"
+    },
+    "anconeus": {
+      "muscleIds": [
+        "left_triceps",
+        "right_triceps"
+      ],
+      "representation": "group"
+    },
+    "forearms": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "forearms-wrists": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "grip": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "wrist flexors": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "wrist extensors": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "brachioradialis": {
+      "muscleIds": [
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group",
+      "note": "Grip is represented by the forearm group, not individual fingers."
+    },
+    "traps": {
+      "muscleIds": [
+        "left_trapezius",
+        "right_trapezius"
+      ],
+      "representation": "group"
+    },
+    "upper traps": {
+      "muscleIds": [
+        "left_trapezius",
+        "right_trapezius"
+      ],
+      "representation": "group"
+    },
+    "lower traps": {
+      "muscleIds": [
+        "left_trapezius",
+        "right_trapezius"
+      ],
+      "representation": "group"
+    },
+    "levator scapulae": {
+      "muscleIds": [
+        "left_trapezius",
+        "right_trapezius"
+      ],
+      "representation": "group"
+    },
+    "lats": {
+      "muscleIds": [
+        "left_latissimus_dorsi",
+        "right_latissimus_dorsi"
+      ],
+      "representation": "group"
+    },
+    "teres major": {
+      "muscleIds": [
+        "left_latissimus_dorsi",
+        "right_latissimus_dorsi"
+      ],
+      "representation": "group"
+    },
+    "mid back": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back"
+      ],
+      "representation": "approximate",
+      "note": "Scapular surface indication; deeper muscles are not visible individually."
+    },
+    "upper back": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back"
+      ],
+      "representation": "approximate",
+      "note": "Scapular surface indication; deeper muscles are not visible individually."
+    },
+    "upper-back": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back"
+      ],
+      "representation": "approximate",
+      "note": "Scapular surface indication; deeper muscles are not visible individually."
+    },
+    "rhomboids": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back"
+      ],
+      "representation": "approximate",
+      "note": "Scapular surface indication; deeper muscles are not visible individually."
+    },
+    "rotator cuff": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back",
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "approximate",
+      "note": "Approximate shoulder/scapular envelope, not a resolved rotator cuff."
+    },
+    "infraspinatus": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back",
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "approximate",
+      "note": "Approximate shoulder/scapular envelope, not a resolved rotator cuff."
+    },
+    "supraspinatus": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back",
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "approximate",
+      "note": "Approximate shoulder/scapular envelope, not a resolved rotator cuff."
+    },
+    "teres minor": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back",
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "approximate",
+      "note": "Approximate shoulder/scapular envelope, not a resolved rotator cuff."
+    },
+    "external rotators": {
+      "muscleIds": [
+        "left_mid_back",
+        "right_mid_back",
+        "left_deltoids",
+        "right_deltoids"
+      ],
+      "representation": "approximate",
+      "note": "Approximate shoulder/scapular envelope, not a resolved rotator cuff."
+    },
+    "spinal erectors": {
+      "muscleIds": [
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "surface"
+    },
+    "lower-back": {
+      "muscleIds": [
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "surface"
+    },
+    "lower back": {
+      "muscleIds": [
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "surface"
+    },
+    "abs": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals"
+      ],
+      "representation": "surface"
+    },
+    "rectus abdominis": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals"
+      ],
+      "representation": "surface"
+    },
+    "obliques": {
+      "muscleIds": [
+        "left_obliques",
+        "right_obliques"
+      ],
+      "representation": "surface"
+    },
+    "transverse abdominis": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals",
+        "left_obliques",
+        "right_obliques"
+      ],
+      "representation": "approximate",
+      "note": "Deep abdominal support represented on the overlying abdominal wall."
+    },
+    "core": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals",
+        "left_obliques",
+        "right_obliques",
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "approximate",
+      "note": "Broad core envelope."
+    },
+    "core-stability": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals",
+        "left_obliques",
+        "right_obliques",
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "approximate",
+      "note": "Broad core envelope."
+    },
+    "abs-core": {
+      "muscleIds": [
+        "left_abdominals",
+        "right_abdominals",
+        "left_obliques",
+        "right_obliques",
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "approximate",
+      "note": "Broad core envelope."
+    },
+    "quadratus lumborum": {
+      "muscleIds": [
+        "left_spinal_erectors",
+        "right_spinal_erectors",
+        "left_obliques",
+        "right_obliques"
+      ],
+      "representation": "approximate",
+      "note": "Deep muscle represented by lower back and flank."
+    },
+    "glutes": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "group",
+      "note": "One gluteal region per side; deep portions approximate."
+    },
+    "glute max": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "group",
+      "note": "One gluteal region per side; deep portions approximate."
+    },
+    "glute med": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "group",
+      "note": "One gluteal region per side; deep portions approximate."
+    },
+    "glute min": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "group",
+      "note": "One gluteal region per side; deep portions approximate."
+    },
+    "hip external rotators": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes",
+        "left_adductors",
+        "right_adductors"
+      ],
+      "representation": "approximate",
+      "note": "Broad hip envelope, not individual hip muscles."
+    },
+    "hips": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes",
+        "left_adductors",
+        "right_adductors"
+      ],
+      "representation": "approximate",
+      "note": "Broad hip envelope, not individual hip muscles."
+    },
+    "TFL": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "approximate",
+      "note": "Lateral hip indication within the gluteal group."
+    },
+    "tensor fasciae latae": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes"
+      ],
+      "representation": "approximate",
+      "note": "Lateral hip indication within the gluteal group."
+    },
+    "quads": {
+      "muscleIds": [
+        "left_quadriceps",
+        "right_quadriceps"
+      ],
+      "representation": "group"
+    },
+    "rectus femoris": {
+      "muscleIds": [
+        "left_quadriceps",
+        "right_quadriceps"
+      ],
+      "representation": "group"
+    },
+    "VMO": {
+      "muscleIds": [
+        "left_quadriceps",
+        "right_quadriceps"
+      ],
+      "representation": "group"
+    },
+    "hamstrings": {
+      "muscleIds": [
+        "left_hamstrings",
+        "right_hamstrings"
+      ],
+      "representation": "surface"
+    },
+    "adductors": {
+      "muscleIds": [
+        "left_adductors",
+        "right_adductors"
+      ],
+      "representation": "surface"
+    },
+    "calves": {
+      "muscleIds": [
+        "left_calves",
+        "right_calves"
+      ],
+      "representation": "group"
+    },
+    "gastrocnemius": {
+      "muscleIds": [
+        "left_calves",
+        "right_calves"
+      ],
+      "representation": "group"
+    },
+    "soleus": {
+      "muscleIds": [
+        "left_calves",
+        "right_calves"
+      ],
+      "representation": "group"
+    },
+    "tibialis anterior": {
+      "muscleIds": [
+        "left_tibialis_anterior",
+        "right_tibialis_anterior"
+      ],
+      "representation": "surface"
+    },
+    "tibialis posterior": {
+      "muscleIds": [
+        "left_calves",
+        "right_calves"
+      ],
+      "representation": "approximate",
+      "note": "Deep posterior lower-leg indication only."
+    },
+    "serratus": {
+      "muscleIds": [
+        "left_obliques",
+        "right_obliques"
+      ],
+      "representation": "approximate",
+      "note": "Lateral trunk indication; no separately resolved serratus surface."
+    },
+    "biceps tendons": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "cardiorespiratory system": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "deep neck flexors": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "neck extensors": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "neck flexors": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "neck lateral flexors": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "neck": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "intrinsic foot muscles": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "hip flexors": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "stabilizers": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "other": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "thumbs": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "cardio": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "mobility": {
+      "muscleIds": [],
+      "representation": "unrepresented",
+      "note": "No anatomically specific surface in this asset. Retain the exercise text; do not substitute a pain region."
+    },
+    "arms": {
+      "muscleIds": [
+        "left_biceps",
+        "right_biceps",
+        "left_triceps",
+        "right_triceps",
+        "left_forearms",
+        "right_forearms"
+      ],
+      "representation": "group"
+    },
+    "back": {
+      "muscleIds": [
+        "left_trapezius",
+        "right_trapezius",
+        "left_latissimus_dorsi",
+        "right_latissimus_dorsi",
+        "left_mid_back",
+        "right_mid_back",
+        "left_spinal_erectors",
+        "right_spinal_erectors"
+      ],
+      "representation": "group"
+    },
+    "legs": {
+      "muscleIds": [
+        "left_glutes",
+        "right_glutes",
+        "left_quadriceps",
+        "right_quadriceps",
+        "left_hamstrings",
+        "right_hamstrings",
+        "left_adductors",
+        "right_adductors",
+        "left_calves",
+        "right_calves",
+        "left_tibialis_anterior",
+        "right_tibialis_anterior"
+      ],
+      "representation": "group"
+    },
+    "full-body": {
+      "muscleIds": [
+        "left_abdominals",
+        "left_adductors",
+        "left_biceps",
+        "left_calves",
+        "left_deltoids",
+        "left_forearms",
+        "left_glutes",
+        "left_hamstrings",
+        "left_latissimus_dorsi",
+        "left_mid_back",
+        "left_obliques",
+        "left_pectorals",
+        "left_quadriceps",
+        "left_spinal_erectors",
+        "left_tibialis_anterior",
+        "left_trapezius",
+        "left_triceps",
+        "right_abdominals",
+        "right_adductors",
+        "right_biceps",
+        "right_calves",
+        "right_deltoids",
+        "right_forearms",
+        "right_glutes",
+        "right_hamstrings",
+        "right_latissimus_dorsi",
+        "right_mid_back",
+        "right_obliques",
+        "right_pectorals",
+        "right_quadriceps",
+        "right_spinal_erectors",
+        "right_tibialis_anterior",
+        "right_trapezius",
+        "right_triceps"
+      ],
+      "representation": "group",
+      "note": "Use only for an explicit full-body label, never as an unknown-term fallback."
+    }
+  },
+  "catalogCoverage": {
+    "source": "exports/exercise_catalog_live_raw.json",
+    "sourceSha256": "90e8e8aa1c29d04b506102c664a320acfe1fbb527a97889a7bef365bd65c4514",
+    "distinctTerms": 69,
+    "terms": [
+      "TFL",
+      "VMO",
+      "abs",
+      "adductors",
+      "anconeus",
+      "biceps",
+      "biceps tendons",
+      "brachialis",
+      "brachioradialis",
+      "calves",
+      "cardiorespiratory system",
+      "core",
+      "deep neck flexors",
+      "external rotators",
+      "forearms",
+      "front delts",
+      "gastrocnemius",
+      "glute max",
+      "glute med",
+      "glute min",
+      "glutes",
+      "grip",
+      "hamstrings",
+      "hip external rotators",
+      "hip flexors",
+      "hips",
+      "infraspinatus",
+      "intrinsic foot muscles",
+      "lateral delts",
+      "lats",
+      "levator scapulae",
+      "lower pecs",
+      "lower traps",
+      "mid back",
+      "neck extensors",
+      "neck flexors",
+      "neck lateral flexors",
+      "obliques",
+      "other",
+      "pecs",
+      "quadratus lumborum",
+      "quads",
+      "rear delts",
+      "rectus abdominis",
+      "rectus femoris",
+      "rhomboids",
+      "rotator cuff",
+      "serratus",
+      "shoulders",
+      "side delts",
+      "soleus",
+      "spinal erectors",
+      "stabilizers",
+      "supraspinatus",
+      "tensor fasciae latae",
+      "teres major",
+      "teres minor",
+      "thumbs",
+      "tibialis anterior",
+      "tibialis posterior",
+      "transverse abdominis",
+      "traps",
+      "triceps",
+      "triceps long head",
+      "upper back",
+      "upper chest",
+      "upper traps",
+      "wrist extensors",
+      "wrist flexors"
+    ],
+    "normalization": "Trim and compare case-insensitively. Alias keys retain source spellings. Unknown terms return no highlight.",
+    "focusSources": [
+      "domains/workout/catalog.ts",
+      "domains/workout/exercise-focus.ts"
+    ]
+  },
+  "morphTargets": [
+    {
+      "name": "adiposity",
+      "index": 0,
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "meaning": "Increased softness and torso, abdominal, hip and limb fullness from the defined base. Approximate appearance, not a body-fat percentage."
+    },
+    {
+      "name": "muscularity",
+      "index": 1,
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "meaning": "Increased muscular volume and relief from the defined base; independent of the body variant."
+    },
+    {
+      "name": "fullness_corrective",
+      "index": 2,
+      "range": [
+        0,
+        1
+      ],
+      "default": 0,
+      "meaning": "Authored combined endpoint retaining softness and restrained muscle relief. Set to adiposity * muscularity; never expose as an independent control."
+    }
+  ],
+  "morphApplication": "Apply the same three weights to body and every highlight node, including currently hidden nodes. Clamp controls to [0,1].",
+  "variantDifferences": {
+    "male": "Authored realistic male body, visible muscle relief and low-waisted fitted coverage.",
+    "female": "Authored realistic female body, visible muscle relief, low-waisted coverage and fitted chest coverage.",
+    "shared": "Identical source topology, anatomical IDs, classification, naming, material interface, pose, 1.72m height and morph meanings."
+  },
+  "limitations": [
+    "Approximate surface anatomy for fitness explanation, not a medical anatomical atlas.",
+    "Muscle heads are grouped; many deep structures have only an approximate indication or no representation.",
+    "No normal texture is required at phone size; shape and smooth normals carry detail.",
+    "No rig or animations.",
+    "Morph controls describe approximate appearance, not measured body composition.",
+    "Phone GPU performance and actual Android device behavior have not been validated."
+  ],
+  "appearanceMapping": "Continuous interpolation of authored appearance endpoints, not a calibrated body-fat-percentage scale. Keep adiposity and muscularity independent; do not extrapolate beyond [0,1]. Broader sizes or different fat distributions require additional authored endpoints."
+}

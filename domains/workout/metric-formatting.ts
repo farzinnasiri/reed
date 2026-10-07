@@ -25,21 +25,21 @@ export function formatMetricValue(field: RecipeFieldDefinition, value: number) {
 
 export function formatMetricLabel(field: RecipeFieldDefinition) {
   if (field.key === 'load') {
-    return 'LOAD (KG)';
+    return 'Load (kg)';
   }
   if (field.key === 'assistLoad') {
-    return 'ASSIST (KG)';
+    return 'Assist (kg)';
   }
   if (field.key === 'addedLoad') {
-    return 'ADDED LOAD (KG)';
+    return 'Added load (kg)';
   }
   if (field.key === 'reps') {
-    return 'REPS';
+    return 'Reps';
   }
   if (field.key === 'rpe') {
-    return 'TARGET RPE';
+    return 'Target RPE';
   }
-  return field.label.toUpperCase();
+  return field.label;
 }
 
 export function roundMetricValue(value: number, precision = 2) {

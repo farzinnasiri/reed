@@ -1,127 +1,69 @@
-import * as SecureStore from 'expo-secure-store';
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Platform, useColorScheme } from 'react-native';
-import { darkTheme, lightTheme, type ReedTheme, type ThemePreference } from '@/design/system';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { ReedAccent, ReedGlowPalette, ReedTheme } from '@/design/system';
+import { accentForGender, DEFAULT_ACCENT_PREFERENCE, parseAccentPreference, resolveAccent, type AccentChoice } from './accent-preference';
+import { setReedMotionReduced } from './motion';
+import { useReedReducedMotion } from './use-reed-reduced-motion';
+import { useAccentAppearance } from './use-accent-appearance';
 
-const THEME_PREFERENCE_KEY = 'reed.themePreference';
-
-type ReedThemeContextValue = {
-  preference: ThemePreference;
-  reducedTransparency: boolean;
-  resolvedMode: ReedTheme['mode'];
-  setPreference: (preference: ThemePreference) => void;
-  theme: ReedTheme;
-};
-
-const ReedThemeContext = createContext<ReedThemeContextValue | null>(null);
-
-function isThemePreference(value: string | null): value is ThemePreference {
-  return value === 'light' || value === 'dark' || value === 'system';
-}
-
-async function readThemePreference() {
-  if (Platform.OS === 'web') {
-    return typeof globalThis.localStorage === 'undefined'
-      ? null
-      : globalThis.localStorage.getItem(THEME_PREFERENCE_KEY);
-  }
-
-  return SecureStore.getItemAsync(THEME_PREFERENCE_KEY);
-}
-
-async function writeThemePreference(preference: ThemePreference) {
-  if (Platform.OS === 'web') {
-    if (typeof globalThis.localStorage !== 'undefined') {
-      globalThis.localStorage.setItem(THEME_PREFERENCE_KEY, preference);
-    }
-
-    return;
-  }
-
-  await SecureStore.setItemAsync(THEME_PREFERENCE_KEY, preference);
-}
+const ACCENT_STORAGE_KEY = 'reed.accent.v1';
+type ThemeContext = { theme: ReedTheme; accent: ReedAccent; accentChoice: AccentChoice; automaticAccent: ReedAccent; glowPalette: ReedGlowPalette; setAccentChoice: (choice: AccentChoice) => void; setAutomaticAccent: (gender: string | null | undefined, options?: { onlyIfUnset?: boolean }) => void };
+const ReedThemeContext = createContext<ThemeContext | null>(null);
 
 export function ReedThemeProvider({ children }: { children: ReactNode }) {
-  const systemColorScheme = useColorScheme();
-  const [preference, setPreferenceState] = useState<ThemePreference>('system');
-  const [reducedTransparency, setReducedTransparency] = useState(false);
-  const resolvedMode =
-    preference === 'system' ? (systemColorScheme === 'dark' ? 'dark' : 'light') : preference;
-  const theme = resolvedMode === 'dark' ? darkTheme : lightTheme;
-
+  const reduced = useReedReducedMotion();
+  const [preference, setPreference] = useState(DEFAULT_ACCENT_PREFERENCE);
+  const [loaded, setLoaded] = useState(false);
+  const touched = useRef({ choice: false, automatic: false });
+  const automaticInitialized = useRef(false);
+  const writeQueue = useRef(Promise.resolve());
+  useEffect(() => { setReedMotionReduced(reduced); }, [reduced]);
   useEffect(() => {
-    let cancelled = false;
-
-    void readThemePreference()
-      .then(value => {
-        if (!cancelled && isThemePreference(value)) {
-          setPreferenceState(value);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const setPreference = useCallback((nextPreference: ThemePreference) => {
-    setPreferenceState(nextPreference);
-    void writeThemePreference(nextPreference).catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== 'ios') {
-      return;
-    }
-
-    let cancelled = false;
-
-    void AccessibilityInfo.isReduceTransparencyEnabled()
-      .then(enabled => {
-        if (!cancelled) {
-          setReducedTransparency(enabled);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setReducedTransparency(false);
-        }
-      });
-
-    const subscription = AccessibilityInfo.addEventListener('reduceTransparencyChanged', enabled => {
-      if (!cancelled) {
-        setReducedTransparency(enabled);
+    let active = true;
+    void AsyncStorage.getItem(ACCENT_STORAGE_KEY).then(raw => {
+      if (!active) return;
+      const saved = parseAccentPreference(raw);
+      if (saved) {
+        setPreference(current => ({ choice: touched.current.choice ? current.choice : saved.choice, automatic: touched.current.automatic ? current.automatic : saved.automatic }));
+        automaticInitialized.current = true;
       }
-    });
-
-    return () => {
-      cancelled = true;
-      subscription.remove();
-    };
+    }).catch(() => {}).finally(() => { if (active) setLoaded(true); });
+    return () => { active = false; };
   }, []);
-
-  return (
-    <ReedThemeContext.Provider
-      value={{
-        preference,
-        reducedTransparency,
-        resolvedMode,
-        setPreference,
-        theme,
-      }}
-    >
-      {children}
-    </ReedThemeContext.Provider>
-  );
+  useEffect(() => {
+    if (!loaded) return;
+    // Serialize writes so rapid taps cannot leave an older selection on disk.
+    writeQueue.current = writeQueue.current.then(() => AsyncStorage.setItem(ACCENT_STORAGE_KEY, JSON.stringify(preference))).catch(() => {});
+  }, [loaded, preference]);
+  const setAccentChoice = useCallback((choice: AccentChoice) => {
+    touched.current.choice = true;
+    setPreference(current => current.choice === choice ? current : { ...current, choice });
+  }, []);
+  const setAutomaticAccent = useCallback((gender: string | null | undefined, options?: { onlyIfUnset?: boolean }) => {
+    // Profile data initializes a new device; it cannot undo an explicit local onboarding choice.
+    if (options?.onlyIfUnset && (!loaded || automaticInitialized.current)) return;
+    automaticInitialized.current = true;
+    touched.current.automatic = true;
+    const automatic = accentForGender(gender);
+    setPreference(current => current.automatic === automatic ? current : { ...current, automatic });
+  }, [loaded]);
+  const accent = resolveAccent(preference);
+  const appearance = useAccentAppearance(accent, reduced);
+  const value = useMemo(() => ({ ...appearance, accent, accentChoice: preference.choice, automaticAccent: preference.automatic, setAccentChoice, setAutomaticAccent }), [accent, appearance, preference.automatic, preference.choice, setAccentChoice, setAutomaticAccent]);
+  return <ReedThemeContext.Provider value={value}>{children}</ReedThemeContext.Provider>;
 }
 
+/** A fresh onboarding starts blue even when the device has an app color saved. */
+export function ReedOnboardingThemeProvider({ gender, children }: { gender: string | null; children: ReactNode }) {
+  const parent = useReedTheme();
+  const reduced = useReedReducedMotion();
+  const accent = accentForGender(gender);
+  const appearance = useAccentAppearance(accent, reduced);
+  const value = useMemo(() => ({ ...parent, ...appearance, accent }), [accent, appearance, parent]);
+  return <ReedThemeContext.Provider value={value}>{children}</ReedThemeContext.Provider>;
+}
 export function useReedTheme() {
   const context = useContext(ReedThemeContext);
-
-  if (!context) {
-    throw new Error('useReedTheme must be used inside ReedThemeProvider.');
-  }
-
+  if (!context) throw new Error('useReedTheme must be used inside ReedThemeProvider.');
   return context;
 }

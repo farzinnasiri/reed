@@ -1,0 +1,20 @@
+{
+  "encoding": "gzip",
+  "level": 9,
+  "variants": {
+    "male": {
+      "originalBytes": 5829480,
+      "gzipBytes": 2996291,
+      "gzipRoundtripByteIdentical": true,
+      "originalSha256": "b1b064221202955c13c78fdd625d6e43e864a3fdf25fdb9a6feb8990e7f36658",
+      "gzipSha256": "b3ada95f71c85e7042900c89e31ac96a77e42ab2ced3aa974a92f96de874c97c"
+    },
+    "female": {
+      "originalBytes": 5840684,
+      "gzipBytes": 3000941,
+      "gzipRoundtripByteIdentical": true,
+      "originalSha256": "b872bd235001bb3ee3f034592fd4b248d83a6c2e42cfea7d93559474e551b195",
+      "gzipSha256": "a9c3695dd35e7af24e09743f80af667444a099af7dcffd67a3e2583681497b2b"
+    }
+  }
+}

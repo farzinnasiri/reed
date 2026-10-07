@@ -1,3 +1,10 @@
+import { sessionDurationSeconds } from '../domains/workout/session-duration';
+import { canReedReact } from '../domains/reed/reactions';
+import { messageReactionValidator } from './reedReactionValues';
+import { reedMessageContextValidator, validateReedMessageContext, reedMessageContextLine } from './reedSessionContext';
+export { getSessionWhisper } from './reedSessionWhispers';
+import { prepareSessionAction, saveSessionAction } from './reedSessionActions';
+import { prepareChatPlan, saveChatPlan } from './plannedSessions';
 import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
@@ -5,7 +12,11 @@ import { internalMutation, internalQuery, mutation, query } from './_generated/s
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { requireViewerProfile } from './profiles';
+import { loadProfileTimeZone } from './profileTimeZone';
 import { contextAgentGateDecision, pickAgentThinkingMessage } from './reedContextGate';
+import { sanitizeReedPresentation } from './reedWidgets';
+import schema from './schema';
+import { assignMessageChapter, chapterGapMinutes, chapterMetadata, startsNewChapter } from './reedChapters';
 
 const DEFAULT_REED_SYSTEM_PROMPT = `You are Reed, a precise training coach inside a fitness app.
 You are warm, direct, and concise. You help the user understand training, momentum, recovery, and next focus.
@@ -21,16 +32,11 @@ const COLD_RECENT_MESSAGE_COUNT = 0;
 const COMPACT_AFTER_MESSAGE_COUNT = 24;
 const COACH_STATE_REFRESH_AFTER_USER_MESSAGES = 4;
 const MAX_REED_IMAGE_ATTACHMENTS = 5;
+const MAX_MESSAGE_PAGE_SIZE = 50;
 const MAX_REED_IMAGE_BYTES = 8 * 1024 * 1024;
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 const DEFAULT_SUMMARY_PROMPT_KEY = 'reed_memory_summary_system';
 const DEFAULT_COACH_STATE_PROMPT_KEY = 'reed_coach_state_system';
-const COACHING_MEMORY_PROMPT_KEY = 'reed_coaching_memory_system';
-const CONTEXT_AGENT_PROMPT_KEY = 'reed_context_agent_system';
-const CHECKED_IN_CHAT_PROMPT_HASH = 'he064728b';
-const CHECKED_IN_COACH_STATE_PROMPT_HASH = 'h7a119f49';
-const CHECKED_IN_COACHING_MEMORY_PROMPT_HASH = 'hda6c67d4';
-const CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH = 'h923c95d';
 const DEFAULT_REED_SUMMARY_PROMPT = `You update Reed's compact memory of an ongoing coaching conversation.
 
 This memory is objective continuity for a coach. It is not a transcript, not a psychological profile, not a private coaching strategy, and not an analysis of the user's personality.
@@ -121,6 +127,22 @@ const reedImageAttachmentInputValidator = v.object({
   storageId: v.id('_storage'),
 });
 
+const messageFields = {
+  ...schema.tables.reedMessages.validator.fields,
+  _id: v.id('reedMessages'), _creationTime: v.number(),
+  attachments: v.array(v.object({
+    _id: v.id('reedMessageAttachments'), height: v.null(), width: v.null(),
+    mediaType: schema.tables.reedMessageAttachments.validator.fields.mediaType,
+    status: schema.tables.reedMessageAttachments.validator.fields.status,
+    sortOrder: v.number(), url: v.string(),
+  })),
+};
+const messageValidator = v.object(messageFields);
+const relatedMessageValidator = v.object({ ...messageFields, relatedSession: v.union(v.null(), v.object({
+  endedAt: v.number(), exerciseCount: v.number(), sessionId: v.id('liveSessions'), startedAt: v.number(),
+  manualDurationSeconds: v.optional(v.number()),
+})) });
+
 export const getOrCreateThread = mutation({
   args: {},
   handler: async ctx => {
@@ -131,12 +153,13 @@ export const getOrCreateThread = mutation({
 
 export const listMessages = query({
   args: { limit: v.optional(v.number()) },
+  returns: v.object({ hasMore: v.boolean(), messages: v.array(messageValidator) }),
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const thread = await getActiveThread(ctx, profile._id);
     if (!thread) return { hasMore: false, messages: [] };
 
-    const limit = Math.min(Math.max(args.limit ?? 40, 1), 200);
+    const limit = Number.isFinite(args.limit ?? 40) ? Math.min(Math.max(Math.floor(args.limit ?? 40), 1), 200) : 40;
     const rows = await ctx.db
       .query('reedMessages')
       .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', thread._id))
@@ -156,6 +179,11 @@ export const listMessages = query({
 
 export const listMessagesPaginated = query({
   args: { paginationOpts: paginationOptsValidator },
+  returns: v.object({
+    page: v.array(relatedMessageValidator), isDone: v.boolean(), continueCursor: v.string(),
+    splitCursor: v.optional(v.union(v.string(), v.null())),
+    pageStatus: v.optional(v.union(v.literal('SplitRecommended'), v.literal('SplitRequired'), v.null())),
+  }),
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const thread = await getActiveThread(ctx, profile._id);
@@ -171,74 +199,92 @@ export const listMessagesPaginated = query({
       .query('reedMessages')
       .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', thread._id))
       .order('desc')
-      .paginate(args.paginationOpts);
+      .paginate({ ...args.paginationOpts, numItems: Number.isFinite(args.paginationOpts.numItems)
+        ? Math.min(MAX_MESSAGE_PAGE_SIZE, Math.max(1, Math.floor(args.paginationOpts.numItems))) : MAX_MESSAGE_PAGE_SIZE });
 
+    const page = await attachMessageImages(ctx, result.page.filter(message => !isInternalArtifactMessage(message)));
     return {
       ...result,
-      page: await attachMessageImages(ctx, result.page.filter(message => !isInternalArtifactMessage(message))),
+      page: await attachRelatedSessions(ctx, profile._id, page),
     };
   },
 });
 
 export const getPresence = query({
-  args: {},
-  handler: async ctx => {
+  args: { now: v.optional(v.number()) },
+  handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const thread = await getActiveThread(ctx, profile._id);
-    const now = Date.now();
+    const now = args.now ?? thread?.lastMessageAt ?? 0;
     const lastMessageAt = thread?.lastMessageAt ?? null;
     const reentryState = classifyReentry(lastMessageAt, now).state;
-    return { lastMessageAt, reentryState };
+    const chapter = thread?.currentChapterId ? await ctx.db.get(thread.currentChapterId) : null;
+    return { lastMessageAt, reentryState, currentChapterId: chapter?._id ?? null,
+      wouldStartNewChapter: startsNewChapter(chapter ? Math.max(lastMessageAt ?? 0, chapter.startedAt) : lastMessageAt, now, chapterGapMinutes(), chapter?.closedAt),
+      chapterGapMinutes: chapterGapMinutes(),
+      chapterClosedAt: chapter?.closedAt ?? null,
+      timeZone: await loadProfileTimeZone(ctx, profile._id),
+      chapter: chapter ? await chapterMetadata(ctx, chapter) : null,
+      previousChapter: chapter?.previousChapterId ? await ctx.db.get(chapter.previousChapterId).then(row => row ? chapterMetadata(ctx, row) : null) : null,
+    };
+  },
+});
+
+export const getChapterHeader = query({
+  args: { chapterId: v.id('reedChapters') },
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const chapter = await ctx.db.get(args.chapterId);
+    if (!chapter || chapter.profileId !== profile._id) throw new ConvexError('Chapter not found.');
+    return await chapterMetadata(ctx, chapter);
+  },
+});
+
+export const listChapterMessages = query({
+  args: { chapterId: v.id('reedChapters'), paginationOpts: paginationOptsValidator },
+  returns: v.object({ page: v.array(relatedMessageValidator), isDone: v.boolean(), continueCursor: v.string(), splitCursor: v.optional(v.union(v.string(), v.null())), pageStatus: v.optional(v.union(v.literal('SplitRecommended'), v.literal('SplitRequired'), v.null())) }),
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const chapter = await ctx.db.get(args.chapterId);
+    if (!chapter || chapter.profileId !== profile._id) throw new ConvexError('Chapter not found.');
+    const result = await ctx.db.query('reedMessages').withIndex('by_chapter_id_and_created_at', q => q.eq('chapterId', chapter._id)).order('desc').paginate({ ...args.paginationOpts, numItems: Number.isFinite(args.paginationOpts.numItems) ? Math.min(MAX_MESSAGE_PAGE_SIZE, Math.max(1, Math.floor(args.paginationOpts.numItems))) : 30 });
+    const page = await attachMessageImages(ctx, result.page.filter(message => !isInternalArtifactMessage(message)));
+    return { ...result, page: await attachRelatedSessions(ctx, profile._id, page) };
+  },
+});
+
+export const setMessageReaction = mutation({
+  args: { messageId: v.id('reedMessages'), reaction: v.union(messageReactionValidator, v.null()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const message = await ctx.db.get(args.messageId);
+    if (!message || message.profileId !== profile._id || message.role !== 'assistant' || message.status !== 'sent' || isInternalArtifactMessage(message)) {
+      throw new ConvexError('That response is not available for reactions.');
+    }
+    if (message.reaction === (args.reaction ?? undefined)) return null;
+    await ctx.db.patch(message._id, { reaction: args.reaction ?? undefined, reactionUpdatedAt: Date.now() });
+    return null;
   },
 });
 
 export const listQuickActions = query({
   args: {},
   returns: v.array(quickActionValidator),
-  handler: async () => [...DEFAULT_QUICK_ACTIONS].sort((left, right) => left.sortOrder - right.sortOrder),
-});
-
-export const upsertActivePrompt = mutation({
-  args: { adminSecret: v.string(), content: v.string(), key: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    assertPromptAdmin(args.adminSecret);
-    const key = args.key ?? DEFAULT_PROMPT_KEY;
-    const content = args.content.trim();
-    if (content.length < 100) throw new ConvexError('Prompt content is too short.');
-
-    return await upsertPromptVersion(ctx, { key, content });
+  handler: async ctx => {
+    await requireViewerProfile(ctx);
+    return [...DEFAULT_QUICK_ACTIONS].sort((left, right) => left.sortOrder - right.sortOrder);
   },
 });
 
-export const seedCoachStatePrompt = mutation({
-  args: { content: v.string() },
-  handler: async (ctx, args) => {
-    const content = args.content.trim();
-    if (simpleHash(content) !== CHECKED_IN_COACH_STATE_PROMPT_HASH) {
-      throw new ConvexError('Coach state prompt content does not match the checked-in prompt.');
-    }
-
-    return await upsertPromptVersion(ctx, {
-      key: DEFAULT_COACH_STATE_PROMPT_KEY,
-      content,
-    });
-  },
-});
-
-export const seedCheckedInPrompt = mutation({
-  args: { content: v.string(), key: v.string() },
-  handler: async (ctx, args) => {
-    const content = args.content.trim();
-    const expectedHash = checkedInPromptHash(args.key);
-    if (!expectedHash) throw new ConvexError('Prompt key is not a checked-in prompt.');
-    if (simpleHash(content) !== expectedHash) {
-      throw new ConvexError('Prompt content does not match the checked-in prompt.');
-    }
-
-    return await upsertPromptVersion(ctx, {
-      key: args.key,
-      content,
-    });
+// Initial fallback for the two suggestions beside the chat mascot. Keep this separate from
+// Today/composer starters so it can later become contextual without changing their contract.
+export const listNextSuggestions = query({
+  args: {},
+  returns: v.array(quickActionValidator),
+  handler: async ctx => {
+    await requireViewerProfile(ctx);
+    return DEFAULT_QUICK_ACTIONS.filter(action => action.id === 'next-focus' || action.id === 'check-progress');
   },
 });
 
@@ -252,6 +298,7 @@ export const generateImageUploadUrl = mutation({
 
 export const sendMessage = mutation({
   args: {
+    context: v.optional(reedMessageContextValidator),
     attachments: v.optional(v.array(reedImageAttachmentInputValidator)),
     clientNonce: v.optional(v.string()),
     clientNow: v.optional(v.number()),
@@ -280,12 +327,16 @@ export const sendMessage = mutation({
       if (existing) return { threadId: existing.threadId, userMessageId: existing._id, assistantMessageId: null };
     }
 
+    await validateReedMessageContext(ctx, profile._id, args.context);
     const thread = await getOrCreateActiveThread(ctx, profile._id, now);
     const priorLastMessageAt = thread.lastMessageAt ?? null;
+    const chapterId = await assignMessageChapter(ctx, thread, now);
     const { state, recentTurnCount } = classifyReentry(priorLastMessageAt, now);
     const userMessageContent = content || `Attached ${attachments.length} image${attachments.length === 1 ? '' : 's'}`;
 
     const userMessageId = await ctx.db.insert('reedMessages', {
+      chapterId,
+      ...(args.context ? { context: args.context } : {}),
       threadId: thread._id,
       profileId: profile._id,
       role: 'user',
@@ -315,6 +366,7 @@ export const sendMessage = mutation({
     const shouldShowAgentThinkingMessage = contextAgentGateDecision(userMessageContent).run;
     if (shouldShowAgentThinkingMessage) {
       await ctx.db.insert('reedMessages', {
+        chapterId,
         threadId: thread._id,
         profileId: profile._id,
         role: 'assistant',
@@ -327,6 +379,7 @@ export const sendMessage = mutation({
     }
 
     const assistantMessageId = await ctx.db.insert('reedMessages', {
+      chapterId,
       threadId: thread._id,
       profileId: profile._id,
       role: 'assistant',
@@ -390,7 +443,10 @@ export const retryAssistantMessage = mutation({
       content: '',
       status: 'pending',
       completedAt: undefined,
+      replyRecovery: undefined,
       error: undefined,
+      widget: undefined,
+      replies: undefined,
     });
 
     await ctx.scheduler.runAfter(0, internal.reedAgent.runAssistant, {
@@ -433,9 +489,13 @@ export const loadAssistantContext = internalQuery({
     imageObservations: Array<{ attachmentId: Id<'reedMessageAttachments'>; narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
     appTimeline: ReedAppTimelineEvent[];
     currentAppState: string;
+    messageContext: string | null;
     journeySummary: string | null;
     memorySummary: string | null;
     recentMessages: Doc<'reedMessages'>[];
+    recentReactionSignals: Doc<'reedMessages'>[];
+    reactionAllowed: boolean;
+    widgetChoices: { sessions: Array<{ sessionId: Id<'liveSessions'>; endedAt: number }>; presets: Array<{ key: string; label: string }> };
   }> => {
     const thread = await ctx.db.get(args.threadId);
     const userMessage = await ctx.db.get(args.userMessageId);
@@ -453,13 +513,24 @@ export const loadAssistantContext = internalQuery({
       .first();
     const summary = thread.activeSummaryId ? await ctx.db.get(thread.activeSummaryId) : null;
     const recentMessages = await loadRecentMessages(ctx, thread._id, args.recentTurnCount, userMessage._id);
+    const recentUserTurns = (await ctx.db.query('reedMessages')
+      .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', thread._id).lt('createdAt', userMessage.createdAt))
+      .order('desc').take(12)).filter(row => row.role === 'user').reverse();
+    // Include fresh feedback on older, compacted messages in the next turn too.
+    const previousUserAt = recentUserTurns.at(-1)?.createdAt ?? 0;
+    const recentReactionSignals = (await ctx.db.query('reedMessages')
+      .withIndex('by_thread_id_and_reaction_updated_at', q => q.eq('threadId', thread._id).gt('reactionUpdatedAt', previousUserAt))
+      .order('desc').take(10)).filter(row => row.role === 'assistant' && row.reaction && !recentMessages.some(recent => recent._id === row._id));
+    const reactionAllowed = canReedReact(recentUserTurns);
     const coachState = await getCoachStateForThread(ctx, thread._id);
     const imageObservations = await loadImageObservations(ctx, userMessage._id);
     const appTimeline = await loadRecentAppTimeline(ctx, thread.profileId, args.clientNow);
+    const presets = await ctx.db.query('quickLogPresets')
+      .withIndex('by_enabled_and_sort_order', q => q.eq('isEnabled', true)).take(30);
 
     return {
       clientNow: args.clientNow,
-      clientTimeZone: args.clientTimeZone,
+      clientTimeZone: await loadProfileTimeZone(ctx, profile._id),
       priorLastMessageAt: args.priorLastMessageAt,
       reentryState: args.reentryState,
       thread,
@@ -477,9 +548,13 @@ export const loadAssistantContext = internalQuery({
       imageObservations,
       appTimeline: appTimeline.events,
       currentAppState: appTimeline.currentState,
+      messageContext: await reedMessageContextLine(ctx, profile._id, userMessage.context),
       journeySummary: journey?.renderedContext ?? null,
       memorySummary: summary?.content ?? null,
       recentMessages,
+      recentReactionSignals,
+      reactionAllowed,
+      widgetChoices: { sessions: appTimeline.widgetSessions, presets: presets.map(preset => ({ key: preset.key, label: preset.label })) },
     };
   },
 });
@@ -488,20 +563,64 @@ export const completeAssistantMessage = internalMutation({
   args: {
     assistantMessageId: v.id('reedMessages'),
     content: v.string(),
+    reaction: v.optional(messageReactionValidator),
     completedAt: v.number(),
     reentryState: reentryStateValidator,
     threadId: v.id('reedThreads'),
+    userMessageId: v.optional(v.id('reedMessages')),
+    plan: v.optional(v.any()),
+    sessionAction: v.optional(v.any()),
+    // Model fields are untrusted; sanitize them transactionally before persistence.
+    widget: v.optional(v.any()),
+    replies: v.optional(v.any()),
   },
+  returns: v.object({ widgetKind: v.union(v.string(), v.null()), replyCount: v.number(), planDecision: v.string(), actionDecision: v.string() }),
   handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.assistantMessageId);
+    const thread = await ctx.db.get(args.threadId);
+    if (!message || message.role !== 'assistant' || message.threadId !== args.threadId || message.profileId !== thread?.profileId) {
+      throw new ConvexError('Assistant message not found in thread.');
+    }
+    if (message.status === 'sent') return { widgetKind: message.widget?.kind ?? null, replyCount: message.replies?.length ?? 0, planDecision: 'already_completed', actionDecision: 'already_completed' };
+    const user = args.userMessageId ? await ctx.db.get(args.userMessageId) : null;
+    const prepared = args.plan !== undefined && args.sessionAction === undefined && user ? await prepareChatPlan(ctx, message.profileId, args.plan, user, message) : null;
+    const preparedAction = args.sessionAction !== undefined && args.plan === undefined && user ? await prepareSessionAction(ctx, message.profileId, args.sessionAction, user, message) : null;
+    const actionId = preparedAction ? await saveSessionAction(ctx, message.profileId, message._id, preparedAction) : null;
+    const plannedSessionId = prepared ? await saveChatPlan(ctx, message.profileId, message._id, prepared) : null;
+    const missingClaimedOperation = user?.role === 'user' && user.profileId === message.profileId
+      && user.threadId === message.threadId && args.plan === undefined && args.sessionAction === undefined
+      && /\b(revised|updated|shortened|saved|created|swapped|changed|replaced)\b/i.test(args.content)
+      && /\b(?:make\b[\s\S]{0,100}\b(?:shorter|longer|easier|harder)|swap|replace|revise|shorten|lengthen)\b/i.test(user.content);
+    const invalidOperation = (args.plan !== undefined && !prepared) || (args.sessionAction !== undefined && !preparedAction);
+    const content = missingClaimedOperation
+      ? 'I could not save that proposed change. Ask me to try again.'
+      : invalidOperation
+      ? args.sessionAction !== undefined
+        ? 'I could not save that swap proposal. Your session is unchanged. Ask me for a fresh option.'
+        : 'I could not save that plan. Ask me to try again with supported exercises.'
+      : args.content;
+    const presentation = await sanitizeMessagePresentation(ctx, message.profileId, {
+      ...args, widget: actionId ? { kind: 'session_change', actionId } : plannedSessionId ? { kind: 'plan', plannedSessionId } : args.plan !== undefined || args.sessionAction !== undefined ? undefined : args.widget,
+    }, content);
     await ctx.db.patch(args.assistantMessageId, {
-      content: args.content,
+      content,
       status: 'sent',
       completedAt: args.completedAt,
+      replyRecovery: undefined,
+      widget: presentation.widget,
+      replies: presentation.replies,
     });
     await ctx.db.patch(args.threadId, {
       updatedAt: args.completedAt,
       lastMessageAt: args.completedAt,
     });
+
+    if (args.reaction && user && user.role === 'user' && user.profileId === message.profileId && user.threadId === message.threadId) {
+      const turns = (await ctx.db.query('reedMessages')
+        .withIndex('by_thread_id_and_created_at', q => q.eq('threadId', message.threadId).lt('createdAt', user.createdAt))
+        .order('desc').take(12)).filter(row => row.role === 'user').reverse();
+      if (canReedReact(turns)) await ctx.db.patch(user._id, { reaction: args.reaction });
+    }
 
     const unsummarized = await loadUnsummarizedMessages(ctx, args.threadId, COMPACT_AFTER_MESSAGE_COUNT + 1);
     if (unsummarized.length >= COMPACT_AFTER_MESSAGE_COUNT) {
@@ -518,6 +637,7 @@ export const completeAssistantMessage = internalMutation({
         threadId: args.threadId,
       });
     }
+    return { widgetKind: presentation.widget?.kind ?? null, replyCount: presentation.replies?.length ?? 0, actionDecision: missingClaimedOperation ? 'missing_operation_text_only' : preparedAction ? 'proposed' : args.sessionAction !== undefined ? 'invalid_text_only' : 'none', planDecision: missingClaimedOperation ? 'missing_operation_text_only' : prepared ? prepared.existing ? 'revised' : 'created' : args.plan !== undefined ? 'invalid_text_only' : 'none' };
   },
 });
 
@@ -527,6 +647,10 @@ export const createBackgroundMessage = internalMutation({
     content: v.string(),
     createdAt: v.number(),
     profileId: v.id('profiles'),
+    // Outbound payloads carry ids as strings; unknown or foreign ids are dropped, not rejected.
+    relatedSessionId: v.optional(v.string()),
+    widget: v.optional(v.any()),
+    replies: v.optional(v.any()),
   },
   returns: v.object({
     messageId: v.id('reedMessages'),
@@ -541,7 +665,14 @@ export const createBackgroundMessage = internalMutation({
     if (!profile) throw new ConvexError('Profile not found.');
 
     const thread = await getOrCreateActiveThread(ctx, args.profileId, args.createdAt);
+    const chapterId = await assignMessageChapter(ctx, thread, args.createdAt);
+    const relatedSessionId = await resolveOwnedSessionId(ctx, args.profileId, args.relatedSessionId);
+    const presentation = await sanitizeMessagePresentation(ctx, args.profileId, {
+      widget: relatedSessionId ? { kind: 'session_summary', sessionId: relatedSessionId } : args.widget,
+      replies: args.replies,
+    }, content);
     const messageId = await ctx.db.insert('reedMessages', {
+      chapterId,
       threadId: thread._id,
       profileId: args.profileId,
       role: 'assistant',
@@ -551,6 +682,8 @@ export const createBackgroundMessage = internalMutation({
       createdAt: args.createdAt,
       completedAt: args.createdAt,
       clientNonce: args.clientNonce,
+      ...(relatedSessionId ? { relatedSessionId } : {}),
+      ...presentation,
     });
 
     await ctx.db.patch(thread._id, {
@@ -562,19 +695,45 @@ export const createBackgroundMessage = internalMutation({
   },
 });
 
+/** Push retry state on the same pending row; never insert pretend assistant replies. */
+export const markAssistantRecovery = internalMutation({
+  args: {
+    assistantMessageId: v.id('reedMessages'),
+    threadId: v.id('reedThreads'),
+    phase: v.union(v.literal('retrying'), v.literal('backup')),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.assistantMessageId);
+    const thread = await ctx.db.get(args.threadId);
+    if (!message || message.role !== 'assistant' || message.threadId !== args.threadId || message.profileId !== thread?.profileId) {
+      throw new ConvexError('Assistant message not found in thread.');
+    }
+    if (message.status === 'pending') await ctx.db.patch(message._id, { replyRecovery: args.phase });
+    return null;
+  },
+});
+
 export const failAssistantMessage = internalMutation({
   args: {
     assistantMessageId: v.id('reedMessages'),
     error: v.string(),
     failedAt: v.number(),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
+    const message = await ctx.db.get(args.assistantMessageId);
+    if (!message || message.role !== 'assistant') throw new ConvexError('Assistant message not found.');
     await ctx.db.patch(args.assistantMessageId, {
       content: 'I hit a system issue while thinking. Try again in a moment.',
       status: 'failed',
       completedAt: args.failedAt,
       error: args.error,
+      widget: undefined,
+      replies: undefined,
+      replyRecovery: undefined,
     });
+    return null;
   },
 });
 
@@ -587,7 +746,7 @@ export const loadPendingImageAttachments = internalQuery({
       .query('reedMessageAttachments')
       .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', args.messageId))
       .order('asc')
-      .collect();
+      .take(MAX_REED_IMAGE_ATTACHMENTS);
 
     const pending = [];
     for (const attachment of attachments) {
@@ -844,42 +1003,6 @@ async function getActiveThread(ctx: QueryCtx | MutationCtx, profileId: Id<'profi
     .unique();
 }
 
-function assertPromptAdmin(adminSecret: string) {
-  const expectedSecret = process.env.REED_CONTROL_PANEL_SECRET;
-  if (!expectedSecret || adminSecret !== expectedSecret) {
-    throw new ConvexError('Prompt editing is not enabled for this deployment.');
-  }
-}
-
-async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; content: string }) {
-  const now = Date.now();
-  const current = await ctx.db
-    .query('reedPromptVersions')
-    .withIndex('by_key_and_status', q => q.eq('key', args.key).eq('status', 'active'))
-    .order('desc')
-    .first();
-  if (current?.content === args.content) return current._id;
-  if (current) await ctx.db.patch(current._id, { status: 'archived', updatedAt: now });
-
-  return await ctx.db.insert('reedPromptVersions', {
-    key: args.key,
-    content: args.content,
-    status: 'active',
-    version: (current?.version ?? 0) + 1,
-    contentHash: simpleHash(args.content),
-    createdAt: now,
-    updatedAt: now,
-  });
-}
-
-function checkedInPromptHash(key: string) {
-  if (key === DEFAULT_PROMPT_KEY) return CHECKED_IN_CHAT_PROMPT_HASH;
-  if (key === DEFAULT_COACH_STATE_PROMPT_KEY) return CHECKED_IN_COACH_STATE_PROMPT_HASH;
-  if (key === COACHING_MEMORY_PROMPT_KEY) return CHECKED_IN_COACHING_MEMORY_PROMPT_HASH;
-  if (key === CONTEXT_AGENT_PROMPT_KEY) return CHECKED_IN_CONTEXT_AGENT_PROMPT_HASH;
-  return null;
-}
-
 async function getOrCreateActiveThread(ctx: MutationCtx, profileId: Id<'profiles'>, now: number) {
   const existing = await getActiveThread(ctx, profileId);
   if (existing) return existing;
@@ -940,28 +1063,75 @@ async function countMessageAttachments(ctx: QueryCtx | MutationCtx, messageId: I
   return (await ctx.db
     .query('reedMessageAttachments')
     .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', messageId))
-    .collect()).length;
+    .take(MAX_REED_IMAGE_ATTACHMENTS + 1)).length;
+}
+
+async function resolveOwnedSessionId(ctx: MutationCtx, profileId: Id<'profiles'>, rawSessionId: string | undefined) {
+  if (!rawSessionId) return null;
+  const sessionId = ctx.db.normalizeId('liveSessions', rawSessionId);
+  if (!sessionId) return null;
+  const session = await ctx.db.get(sessionId);
+  return session && session.profileId === profileId ? sessionId : null;
+}
+
+async function sanitizeMessagePresentation(ctx: MutationCtx, profileId: Id<'profiles'>, value: { widget?: unknown; replies?: unknown }, content: string) {
+  const widget = value.widget && typeof value.widget === 'object' ? value.widget as Record<string, unknown> : null;
+  const rawId = widget?.kind === 'session_summary' && typeof widget.sessionId === 'string' ? widget.sessionId : null;
+  const sessionId = rawId ? ctx.db.normalizeId('liveSessions', rawId) : null;
+  const session = sessionId ? await ctx.db.get(sessionId) : null;
+  const planId = widget?.kind === 'plan' && typeof widget.plannedSessionId === 'string' ? ctx.db.normalizeId('plannedSessions', widget.plannedSessionId) : null;
+  const plan = planId ? await ctx.db.get(planId) : null;
+  const actionId = widget?.kind === 'session_change' && typeof widget.actionId === 'string' ? ctx.db.normalizeId('reedSessionActions', widget.actionId) : null;
+  const action = actionId ? await ctx.db.get(actionId) : null;
+  const presets = widget?.kind === 'quick_log' ? await ctx.db.query('quickLogPresets')
+    .withIndex('by_enabled_and_sort_order', q => q.eq('isEnabled', true)).take(100) : [];
+  return sanitizeReedPresentation(value, { profileId, session, plan, action, enabledPresetKeys: presets.map(preset => preset.key) }, content);
+}
+
+const RELATED_SESSION_EXERCISE_SCAN_LIMIT = 100;
+
+async function attachRelatedSessions<T extends Doc<'reedMessages'>>(ctx: QueryCtx, profileId: Id<'profiles'>, messages: T[]) {
+  return await Promise.all(messages.map(async message => {
+    if (!message.relatedSessionId) return { ...message, relatedSession: null };
+
+    const session = await ctx.db.get(message.relatedSessionId);
+    if (!session || session.profileId !== profileId || session.status !== 'ended') {
+      return { ...message, relatedSession: null };
+    }
+
+    const exercises = await ctx.db
+      .query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
+      .take(RELATED_SESSION_EXERCISE_SCAN_LIMIT);
+
+    return {
+      ...message,
+      relatedSession: {
+        endedAt: session.endedAt ?? session.startedAt,
+        manualDurationSeconds: session.manualDurationSeconds,
+        exerciseCount: exercises.length,
+        sessionId: session._id,
+        startedAt: session.startedAt,
+      },
+    };
+  }));
 }
 
 async function attachMessageImages(ctx: QueryCtx, messages: Doc<'reedMessages'>[]) {
-  const withAttachments = [];
-  for (const message of messages) {
+  return await Promise.all(messages.map(async message => {
     const attachments = await ctx.db
       .query('reedMessageAttachments')
       .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', message._id))
       .order('asc')
-      .collect();
+      .take(MAX_REED_IMAGE_ATTACHMENTS);
 
     if (attachments.length === 0) {
-      withAttachments.push({ ...message, attachments: [] });
-      continue;
+      return { ...message, attachments: [] };
     }
 
-    const images = [];
-    for (const attachment of attachments) {
+    const images = (await Promise.all(attachments.map(async attachment => {
       const url = await ctx.storage.getUrl(attachment.storageId);
-      if (!url) continue;
-      images.push({
+      return url ? {
         _id: attachment._id,
         height: null,
         mediaType: attachment.mediaType,
@@ -969,13 +1139,11 @@ async function attachMessageImages(ctx: QueryCtx, messages: Doc<'reedMessages'>[
         status: attachment.status,
         url,
         width: null,
-      });
-    }
+      } : null;
+    }))).filter(image => image !== null);
 
-    withAttachments.push({ ...message, attachments: images });
-  }
-
-  return withAttachments;
+    return { ...message, attachments: images };
+  }));
 }
 
 async function validateImageAttachments(ctx: MutationCtx, attachments: Array<{ storageId: Id<'_storage'> }>) {
@@ -1008,7 +1176,7 @@ async function loadImageObservations(ctx: QueryCtx, messageId: Id<'reedMessages'
     .query('reedMessageAttachments')
     .withIndex('by_message_id_and_sort_order', q => q.eq('messageId', messageId))
     .order('asc')
-    .collect();
+    .take(MAX_REED_IMAGE_ATTACHMENTS);
 
   const observations = [];
   for (const attachment of attachments) {
@@ -1031,6 +1199,7 @@ async function loadImageObservations(ctx: QueryCtx, messageId: Id<'reedMessages'
 async function loadRecentAppTimeline(ctx: QueryCtx, profileId: Id<'profiles'>, now: number): Promise<{
   currentState: string;
   events: ReedAppTimelineEvent[];
+  widgetSessions: Array<{ sessionId: Id<'liveSessions'>; endedAt: number }>;
 }> {
   const events: ReedAppTimelineEvent[] = [];
   const activeSession = await ctx.db
@@ -1073,6 +1242,7 @@ async function loadRecentAppTimeline(ctx: QueryCtx, profileId: Id<'profiles'>, n
   return {
     currentState,
     events: events.sort((left, right) => left.at - right.at),
+    widgetSessions: endedSessions.map(session => ({ sessionId: session._id, endedAt: session.endedAt ?? session.startedAt })),
   };
 }
 
@@ -1087,7 +1257,7 @@ async function summarizeSessionForTimeline(ctx: QueryCtx, session: Doc<'liveSess
     .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id))
     .take(120);
   const duration = session.endedAt
-    ? `Duration ${Math.max(1, Math.round((session.endedAt - session.startedAt) / 60000))} min.`
+    ? `Duration ${Math.max(1, Math.round(sessionDurationSeconds(session, session.endedAt) / 60))} min.`
     : 'Still in progress.';
   const exerciseNames = exercises.slice(0, 8).map(exercise => exercise.exerciseName);
   const exerciseSummary = exerciseNames.length > 0

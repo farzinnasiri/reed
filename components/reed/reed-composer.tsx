@@ -1,480 +1,214 @@
+import { useComposerVoiceLevel } from './reed-composer-context';
+import { ReedSheetTextInput } from '@/components/ui/reed-sheet-input';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { Animated, Image, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { BlurView } from 'expo-blur';
-import { canUseGlassBlur, getAndroidGlassBlurProps, getGlassTabPillTokens } from '@/components/ui/glass-material';
-import { useGlassBlurTarget } from '@/components/ui/blur-target-context';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { Image, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
-import { createTiming, getTapScaleStyle, reedEasing, reedMotion, shouldUseNativeDriver } from '@/design/motion';
+import * as haptics from '@/design/haptics';
+import { getTapScaleStyle, reedLayoutTransitions, reedMotion, reedReanimatedEasing, reedSprings } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
+import { reedComposerMetrics as metrics, withColorAlpha } from '@/design/system';
+import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
+import { restoreHiddenComposerAncestors, useComposerFocusRetention } from './use-composer-focus-retention';
 import { styles } from './reed.styles';
-import type { ReedDraftAttachment, ReedQuickAction, VoiceComposerState } from './reed.types';
+import type { ReedDraftAttachment, VoiceComposerState } from './reed.types';
+import { ComposerHalo } from './presence/composer-halo';
 
-const COMPOSER_INPUT_MIN_HEIGHT = 22;
-const COMPOSER_INPUT_MAX_HEIGHT = 96;
+export type ComposerMenuAnchor = { x: number; y: number; width: number; height: number };
 
-export function ReedComposer({
-  attachments,
-  canAttachMore,
-  draftSeed,
-  disabled,
-  isPreparingAttachments,
-  lastAttachmentError,
-  onChangeComposerDraft,
-  onPickCamera,
-  onPickFiles,
-  onPickLibrary,
-  onQuickAction,
-  onRemoveAttachment,
-  onRetryVoice,
-  onSendTyped,
-  onSendVoiceDraft,
-  onStartVoice,
-  onStopVoice,
-  quickActions,
-  shouldShowQuickActions,
-  voiceState,
-}: {
-  attachments: ReedDraftAttachment[];
-  canAttachMore: boolean;
-  draftSeed: { revision: number; text: string };
-  disabled: boolean;
-  isPreparingAttachments: boolean;
-  lastAttachmentError: string | null;
-  onChangeComposerDraft: (text: string) => void;
-  onPickCamera: () => void;
-  onPickFiles: () => void;
-  onPickLibrary: () => void;
-  onQuickAction: (prompt: string) => boolean;
-  onRemoveAttachment: (attachmentId: string) => void;
-  onRetryVoice: () => void;
-  onSendTyped: (text: string) => boolean;
-  onSendVoiceDraft: (text: string) => boolean;
-  onStartVoice: () => void;
-  onStopVoice: () => void;
-  quickActions: ReedQuickAction[];
-  shouldShowQuickActions: boolean;
-  voiceState: VoiceComposerState;
-}) {
-  const [draftText, setDraftText] = useState(draftSeed.text);
+type ReedComposerProps = {
+  attachments: { items: ReedDraftAttachment[]; preparing: boolean; error: string | null; remove: (id: string) => void };
+  draft: { seed: { revision: number; text: string }; change: (text: string) => void; send: (text: string) => boolean };
+  interaction: { focused: boolean; menuOpen: boolean; sheet?: boolean; focus: (focused: boolean) => void; openMenu: (anchor: ComposerMenuAnchor) => void };
+  inputRef: RefObject<TextInput | null>;
+  waiting: boolean;
+  voice: { state: VoiceComposerState; start: () => void; stop: () => void; retry: () => void };
+};
 
-  useEffect(() => {
-    setDraftText(draftSeed.text);
-  }, [draftSeed.revision, draftSeed.text]);
-
-  function handleChangeDraftText(nextText: string) {
-    setDraftText(nextText);
-    onChangeComposerDraft(nextText);
-  }
-
-  return (
-    <>
-      {shouldShowQuickActions ? (
-        <ScrollView
-          contentContainerStyle={styles.quickActionsContent}
-          horizontal
-          keyboardShouldPersistTaps="handled"
-          showsHorizontalScrollIndicator={false}
-          style={styles.quickActionsScroller}
-        >
-          {quickActions.map(action => (
-            <QuickActionChip
-              disabled={disabled}
-              key={action.id}
-              label={action.label}
-              onPress={() => {
-                onQuickAction(action.prompt);
-              }}
-            />
-          ))}
-        </ScrollView>
-      ) : null}
-
-      <ComposerCard
-        attachments={attachments}
-        canAttachMore={canAttachMore}
-        disabled={disabled}
-        isPreparingAttachments={isPreparingAttachments}
-        lastAttachmentError={lastAttachmentError}
-        onCancelVoice={onStopVoice}
-        onChangeText={handleChangeDraftText}
-        onPickCamera={onPickCamera}
-        onPickFiles={onPickFiles}
-        onPickLibrary={onPickLibrary}
-        onRemoveAttachment={onRemoveAttachment}
-        onRetryVoice={onRetryVoice}
-        onSend={() => {
-          if (voiceState.status === 'ready') {
-            onSendVoiceDraft(voiceState.transcript);
-            return;
-          }
-          onSendTyped(draftText);
-        }}
-        onVoice={onStartVoice}
-        text={draftText}
-        voiceState={voiceState}
-      />
-    </>
-  );
+/** Retain the editor when a web control receives a pointer press. */
+export function retainComposerFocus(event: GestureResponderEvent) {
+  if (Platform.OS === 'web') event.preventDefault();
 }
 
-function QuickActionChip({
-  disabled,
-  label,
-  onPress,
-}: {
-  disabled?: boolean;
-  label: string;
-  onPress: () => void;
-}) {
-  const { reducedTransparency, theme } = useReedTheme();
-  const blurTarget = useGlassBlurTarget();
-  const pane = getGlassTabPillTokens(theme);
-  const androidBlurTarget = blurTarget?.isReady ? blurTarget.targetRef : undefined;
-  const canUseBlur = canUseGlassBlur({ hasAndroidTarget: Boolean(androidBlurTarget) }) && !reducedTransparency;
-  const shellBackground = canUseBlur ? pane.backgroundColor : pane.fallbackBackgroundColor;
-
-  return (
-    <Pressable
-      accessibilityHint="Sends this suggested prompt to Reed."
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      accessibilityState={{ disabled: Boolean(disabled) }}
-      disabled={disabled}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.quickActionChip,
-        pane.shadowStyle,
-        {
-          backgroundColor: shellBackground,
-          borderColor: pane.borderColor,
-        },
-        getTapScaleStyle(pressed, disabled),
-      ]}
-    >
-      {canUseBlur ? (
-        <BlurView
-          {...getAndroidGlassBlurProps(androidBlurTarget)}
-          intensity={pane.blurIntensity}
-          pointerEvents="none"
-          style={StyleSheet.absoluteFill}
-          tint={theme.blur.tint}
-        />
-      ) : null}
-      <View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          styles.quickActionChipHighlight,
-          {
-            backgroundColor: canUseBlur ? 'transparent' : shellBackground,
-            borderColor: pane.borderColor,
-          },
-        ]}
-      />
-      <ReedText style={styles.quickActionChipLabel} variant="caption">{label}</ReedText>
-    </Pressable>
-  );
-}
-
-function ComposerCard({
-  attachments,
-  canAttachMore,
-  disabled,
-  isPreparingAttachments,
-  lastAttachmentError,
-  onCancelVoice,
-  onChangeText,
-  onPickCamera,
-  onPickFiles,
-  onPickLibrary,
-  onRemoveAttachment,
-  onRetryVoice,
-  onSend,
-  onVoice,
-  text,
-  voiceState,
-}: {
-  attachments: ReedDraftAttachment[];
-  canAttachMore: boolean;
-  disabled: boolean;
-  isPreparingAttachments: boolean;
-  lastAttachmentError: string | null;
-  onCancelVoice: () => void;
-  onChangeText: (text: string) => void;
-  onPickCamera: () => void;
-  onPickFiles: () => void;
-  onPickLibrary: () => void;
-  onRemoveAttachment: (attachmentId: string) => void;
-  onRetryVoice: () => void;
-  onSend: () => void;
-  onVoice: () => void;
-  text: string;
-  voiceState: VoiceComposerState;
-}) {
+export function ReedComposer({ attachments, draft, interaction, inputRef, waiting, voice }: ReedComposerProps) {
   const { theme } = useReedTheme();
-  const [inputContentHeight, setInputContentHeight] = useState(22);
-  const [isAttachmentPickerOpen, setIsAttachmentPickerOpen] = useState(false);
-  const attachmentPickerProgress = useRef(new Animated.Value(0)).current;
-  const isVoiceActive = voiceState.status !== 'idle';
-  const isVoiceBusy = voiceState.status === 'listening' || voiceState.status === 'transcribing';
-  const shouldShowVoiceStatus = voiceState.status === 'transcribing' || voiceState.status === 'failed';
-  const draftText = shouldShowVoiceStatus ? voiceState.transcript : text;
-  const hasReadyAttachments = attachments.some(attachment => attachment.status === 'ready');
-  const canSend = (!isVoiceActive && (text.trim().length > 0 || hasReadyAttachments)) && !disabled && !isPreparingAttachments;
-  const inputHeight = Math.min(COMPOSER_INPUT_MAX_HEIGHT, Math.max(COMPOSER_INPUT_MIN_HEIGHT, Math.ceil(inputContentHeight)));
+  const Input = interaction.sheet ? ReedSheetTextInput : TextInput;
+  const reduced = useReedReducedMotion();
+  const { fontScale } = useWindowDimensions();
+  const lineHeight = metrics.inputLineHeight * fontScale;
+  const maxHeight = lineHeight * metrics.inputMaxLines;
+  const text = draft.seed.text;
+  const [contentHeight, setContentHeight] = useState(lineHeight);
+  const plusRef = useRef<View>(null);
+  const cardRef = useRef<View>(null);
+  const [cardSize, setCardSize] = useState({ width: 0, height: 0 });
+  useComposerFocusRetention(cardRef);
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pop = useSharedValue(1);
+  const rim = useSharedValue(0);
+  const plus = useSharedValue(0);
+  const clearAccent = withColorAlpha(String(theme.colors.accent), 0);
+  const recording = voice.state.status === 'listening';
+  const transcribing = voice.state.status === 'transcribing';
+  const readyAttachments = attachments.items.some(item => item.status === 'ready');
+  const hasPayload = text.trim().length > 0 || readyAttachments;
+  const showSend = hasPayload && !recording && !transcribing;
+  const inputHeight = text ? Math.min(maxHeight, Math.max(lineHeight, contentHeight)) : lineHeight;
 
   useEffect(() => {
-    if (draftText.length === 0) {
-      setInputContentHeight(COMPOSER_INPUT_MIN_HEIGHT);
-    }
-  }, [draftText.length]);
+    rim.set(withTiming(interaction.focused ? (hasPayload ? metrics.draftRingAlpha : metrics.focusRingAlpha) : 0, { duration: reedMotion.durations.standard }));
+    plus.set(reduced ? (interaction.menuOpen ? 1 : 0) : withSpring(interaction.menuOpen ? 1 : 0, reedSprings.pop));
+  }, [hasPayload, interaction.focused, interaction.menuOpen, plus, reduced, rim]);
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
 
-  useEffect(() => {
-    createTiming(
-      attachmentPickerProgress,
-      isAttachmentPickerOpen ? 1 : 0,
-      reedMotion.durations.mode,
-      reedEasing.easeOut,
-      shouldUseNativeDriver,
-    ).start();
-  }, [attachmentPickerProgress, isAttachmentPickerOpen]);
-
-  useEffect(() => {
-    if (!canAttachMore) {
-      setIsAttachmentPickerOpen(false);
-    }
-  }, [canAttachMore]);
-
-  const attachmentPickerStyle = {
-    opacity: attachmentPickerProgress,
-    transform: [{
-      translateY: attachmentPickerProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [8, 0],
-      }),
-    }],
-  };
+  function popOnTouch() {
+    if (reduced || interaction.focused) return;
+    pop.set(withSequence(withTiming(reedMotion.composer.focusScale, { duration: reedMotion.composer.focusMs }), withSpring(1, reedSprings.pop)));
+  }
+  function focus() {
+    restoreHiddenComposerAncestors(inputRef.current);
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    popOnTouch();
+    interaction.focus(true);
+  }
+  function blur() {
+    if (blurTimer.current) clearTimeout(blurTimer.current);
+    blurTimer.current = setTimeout(() => interaction.focus(false), reedMotion.composer.blurDelayMs);
+  }
+  const cardStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(rim.get(), [0, 1], [clearAccent, String(theme.colors.accent)]),
+    transform: [{ scale: reduced ? 1 : pop.get() }],
+  }));
+  const haloStyle = useAnimatedStyle(() => ({ opacity: rim.get() / (hasPayload ? metrics.draftRingAlpha : metrics.focusRingAlpha) * (hasPayload ? metrics.draftHaloAlpha : metrics.focusHaloAlpha) }));
+  const plusStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${plus.get() * 45}deg` }] }));
 
   return (
-    <GlassSurface androidBlur contentStyle={styles.composerCardContent} style={styles.composerCard}>
-      {attachments.length > 0 || lastAttachmentError ? (
-        <AttachmentTray
-          attachments={attachments}
-          onRemoveAttachment={onRemoveAttachment}
-        />
-      ) : null}
-
-      {isAttachmentPickerOpen && canAttachMore ? (
-        <Animated.View style={[styles.attachmentPickerPopover, attachmentPickerStyle]}>
-          <AttachmentActions
-            disabled={disabled || isVoiceActive}
-            onPickCamera={() => {
-              setIsAttachmentPickerOpen(false);
-              onPickCamera();
-            }}
-            onPickFiles={() => {
-              setIsAttachmentPickerOpen(false);
-              onPickFiles();
-            }}
-            onPickLibrary={() => {
-              setIsAttachmentPickerOpen(false);
-              onPickLibrary();
-            }}
-          />
-        </Animated.View>
-      ) : null}
-
+    <View>
+      <Animated.View style={[{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }, haloStyle]}><ComposerHalo width={cardSize.width} height={cardSize.height} radius={inputHeight > lineHeight ? metrics.multilineRadius : metrics.radius} /></Animated.View>
+    <Animated.View
+      ref={cardRef}
+      onLayout={e => { const { width, height } = e.nativeEvent.layout; setCardSize(current => current.width === width && current.height === height ? current : { width, height }); }}
+      layout={reduced ? undefined : reedLayoutTransitions.smooth}
+      style={[styles.composerCard, { backgroundColor: theme.colors.surface, borderRadius: inputHeight > lineHeight ? metrics.multilineRadius : metrics.radius }, cardStyle]}
+    >
+      {attachments.items.length ? <AttachmentTray attachments={attachments.items} onRemoveAttachment={attachments.remove} /> : null}
+      {attachments.error ? <ReedText tone="danger" variant="caption">{attachments.error}</ReedText> : null}
+      {voice.state.status === 'failed' ? <ReedText tone="danger" variant="caption">{voice.state.error ?? 'Could not transcribe audio. Try again or type your message.'}</ReedText> : null}
       <View style={styles.composerInputRow}>
-        <View style={[styles.composerInputFrame, { height: shouldShowVoiceStatus ? 44 : Math.max(44, inputHeight) }]}>
-          {shouldShowVoiceStatus ? (
-            <View style={styles.voiceStatusInline}>
-              <ReedText
-                numberOfLines={1}
-                tone={voiceState.status === 'failed' ? 'danger' : 'muted'}
-                variant="caption"
-              >
-                {voiceState.status === 'failed' ? voiceState.error ?? 'Could not transcribe audio.' : 'Transcribing voice...'}
-              </ReedText>
-            </View>
-          ) : (
-            <TextInput
-              accessibilityHint={
-                isVoiceActive
-                  ? 'Voice draft is active. Use the stop button to return to typing.'
-                  : 'Type a question about training, recovery, or your next session.'
-              }
+        <Pressable
+          accessibilityHint="Opens quick log and photo attachments."
+          accessibilityLabel="More actions"
+          accessibilityRole="button"
+          accessibilityState={{ expanded: interaction.menuOpen }}
+          hitSlop={4}
+          onPressIn={retainComposerFocus}
+          onPress={() => plusRef.current?.measureInWindow((x, _y, width) => cardRef.current?.measureInWindow((_x, y, _width, height) => interaction.openMenu({ x, y, width, height })))}
+          ref={plusRef}
+          style={({ pressed }) => [styles.composerControl, getTapScaleStyle(pressed)]}
+        >
+          <Animated.View style={plusStyle}><Ionicons color={String(theme.colors.inkSecondary)} name="add" size={22} /></Animated.View>
+        </Pressable>
+        <Animated.View layout={reduced ? undefined : reedLayoutTransitions.smooth} style={[styles.composerInputFrame, { height: Math.max(metrics.control, inputHeight) }]}>
+          {transcribing ? <ReedText tone="muted" variant="caption">Transcribing voice…</ReedText> : (
+            <Input
+              accessibilityHint="Type a question about training, recovery, or your next session."
               accessibilityLabel="Message Reed"
-              accessibilityState={{ disabled: disabled || isVoiceActive, busy: disabled }}
-              editable={!disabled && !isVoiceActive}
+              accessibilityState={{ disabled: recording }}
+              editable={!recording}
               multiline
-              numberOfLines={1}
-              onChangeText={nextText => {
-                if (nextText.length === 0) {
-                  setInputContentHeight(COMPOSER_INPUT_MIN_HEIGHT);
-                }
-                onChangeText(nextText);
+              onBlur={blur}
+              onChangeText={next => { if (!next) setContentHeight(lineHeight); draft.change(next); }}
+              onContentSizeChange={event => setContentHeight(Math.ceil(event.nativeEvent.contentSize.height))}
+              onFocus={focus}
+              onPressIn={popOnTouch}
+              placeholder="Talk to Reed"
+              placeholderTextColor={String(theme.colors.inkMuted)}
+              ref={node => {
+                // Gorhom forwards the native input, but its public ref type names the RNGH component factory.
+                inputRef.current = node as TextInput | null;
               }}
-              onContentSizeChange={event => {
-                setInputContentHeight(event.nativeEvent.contentSize.height);
-              }}
-              placeholder={disabled ? 'Reed is thinking' : 'Message Reed'}
-              placeholderTextColor={String(theme.colors.textMuted)}
-              scrollEnabled={inputContentHeight > COMPOSER_INPUT_MAX_HEIGHT}
-              style={[
-                styles.composerInput,
-                {
-                  color: String(theme.colors.textPrimary),
-                  fontFamily: theme.typography.body.fontFamily,
-                  height: inputHeight,
-                },
-              ]}
-              value={draftText}
+              scrollEnabled={contentHeight > maxHeight}
+              style={[styles.composerInput, { color: String(theme.colors.ink), fontFamily: theme.typography.body.fontFamily, fontSize: metrics.inputFontSize, height: inputHeight, lineHeight: metrics.inputLineHeight, maxHeight }]}
+              value={text}
             />
           )}
-        </View>
-
-        <View style={styles.composerButtonCluster}>
-          <Pressable
-            accessibilityHint="Opens photo attachment options."
-            accessibilityLabel="Attach image"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: disabled || isVoiceActive || !canAttachMore, expanded: isAttachmentPickerOpen }}
-            disabled={disabled || isVoiceActive || !canAttachMore}
-            onPress={() => setIsAttachmentPickerOpen(current => !current)}
-            style={({ pressed }) => [
-              styles.composerIconButton,
-              { backgroundColor: isAttachmentPickerOpen ? theme.colors.controlFill : 'transparent' },
-              getTapScaleStyle(pressed, disabled || isVoiceActive || !canAttachMore),
-            ]}
-          >
-            <Ionicons
-              color={String(disabled || isVoiceActive || !canAttachMore ? theme.colors.textMuted : theme.colors.textPrimary)}
-              name={isAttachmentPickerOpen ? 'close' : 'add'}
-              size={20}
-            />
-          </Pressable>
-
-          <Pressable
-            accessibilityHint={voiceState.status === 'failed' ? 'Retries the last voice transcription.' : isVoiceActive ? 'Stops voice input.' : 'Starts voice input.'}
-            accessibilityLabel={voiceState.status === 'failed' ? 'Retry voice transcription' : isVoiceActive ? 'Stop voice mode' : 'Start voice mode'}
-            accessibilityRole="button"
-            accessibilityState={{ busy: isVoiceBusy, disabled: disabled || voiceState.status === 'transcribing' }}
-            disabled={disabled || voiceState.status === 'transcribing'}
-            onPress={voiceState.status === 'failed' ? onRetryVoice : isVoiceActive ? onCancelVoice : onVoice}
-            style={({ pressed }) => [
-              styles.composerIconButton,
-              voiceState.status === 'listening' ? styles.composerVoiceButtonActive : null,
-              { backgroundColor: isVoiceActive ? theme.colors.controlFill : 'transparent' },
-              getTapScaleStyle(pressed, disabled || voiceState.status === 'transcribing'),
-            ]}
-          >
-            <View style={styles.voiceButtonContent}>
-              <Ionicons
-                color={String(voiceState.status === 'failed' ? theme.colors.dangerText : theme.colors.textPrimary)}
-                name={voiceState.status === 'failed' ? 'refresh' : isVoiceActive ? 'stop' : 'mic-outline'}
-                size={18}
-              />
-              {voiceState.status === 'listening' ? (
-                <VoiceButtonMeter level={voiceState.voiceLevel} />
-              ) : null}
-            </View>
-          </Pressable>
-
-          <Pressable
-            accessibilityHint="Sends your message to Reed."
-            accessibilityLabel="Send message"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: !canSend }}
-            disabled={!canSend}
-            onPress={onSend}
-            style={({ pressed }) => [
-              styles.sendButton,
-              {
-                backgroundColor: canSend ? theme.colors.accentPrimary : theme.colors.controlFill,
-                borderColor: canSend ? theme.colors.accentPrimary : theme.colors.controlBorder,
-                borderWidth: 1,
-              },
-              getTapScaleStyle(pressed, !canSend),
-            ]}
-          >
-            <Ionicons
-              color={String(canSend ? theme.colors.accentPrimaryText : theme.colors.textMuted)}
-              name="arrow-up"
-              size={18}
-            />
-          </Pressable>
-        </View>
+        </Animated.View>
+        <ComposerAction
+          preparing={attachments.preparing}
+          showSend={showSend}
+          voice={voice}
+          waiting={waiting}
+          onSend={() => { if (draft.send(text)) inputRef.current?.focus(); }}
+        />
       </View>
-    </GlassSurface>
+    </Animated.View></View>
   );
 }
 
-function AttachmentActions({
-  disabled,
-  onPickCamera,
-  onPickFiles,
-  onPickLibrary,
-}: {
-  disabled: boolean;
-  onPickCamera: () => void;
-  onPickFiles: () => void;
-  onPickLibrary: () => void;
-}) {
-  return (
-    <View style={styles.attachmentActionsRow}>
-      <ComposerIconButton
-        accessibilityLabel="Take photo"
-        disabled={disabled}
-        icon="camera-outline"
-        onPress={onPickCamera}
-      />
-      <ComposerIconButton
-        accessibilityHint="Press for your photo library. Long press to choose image files."
-        accessibilityLabel="Choose images"
-        disabled={disabled}
-        icon="images-outline"
-        onLongPress={onPickFiles}
-        onPress={onPickLibrary}
-      />
-    </View>
-  );
-}
-
-function ComposerIconButton({
-  accessibilityLabel,
-  accessibilityHint,
-  disabled,
-  icon,
-  onLongPress,
-  onPress,
-}: {
-  accessibilityLabel: string;
-  accessibilityHint?: string;
-  disabled: boolean;
-  icon: ComponentProps<typeof Ionicons>['name'];
-  onLongPress?: () => void;
-  onPress: () => void;
+function ComposerAction({ onSend, preparing, showSend, voice, waiting }: {
+  onSend: () => void;
+  preparing: boolean;
+  showSend: boolean;
+  voice: ReedComposerProps['voice'];
+  waiting: boolean;
 }) {
   const { theme } = useReedTheme();
-
+  const reduced = useReedReducedMotion();
+  const progress = useSharedValue(showSend ? 1 : 0);
+  const fade = useSharedValue(showSend ? 1 : 0);
+  const shake = useSharedValue(0);
+  const active = useSharedValue(waiting || preparing ? 0.4 : 1);
+  const recording = voice.state.status === 'listening';
+  const transcribing = voice.state.status === 'transcribing';
+  const failed = voice.state.status === 'failed';
+  useEffect(() => {
+    progress.set(reduced ? (showSend ? 1 : 0) : withSpring(showSend ? 1 : 0, reedSprings.pop));
+    fade.set(withTiming(showSend ? 1 : 0, { duration: reedMotion.composer.iconFadeMs }));
+  }, [fade, progress, reduced, showSend]);
+  useEffect(() => { active.set(withTiming(waiting || preparing ? 0.4 : 1, { duration: reedMotion.durations.standard })); }, [active, preparing, waiting]);
+  const buttonStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(fade.get(), [0, 1], [String(theme.colors.surfaceRaised), String(theme.colors.accent)]),
+    opacity: showSend ? active.get() : 1,
+    transform: [{ translateX: reduced ? 0 : shake.get() }],
+  }));
+  const micStyle = useAnimatedStyle(() => ({ opacity: 1 - fade.get(), transform: [{ scale: reduced ? 1 : 1 - progress.get() * (1 - reedMotion.composer.iconFromScale) }] }));
+  const sendStyle = useAnimatedStyle(() => ({ opacity: fade.get(), transform: [{ scale: reduced ? 1 : reedMotion.composer.iconFromScale + progress.get() * (1 - reedMotion.composer.iconFromScale) }] }));
+  function press() {
+    if (showSend) {
+      if (waiting || preparing) {
+        haptics.selection();
+        if (!reduced) {
+          const timing = { duration: reedMotion.composer.refusedMs / 4, easing: reedReanimatedEasing.easeOut };
+          shake.set(withSequence(withTiming(reedMotion.composer.refusedX, timing), withTiming(-reedMotion.composer.refusedX, timing), withTiming(reedMotion.composer.refusedX, timing), withTiming(0, timing)));
+        }
+      } else onSend();
+    } else if (recording) voice.stop();
+    else if (failed) voice.retry();
+    else { haptics.light(); voice.start(); }
+  }
   return (
-    <Pressable
-      accessibilityHint={accessibilityHint}
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      onLongPress={onLongPress}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.composerIconButton,
-        getTapScaleStyle(pressed, disabled),
-      ]}
-    >
-      <Ionicons color={String(disabled ? theme.colors.textMuted : theme.colors.textPrimary)} name={icon} size={18} />
-    </Pressable>
+    <Animated.View style={[styles.composerControl, buttonStyle]}>
+      <Pressable
+        accessibilityHint={showSend && waiting ? 'Reed is answering. Your draft stays here until you send it.' : showSend ? 'Sends your message to Reed.' : 'Record a message, then review its transcript before sending.'}
+        accessibilityLabel={showSend ? 'Send message' : recording ? 'Stop voice mode' : transcribing ? 'Transcribing voice' : failed ? 'Retry voice transcription' : 'Start voice mode'}
+        accessibilityRole="button"
+        accessibilityState={{ busy: transcribing || (showSend && waiting), disabled: transcribing }}
+        disabled={transcribing}
+        hitSlop={4}
+        onPress={press}
+        onPressIn={retainComposerFocus}
+        style={({ pressed }) => [styles.composerControl, getTapScaleStyle(pressed)]}
+      >
+        <Animated.View style={[{ position: 'absolute', alignItems: 'center', justifyContent: 'center' }, micStyle]}>
+          <View style={styles.voiceButtonContent}>
+            <Ionicons color={String(theme.colors.inkSecondary)} name={recording ? 'stop' : transcribing ? 'sync-outline' : failed ? 'refresh' : 'mic-outline'} size={recording ? 12 : 18} />
+            {recording ? <SharedVoiceButtonMeter /> : null}
+          </View>
+        </Animated.View>
+        <Animated.View style={[{ position: 'absolute' }, sendStyle]}><Ionicons color={String(theme.colors.accentText)} name="arrow-up" size={20} /></Animated.View>
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -501,8 +235,8 @@ function AttachmentTray({
             style={[
               styles.attachmentPreview,
               {
-                backgroundColor: theme.colors.controlFill,
-                borderColor: attachment.status === 'failed' ? theme.colors.dangerBorder : theme.colors.controlBorder,
+                backgroundColor: theme.colors.surfaceRaised,
+                borderColor: attachment.status === 'failed' ? theme.colors.dangerBorder : 'transparent',
               },
             ]}
           >
@@ -515,7 +249,7 @@ function AttachmentTray({
             {attachment.status !== 'ready' ? (
               <View style={styles.attachmentStatusOverlay}>
                 <Ionicons
-                  color={String(theme.colors.accentPrimaryText)}
+                  color={String(theme.colors.accentText)}
                   name={attachment.status === 'failed' ? 'warning-outline' : 'sync-outline'}
                   size={16}
                 />
@@ -531,7 +265,7 @@ function AttachmentTray({
                 getTapScaleStyle(pressed),
               ]}
             >
-              <Ionicons color={String(theme.colors.textPrimary)} name="close" size={13} />
+              <Ionicons color={String(theme.colors.ink)} name="close" size={13} />
             </Pressable>
           </View>
         ))}
@@ -552,7 +286,7 @@ function VoiceButtonMeter({ level }: { level: number }) {
           style={[
             styles.voiceButtonMeterBar,
             {
-              backgroundColor: theme.colors.accentPrimary,
+              backgroundColor: theme.colors.accentInk,
               height,
               opacity: level > 0.04 ? 0.42 + (level * 0.5) : 0.22,
             },
@@ -561,4 +295,9 @@ function VoiceButtonMeter({ level }: { level: number }) {
       ))}
     </View>
   );
+}
+
+function SharedVoiceButtonMeter() {
+  const level = useComposerVoiceLevel();
+  return <VoiceButtonMeter level={level} />;
 }

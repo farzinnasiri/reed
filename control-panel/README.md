@@ -10,7 +10,7 @@ From the repo root:
 make control-panel
 ```
 
-This loads `.env.dev` and passes `EXPO_PUBLIC_CONVEX_URL` to Vite as `VITE_CONVEX_URL`.
+This loads `.env.dev` and passes `EXPO_PUBLIC_CONVEX_URL` to Vite as `VITE_CONVEX_URL`. The panel calls the matching Convex site (`*.convex.cloud` becomes `*.convex.site`; local port `3210` becomes `3211`) at `POST /control-panel`.
 
 To point at production:
 
@@ -22,4 +22,4 @@ make control-panel ENV=prod
 
 ## Secrets
 
-Do not put `REED_CONTROL_PANEL_SECRET` in frontend env. Paste it into the UI when the page opens. The app keeps it in memory for the current browser session only.
+Do not put `REED_CONTROL_PANEL_SECRET` in frontend env. Paste it into the UI when the page opens. The app keeps it in memory for the current browser session and sends it as an `Authorization: Bearer` header. It is not a Convex function argument.

@@ -8,7 +8,7 @@ type UseRunningTickerOptions = {
 
 export function useRunningTicker({ intervalMs = 1000, isRunning, onTick }: UseRunningTickerOptions) {
   const onTickRef = useRef(onTick);
-  onTickRef.current = onTick;
+  useEffect(() => { onTickRef.current = onTick; }, [onTick]);
 
   useEffect(() => {
     if (!isRunning) {

@@ -16,10 +16,8 @@ export default function AppTabsLayout() {
         tabBarStyle: { display: 'none' },
       }}
     >
-      <Tabs.Screen name="home" />
-      <Tabs.Screen name="workout" />
       <Tabs.Screen name="reed" />
-      <Tabs.Screen name="profile" />
+      <Tabs.Screen name="workout" />
     </Tabs>
   );
 }

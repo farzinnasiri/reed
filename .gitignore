@@ -38,6 +38,8 @@ yarn-error.*
 .env.prod
 .env*.local
 .env.convex.local
+temp_env
+.temp.env
 
 # typescript
 *.tsbuildinfo
@@ -55,3 +57,12 @@ convex/_generated/
 .claude/
 CLAUDE.md
 skills-lock.json
+
+# Local workout image source and upload artifacts
+/assets/workout-images/
+/assets/workout-images-webp/
+
+# Vercel project metadata
+.vercel/
+.vercel
+.env*

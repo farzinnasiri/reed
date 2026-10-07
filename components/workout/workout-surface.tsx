@@ -1,21 +1,22 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import type { WorkoutTiming } from './workout-duration';
+import { SessionHeaderMascot } from '@/components/reed/session/session-header-mascot';
+import { SessionMascotProvider } from '@/components/reed/session/session-mascot';
+import { SessionWhisper } from '@/components/reed/session/session-whisper';
+import { ReedSessionSheet, type SessionAskContext } from '@/components/reed/session/reed-session-sheet';
+import { useMascot } from '@/components/reed/mascot';
+import { StageRecedeProvider, useStageRecedeStyle } from '@/design/stage-recede';
+import * as haptics from '@/design/haptics';
+import Animated from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ReedSwapFeedback, type ReedSwapSnapshot } from '@/components/reed/session/reed-swap-feedback';
 import { analytics } from '@/lib/analytics';
-import { ActivityIndicator, AppState, Pressable, ScrollView, View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
-import { useAppShell } from '@/components/home/app-shell-context';
-import { GlassSurface } from '@/components/ui/glass-surface';
-import { ReedText } from '@/components/ui/reed-text';
-import { getTapScaleStyle } from '@/design/motion';
+import type { WorkoutEntryIntent } from '@/components/home/app-routes';
 import { useReedTheme } from '@/design/provider';
-import { getRemainingSecondsUntil } from '@/domains/workout/rest';
-import {
-  cancelRestTimerBackgroundAlertsAsync,
-  playRestTimerCompletionCueAsync,
-} from '@/lib/rest-timer-alerts';
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
 import { WorkoutSessionInsightsSheet } from './workout-session-insights-sheet';
@@ -23,83 +24,61 @@ import { WorkoutSessionNotesSheet } from './workout-session-notes-sheet';
 import { WorkoutSessionStatusStrip } from './workout-session-status-strip';
 import { styles } from './workout-surface.styles';
 import type {
-  CaptureCard,
-  EditingSet,
-  LiveCardioCard,
   LiveCardioFinishSummary,
-  LiveSessionFullInsights,
   LiveSessionStatusStrip,
-  LiveSessionSummary,
-  MetricValues,
-  RestCard,
-  SetOutcomeDetails,
   TimelineRow,
   TimelineSet,
   WorkoutPage,
 } from './workout-surface.types';
 import { TimelinePage } from './workout-timeline-page';
-import { useRestBackgroundAlerts } from './use-rest-background-alerts';
-import { useRunningTicker } from './use-running-ticker';
-import { formatElapsedCompact, getErrorMessage } from './workout-surface.utils';
+import { useWorkoutNavigation } from './use-workout-navigation';
+import { WorkoutHistoryScreen } from './workout-history-screen';
+import { useUserOperation } from '@/lib/use-user-operation';
+import { useWorkoutSetEditor } from './use-workout-set-editor';
+import { useWorkoutSessionRuntime } from './workout-session-runtime';
+import { usePrefetchedSessionInsights } from './use-prefetched-session-insights';
+import { getErrorMessage } from './workout-surface.utils';
 
 type WorkoutSurfaceProps = {
-  onExitWorkout: () => void;
-  showStartBackButton?: boolean;
+  entryIntent: WorkoutEntryIntent | null;
+  onBack: () => void;
+  onEntryIntentHandled: () => void;
 };
 
-type EndedSessionSummary = {
-  endedAt: number;
-  exerciseCount: number;
-  exercises: Array<{
-    exerciseName: string;
-    lastLoggedSummary: string | null;
-    setCount: number;
-  }>;
-  sessionId: Id<'liveSessions'>;
-  startedAt: number;
-  userNotes: string;
-  userNotesUpdatedAt: number | null;
-};
-
-type QuickLogActivity = {
-  _id: Id<'activityLogs'>;
-  exerciseName: string;
-  loggedAt: number;
-  summary: string;
-};
-
-type QuickLogDayGroup = {
-  dayKey: string;
-  latestLoggedAt: number;
-  logs: QuickLogActivity[];
-};
-
-export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: WorkoutSurfaceProps) {
+function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
-  const { setIsWorkoutSessionFullscreen } = useAppShell();
+  const stageStyle = useStageRecedeStyle();
+  const sessionMascot = useMascot('watching');
+  const [isReedOpen, setIsReedOpen] = useState(false);
+  const [askContext, setAskContext] = useState<SessionAskContext | null>(null);
+  const [committedSet, setCommittedSet] = useState<{
+    id: Id<'activityLogs'>;
+    exercise: Id<'liveSessionExercises'>;
+    at: number;
+  } | null>(null);
+  const beforeSwap = useRef<ReedSwapSnapshot | null>(null);
+  const [confirmedSwap, setConfirmedSwap] = useState<ReedSwapSnapshot | null>(null);
+  const finishSwap = useCallback(() => {
+    setConfirmedSwap(null);
+  }, []);
   const insets = useSafeAreaInsets();
-  const session = useQuery(api.liveSessions.getCurrent, {});
-  const sessionInsights = useQuery(api.liveSessionInsights.getCurrent, {});
-  const latestEndedSummary = useQuery(api.liveSessions.getLatestEndedSummary, {});
-  const [sessionPageCursorStack, setSessionPageCursorStack] = useState<number[]>([]);
-  const sessionPageBeforeStartedAt = sessionPageCursorStack.at(-1) ?? null;
-  const [selectedEndedSessionId, setSelectedEndedSessionId] = useState<Id<'liveSessions'> | null>(null);
-  const [isEndedInsightsOpen, setIsEndedInsightsOpen] = useState(false);
-  const [isHistoryExpanded, setIsHistoryExpanded] = useState(true);
-  const [expandedQuickLogDays, setExpandedQuickLogDays] = useState<string[]>([]);
-  const endedSessionsPage = useQuery(api.liveSessions.listEndedSummaries, {
-    beforeStartedAt: sessionPageBeforeStartedAt ?? undefined,
-    limit: 5,
-  });
-  const quickLogActivity = useQuery(api.quickLogs.listRecentActivity, { limit: 40 });
-  const endedSessionInsights = useQuery(
-    api.liveSessionInsights.getForSession,
-    selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
+  const { session, restPermissionDenied } = useWorkoutSessionRuntime();
+  const whisper = useQuery(
+    api.reed.getSessionWhisper,
+    committedSet && session
+      ? { sessionId: session.session.sessionId, exerciseId: committedSet.exercise, now: committedSet.at }
+      : 'skip',
   );
-  const endedSessionTimeline = useQuery(
-    api.liveSessions.getEndedTimeline,
-    selectedEndedSessionId ? { sessionId: selectedEndedSessionId } : 'skip',
-  );
+  const reactedSet = useRef<string | null>(null);
+  useEffect(() => {
+    if (!whisper || whisper.eventId === reactedSet.current) return;
+    reactedSet.current = whisper.eventId;
+    sessionMascot.react(whisper.kind === 'pr' ? 'surprised' : whisper.kind === 'caution' ? 'concerned' : 'happy');
+    sessionMascot.act(whisper.kind === 'pr' ? 'hop' : 'tick');
+    if (whisper.kind === 'pr') haptics.success();
+  }, [sessionMascot, whisper]);
+  const { view, openHistory, openDraft, openActive, openSession, showPage, applyIntent } = useWorkoutNavigation();
+  const page = view.kind === 'active' ? view.page : 'timeline';
   const addExercise = useMutation(api.liveSessions.addExercise);
   const addExercises = useMutation(api.liveSessions.addExercises);
   const reorderExercises = useMutation(api.liveSessions.reorderExercises);
@@ -119,306 +98,95 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   const updateSessionNotes = useMutation(api.liveSessions.updateSessionNotes);
   const toggleFavorite = useMutation(api.exerciseCatalog.toggleFavorite);
 
-  const [isWorking, setIsWorking] = useState(false);
+  const captureOperation = useUserOperation('workout.capture', 'Could not save this change. Please try again.');
+  const timelineOperation = useUserOperation('workout.timeline', 'Could not update the session. Please try again.');
+  const isWorking = captureOperation.isWorking;
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
-  const [isActiveSessionOpen, setIsActiveSessionOpen] = useState(false);
-  const [isDraftSessionOpen, setIsDraftSessionOpen] = useState(false);
-  const [warmup, setWarmup] = useState(false);
-  const [metricValues, setMetricValues] = useState<MetricValues>({});
-  const [setOutcomeDetails, setSetOutcomeDetails] = useState<SetOutcomeDetails>({});
-  const [restRemaining, setRestRemaining] = useState(0);
-  const [restRunning, setRestRunning] = useState(false);
   const [isPickerInteracting, setIsPickerInteracting] = useState(false);
-  const [isTimelineMutationPending, setIsTimelineMutationPending] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [page, setPage] = useState<WorkoutPage>('timeline');
-  const [elapsedNow, setElapsedNow] = useState(() => Date.now());
-  const [liveElapsedSeconds, setLiveElapsedSeconds] = useState(0);
-  const [editingSet, setEditingSet] = useState<EditingSet | null>(null);
+  const isTimelineMutationPending = timelineOperation.isWorking;
+  const [localError, setErrorMessage] = useState<string | null>(null);
+  const errorMessage = localError ?? captureOperation.errorMessage ?? timelineOperation.errorMessage;
   const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isSessionNotesOpen, setIsSessionNotesOpen] = useState(false);
   const [isSavingSessionNotes, setIsSavingSessionNotes] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
   const [statusStripHeight, setStatusStripHeight] = useState(60);
-  const previousRestRemainingRef = useRef<number | null>(null);
-  const restEndsAtRef = useRef<number | null>(null);
-  const timelineMutationPendingRef = useRef(false);
-  const captureCard = (session?.activeCard.capture ?? null) as CaptureCard | null;
-  const restCard = (session?.activeCard.rest ?? null) as RestCard | null;
-  const restRuntime =
-    ((session as { restRuntime?: RestCard | null } | null | undefined)?.restRuntime ?? null) as RestCard | null;
-  const liveCardioCard = (session?.activeCard.liveCardio ?? null) as LiveCardioCard | null;
-  const isSessionFullscreen = isDraftSessionOpen || Boolean(session && isActiveSessionOpen);
-  const quickLogDayGroups = useMemo(() => {
-    const groups = new Map<string, QuickLogActivity[]>();
-
-    for (const logEntry of (quickLogActivity ?? []) as QuickLogActivity[]) {
-      const dayKey = getLocalDayKey(logEntry.loggedAt);
-      groups.set(dayKey, [...(groups.get(dayKey) ?? []), logEntry]);
+  const {
+    data: sessionInsights,
+    error: sessionInsightsError,
+    isLoading: isSessionInsightsLoading,
+    refresh: refreshSessionInsights,
+  } = usePrefetchedSessionInsights(session?.session.sessionId ?? null, session?.session.manualDurationSeconds);
+  const captureCard = session?.activeCard.capture ?? null;
+  const restCard = session?.activeCard.rest ?? null;
+  const restRuntime = session?.restRuntime ?? null;
+  const restExerciseId = session?.restRuntime?.sessionExerciseId;
+  const restNextSetNumber = session?.restRuntime?.nextSetNumber;
+  const liveCardioCard = session?.activeCard.liveCardio ?? null;
+  const {
+    activeSetEditor,
+    editingSet,
+    metricValues,
+    setMetricValues,
+    setOutcomeDetails,
+    setSetOutcomeDetails,
+    warmup,
+    setWarmup,
+    setEditingSet,
+  } = useWorkoutSetEditor(captureCard);
+  const captureKey = `${captureCard?.sessionExerciseId}|${captureCard?.currentSetNumber}|${captureCard?.exerciseCatalogId}|${editingSet?.setLogId}`;
+  const restKey = `${restExerciseId}|${restNextSetNumber}`;
+  const [previousCaptureKey, setPreviousCaptureKey] = useState(captureKey);
+  const [previousRestKey, setPreviousRestKey] = useState(restKey);
+  if (previousCaptureKey !== captureKey) {
+    setPreviousCaptureKey(captureKey); setIsPickerInteracting(false); setErrorMessage(null);
+  }
+  if (previousRestKey !== restKey) {
+    setPreviousRestKey(restKey);
+    if (restExerciseId) { setIsPickerInteracting(false); setEditingSet(null); setErrorMessage(null); }
+  }
+  if (session === null && view.kind === 'active') {
+    openHistory(); setEditingSet(null); setIsInsightsOpen(false);
+  }
+  const [handledIntent, setHandledIntent] = useState<WorkoutEntryIntent | null>(null);
+  if (entryIntent !== handledIntent && session !== undefined) {
+    setHandledIntent(entryIntent ?? null);
+    if (entryIntent) {
+      applyIntent(entryIntent, Boolean(session));
+      setIsAddSheetOpen(false); setIsConfirmingFinishSession(false);
+      setIsSessionNotesOpen(false); setErrorMessage(null);
     }
-
-    return Array.from(groups.entries()).map(([dayKey, dayLogs]) => ({
-      dayKey,
-      latestLoggedAt: dayLogs[0]?.loggedAt ?? 0,
-      logs: dayLogs,
-    }));
-  }, [quickLogActivity]);
-  const activeSetEditor = useMemo(() => {
-    if (!captureCard || !editingSet || editingSet.sessionExerciseId !== captureCard.sessionExerciseId) {
-      return null;
-    }
-
-    return editingSet;
-  }, [captureCard, editingSet]);
-
-  // Use a stable key that covers the capture card's full identity so that
-  // reshaping initialMetrics (e.g. recipe change) also triggers a reset,
-  // not just set-number / exercise-id transitions.
-  const captureCardKey = captureCard
-    ? `${captureCard.sessionExerciseId}:${captureCard.currentSetNumber}:${captureCard.recipeKey}`
-    : null;
-  const lastCaptureCardKeyRef = useRef<string | null>(null);
-
+  }
   useEffect(() => {
-    if (!captureCard || !captureCardKey || activeSetEditor) {
-      return;
-    }
-
-    if (captureCardKey === lastCaptureCardKeyRef.current) {
-      return;
-    }
-
-    lastCaptureCardKeyRef.current = captureCardKey;
-    setIsPickerInteracting(false);
-    setMetricValues(captureCard.initialMetrics);
-    setSetOutcomeDetails({});
-    setWarmup(false);
-    setErrorMessage(null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [captureCardKey, activeSetEditor]);
-
-  useEffect(() => {
-    if (!activeSetEditor) {
-      return;
-    }
-    setMetricValues(activeSetEditor.metrics);
-    setSetOutcomeDetails(activeSetEditor.setOutcomeDetails ?? {});
-    setWarmup(activeSetEditor.warmup);
-    setErrorMessage(null);
-  }, [activeSetEditor]);
-
-  useEffect(() => {
-    if (!restRuntime) {
-      restEndsAtRef.current = null;
-      setRestRemaining(0);
-      setRestRunning(false);
-      return;
-    }
-
-    setIsPickerInteracting(false);
-    setEditingSet(null);
-
-    if (restRuntime.isRunning) {
-      const restEndsAt = Date.now() + restRuntime.remainingSeconds * 1000;
-      restEndsAtRef.current = restEndsAt;
-      setRestRemaining(getRemainingSecondsUntil(restEndsAt));
-    } else {
-      restEndsAtRef.current = null;
-      setRestRemaining(restRuntime.remainingSeconds);
-    }
-
-    setRestRunning(restRuntime.isRunning);
-    setErrorMessage(null);
-  }, [restRuntime?.isRunning, restRuntime?.nextSetNumber, restRuntime?.remainingSeconds, restRuntime?.sessionExerciseId]);
-
-  useEffect(() => {
-    if (!session) {
-      setPage('timeline');
-      setEditingSet(null);
-      setIsInsightsOpen(false);
-      setIsActiveSessionOpen(false);
-      return;
-    }
-
-    setIsDraftSessionOpen(false);
-    const hasTimelineRows = session.timeline.length > 0;
-    if (page === 'exercise' && !captureCard && !restCard && !liveCardioCard && !hasTimelineRows) {
-      setPage('timeline');
-    }
-  }, [captureCard, liveCardioCard, page, restCard, session]);
-
-  useEffect(() => {
-    setIsWorkoutSessionFullscreen(isSessionFullscreen);
-
-    return () => setIsWorkoutSessionFullscreen(false);
-  }, [isSessionFullscreen, setIsWorkoutSessionFullscreen]);
-
-  useEffect(() => {
-    if (!session || !editingSet) {
-      return;
-    }
-
-    const exists = session.timeline.some(
-      (row: { sessionExerciseId: string; sets: Array<{ setLogId: string }> }) =>
-        row.sessionExerciseId === editingSet.sessionExerciseId &&
-        row.sets.some((setEntry: { setLogId: string }) => setEntry.setLogId === editingSet.setLogId),
-    );
-
-    if (!exists) {
-      setEditingSet(null);
-    }
-  }, [editingSet, session]);
-
-  useEffect(() => {
-    if (!restRunning || restRemaining <= 0) {
-      return;
-    }
-
-    const timeout = setTimeout(() => {
-      const restEndsAt = restEndsAtRef.current;
-      setRestRemaining(restEndsAt === null ? 0 : getRemainingSecondsUntil(restEndsAt));
-    }, 1000);
-
-    return () => clearTimeout(timeout);
-  }, [restRemaining, restRunning]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', nextState => {
-      if (nextState !== 'active' || !restRunning) {
-        return;
-      }
-
-      const restEndsAt = restEndsAtRef.current;
-      setRestRemaining(restEndsAt === null ? 0 : getRemainingSecondsUntil(restEndsAt));
-    });
-
-    return () => subscription.remove();
-  }, [restRunning]);
-
-  useEffect(() => {
-    if (!liveCardioCard) {
-      setLiveElapsedSeconds(0);
-      return;
-    }
-
-    setLiveCardioFinishSummary(null);
-    setLiveElapsedSeconds(liveCardioCard.elapsedSeconds);
-  }, [liveCardioCard?.elapsedSeconds, liveCardioCard?.isRunning, liveCardioCard?.sessionExerciseId]);
-
-  useRunningTicker({
-    isRunning: Boolean(liveCardioCard?.isRunning),
-    onTick: () => {
-      setLiveElapsedSeconds(current => current + 1);
-    },
-  });
-
-  useEffect(() => {
-    if (restRemaining === 0) {
-      setRestRunning(false);
-    }
-  }, [restRemaining]);
-
-  useEffect(() => {
-    if (!restRuntime) {
-      previousRestRemainingRef.current = null;
-      return;
-    }
-
-    const previousRemaining = previousRestRemainingRef.current;
-    previousRestRemainingRef.current = restRemaining;
-
-    if (
-      previousRemaining !== null &&
-      previousRemaining > 0 &&
-      restRemaining === 0 &&
-      AppState.currentState === 'active'
-    ) {
-      void playRestTimerCompletionCueAsync({
-        exerciseName: restRuntime.exerciseName,
-        nextSetNumber: restRuntime.nextSetNumber,
-      });
-    }
-  }, [restRemaining, restRuntime]);
-
-  useRestBackgroundAlerts({
-    cardMode:
-      restRuntime
-        ? 'rest'
-        : session?.cardMode === 'live_cardio'
-          ? 'live_cardio'
-          : 'capture',
-    onPermissionDenied: () => {
-      setErrorMessage('Enable notifications to get rest alerts when the app is in the background.');
-    },
-    restCard: restRuntime,
-    restRemaining,
-  });
-
-  useEffect(() => {
-    if (!session?.session.startedAt) {
-      return;
-    }
-
-    setElapsedNow(Date.now());
-
-    const interval = setInterval(() => {
-      setElapsedNow(Date.now());
-    }, 1000);
-
-    return () => {
-      clearInterval(interval);
-    };
-  }, [session?.session.startedAt]);
-
-  useEffect(() => {
-    if (page === 'timeline') {
-      setLiveCardioFinishSummary(null);
-    }
-  }, [page]);
-
-  const elapsedLabel = useMemo(() => {
-    if (!session?.session.startedAt) {
-      return null;
-    }
-
-    return formatElapsedCompact(session.session.startedAt, elapsedNow);
-  }, [elapsedNow, session?.session.startedAt]);
+    if (entryIntent && handledIntent === entryIntent) onEntryIntentHandled();
+  }, [entryIntent, handledIntent, onEntryIntentHandled]);
+  if (session && editingSet && !session.timeline.some(row =>
+    row.sessionExerciseId === editingSet.sessionExerciseId && row.sets.some(setEntry => setEntry.setLogId === editingSet.setLogId))) setEditingSet(null);
+  if (liveCardioFinishSummary && (liveCardioCard || page === 'timeline')) setLiveCardioFinishSummary(null);
 
   const fallbackStatus = useMemo<LiveSessionStatusStrip>(() => {
-    const completedSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
+    const completedSets =
+      session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
     return {
       completedSetsLabel: `${completedSets} ${completedSets === 1 ? 'set' : 'sets'}`,
-      durationLabel: elapsedLabel ?? '0m',
+      durationLabel: session?.statusStrip?.durationLabel ?? '0m',
       microLineTokens: [],
       workSlotKind: 'active',
       workSlotLabel: 'Active',
     };
-  }, [elapsedLabel, session?.timeline]);
+  }, [session?.statusStrip?.durationLabel, session?.timeline]);
 
-  const insightsStatus = sessionInsights?.statusStrip
-    ? {
-      ...sessionInsights.statusStrip,
-      durationLabel: elapsedLabel ?? sessionInsights.statusStrip.durationLabel,
-    }
-    : fallbackStatus;
+  const insightsStatus = session?.statusStrip ? session.statusStrip : fallbackStatus;
 
   const closeAddSheet = () => {
     setIsAddSheetOpen(false);
   };
 
   async function runMutation<T>(action: () => Promise<T>) {
-    setIsWorking(true);
     setErrorMessage(null);
-
-    try {
-      return await action();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-      return null;
-    } finally {
-      setIsWorking(false);
-    }
+    timelineOperation.clearError();
+    return captureOperation.run(action);
   }
 
   async function handleSaveSessionNotes(sessionId: Id<'liveSessions'>, notes: string) {
@@ -436,28 +204,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   }
 
   async function runTimelineMutation<T>(action: () => Promise<T>) {
-    if (timelineMutationPendingRef.current) {
-      return null;
-    }
-
-    timelineMutationPendingRef.current = true;
-    setIsTimelineMutationPending(true);
     setErrorMessage(null);
-
-    try {
-      return await action();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-      return null;
-    } finally {
-      timelineMutationPendingRef.current = false;
-      setIsTimelineMutationPending(false);
-    }
+    captureOperation.clearError();
+    return timelineOperation.run(action);
   }
 
   async function handleStartSession() {
     setErrorMessage(null);
-    setIsDraftSessionOpen(true);
+    openDraft();
   }
 
   async function handleSelectExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
@@ -466,7 +220,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
       setLiveCardioFinishSummary(null);
-      setPage('exercise');
+      showPage('exercise');
     });
   }
 
@@ -483,7 +237,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         warmup: setEntry.warmup,
       });
       setLiveCardioFinishSummary(null);
-      setPage('exercise');
+      showPage('exercise');
     });
   }
 
@@ -497,7 +251,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         analytics.workoutSessionStarted();
       }
       analytics.exerciseAdded();
-      setIsActiveSessionOpen(true);
+      openActive();
     });
   }
 
@@ -518,7 +272,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         addMode: 'bulk',
         exerciseCount: exerciseCatalogIds.length,
       });
-      setIsActiveSessionOpen(true);
+      openActive();
     });
   }
 
@@ -531,10 +285,9 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   async function handleReorderTimeline(orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) {
     const result = await runTimelineMutation(async () => {
       await reorderExercises({ orderedSessionExerciseIds });
-      return true;
     });
 
-    return Boolean(result);
+    return result.status === 'success';
   }
 
   async function handleToggleFavorite(exerciseCatalogId: Id<'exerciseCatalog'>) {
@@ -564,12 +317,14 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
         return;
       }
 
-      await logSet({
+      const committed = await logSet({
         metrics: metricValues,
         sessionExerciseId: captureCard.sessionExerciseId,
         setOutcomeDetails,
         warmup,
       });
+      setCommittedSet({ id: committed.setLogId, exercise: captureCard.sessionExerciseId, at: committed.loggedAt });
+      sessionMascot.act('tick');
       analytics.workoutSetLogged({
         setNumber: captureCard.currentSetNumber,
         warmup,
@@ -605,23 +360,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     });
   }
 
-  async function handleFinishLiveCardio() {
+  async function handleFinishLiveCardio(elapsedSeconds: number) {
     if (!liveCardioCard) {
       return;
     }
 
     const nextExerciseId = getNextTimelineExerciseId(session?.timeline ?? [], liveCardioCard.sessionExerciseId);
     const result = await runMutation(async () => finishLiveCardio({}));
-    if (!result) {
+    if (result.status !== 'success') {
       return;
     }
 
     setEditingSet(null);
     setLiveCardioFinishSummary({
-      elapsedSeconds: liveElapsedSeconds,
+      elapsedSeconds,
       exerciseName: liveCardioCard.exerciseName,
       nextExerciseId,
-      summary: result.summary,
+      summary: result.value.summary,
     });
   }
 
@@ -635,7 +390,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       await selectExercise({ sessionExerciseId: nextExerciseId });
       setEditingSet(null);
       setLiveCardioFinishSummary(null);
-      setPage('exercise');
+      showPage('exercise');
     });
   }
 
@@ -653,16 +408,15 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
       setIsAddSheetOpen(false);
-      setIsDraftSessionOpen(false);
-      setIsActiveSessionOpen(false);
-      setPage('timeline');
+      openHistory();
+      showPage('timeline');
       return;
     }
 
     await runMutation(async () => {
-      await cancelRestTimerBackgroundAlertsAsync();
       const result = await finishSession({});
-      const totalSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
+      const totalSets =
+        session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
       const exerciseCount = session?.timeline.length ?? 0;
       if (!result.deletedEmptySession) {
         analytics.workoutSessionFinished({
@@ -672,15 +426,13 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
       }
       setIsConfirmingFinishSession(false);
       setEditingSet(null);
-      setIsDraftSessionOpen(false);
-      setIsActiveSessionOpen(false);
-      setPage('timeline');
+      openHistory();
+      showPage('timeline');
     });
   }
 
   async function handleRestSwipeRight() {
     await runMutation(async () => {
-      await cancelRestTimerBackgroundAlertsAsync();
       await endRest({});
       // Stay on the exercise page; next-set capture card appears via getCurrent.
     });
@@ -688,7 +440,6 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
   async function handleRestSwipeLeft() {
     await runMutation(async () => {
-      await cancelRestTimerBackgroundAlertsAsync();
       await endRest({});
       // Keep exercise context; after ending rest the capture card returns
       // to the same exercise so users can continue from the last set flow.
@@ -702,14 +453,11 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
     await runMutation(async () => {
       await updateRestProcess({ mode: 'toggleRunning' });
-      return true;
     });
   }
 
   async function handleAdjustRest(deltaSeconds: number) {
     setErrorMessage(null);
-    setRestRemaining(current => clampRestSeconds(current + deltaSeconds));
-
     try {
       await updateRestProcess({ deltaSeconds, mode: 'adjustBy' });
     } catch (error) {
@@ -720,8 +468,33 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   async function handlePresetRest(durationSeconds: number) {
     await runMutation(async () => {
       await updateRestProcess({ durationSeconds, mode: 'setDuration' });
-      return true;
     });
+  }
+
+  function openReed(fromWhisper: boolean) {
+    if (!session) return;
+    const exerciseId =
+      fromWhisper && committedSet
+        ? committedSet.exercise
+        : (captureCard?.sessionExerciseId ?? restRuntime?.sessionExerciseId ?? liveCardioCard?.sessionExerciseId);
+    const row = session.timeline.find((row) => row.sessionExerciseId === exerciseId);
+    beforeSwap.current =
+      row && exerciseId ? { exerciseId, title: row.exerciseName, metrics: { ...metricValues } } : null;
+    const setNumber =
+      fromWhisper && whisper
+        ? whisper.setIndex + 1
+        : (activeSetEditor?.setNumber ?? captureCard?.currentSetNumber ?? restRuntime?.nextSetNumber);
+    setAskContext({
+      message: {
+        sessionId: session.session.sessionId,
+        ...(exerciseId ? { exerciseId } : {}),
+        ...(setNumber !== undefined ? { setIndex: setNumber - 1 } : {}),
+      },
+      label: row ? `${row.exerciseName}${setNumber ? ` · set ${setNumber}` : ''}` : 'Your session',
+      ...(fromWhisper && whisper ? { whisper: whisper.text } : {}),
+    });
+    haptics.light();
+    setIsReedOpen(true);
   }
 
   function renderSessionChrome({
@@ -730,28 +503,58 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     onOpenInsights,
     overlays,
     status,
+    timing,
   }: {
     children: ReactNode;
     onBack: () => void;
     onOpenInsights?: () => void;
     overlays?: ReactNode;
     status: LiveSessionStatusStrip;
+    timing?: WorkoutTiming;
   }) {
     return (
       <View style={styles.root}>
-        <View style={styles.activeWorkoutShell}>
-          <View style={styles.activeWorkoutPage}>{children}</View>
+        <Animated.View style={[styles.activeWorkoutShell, stageStyle]}>
+          <ReedSwapFeedback before={confirmedSwap} onFinished={finishSwap}>
+            <View style={styles.activeWorkoutPage}>{children}</View>
+          </ReedSwapFeedback>
           <View
-            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + insets.top + 16)}
-            style={[styles.statusStripFloating, { top: insets.top + 8 }]}
+            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + insets.top + theme.spacing.lg + theme.spacing.sm)}
+            style={[styles.statusStripFloating, { top: insets.top + theme.spacing.lg }]}
           >
             <WorkoutSessionStatusStrip
               onBack={onBack}
+              reed={
+                session ? (
+                  <SessionHeaderMascot mascot={sessionMascot} hidden={isReedOpen} onTalk={() => openReed(false)} />
+                ) : undefined
+              }
               onOpenInsights={onOpenInsights}
               status={status}
+              timing={timing ?? (view.kind === 'active' && session ? { ...session.session } : undefined)}
             />
           </View>
-        </View>
+        </Animated.View>
+        {session ? (
+          <>
+            <SessionWhisper
+              value={whisper ?? null}
+              top={statusStripHeight + theme.spacing.xs}
+              allowed={!isReedOpen && !isPickerInteracting && !isWorking && page === 'exercise'}
+              onOpen={() => openReed(true)}
+            />
+            <ReedSessionSheet
+              open={isReedOpen}
+              context={askContext}
+              onClose={() => setIsReedOpen(false)}
+              onApplied={(exerciseId) => {
+                if (beforeSwap.current?.exerciseId === exerciseId) setConfirmedSwap(beforeSwap.current);
+                sessionMascot.react('happy');
+                sessionMascot.act('tick');
+              }}
+            />
+          </>
+        ) : null}
         {overlays}
       </View>
     );
@@ -760,12 +563,12 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   if (session === undefined) {
     return (
       <View style={styles.loadingState}>
-        <ActivityIndicator color={String(theme.colors.accentPrimary)} />
+        <ActivityIndicator color={String(theme.colors.accent)} />
       </View>
     );
   }
 
-  if (session === null && isDraftSessionOpen) {
+  if (session === null && view.kind === 'draft') {
     const draftStatus: LiveSessionStatusStrip = {
       completedSetsLabel: '0 sets',
       durationLabel: '0m',
@@ -777,34 +580,32 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     return renderSessionChrome({
       children: (
         <TimelinePage
-          activeRestAfterSetNumber={null}
-          activeRestExerciseId={null}
-          activeRestSeconds={null}
+          activeRestCard={null}
           contentTopInset={statusStripHeight}
           elapsedLabel={null}
-          errorMessage={errorMessage}
-          isConfirmingFinishSession={isConfirmingFinishSession}
-          isWorking={isTimelineMutationPending}
-          onAddExercise={() => {
-            setIsConfirmingFinishSession(false);
-            setIsAddSheetOpen(true);
-          }}
-          onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
-          onDeleteSet={() => { }}
-          onFinishSession={handleFinishSession}
-          onOpenExercise={() => { }}
-          onOpenSet={() => { }}
-          onReorderTimeline={async () => false}
-          onRemoveExercise={() => { }}
-          onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
-          showHeader={false}
+          errorMessage={
+            errorMessage ??
+            (restPermissionDenied ? 'Enable notifications to get rest alerts when the app is in the background.' : null)
+          }
           timeline={[]}
+          editor={{
+            kind: 'draft',
+            isConfirmingFinishSession: isConfirmingFinishSession,
+            isWorking: isTimelineMutationPending,
+            onAddExercise: () => {
+              setIsConfirmingFinishSession(false);
+              setIsAddSheetOpen(true);
+            },
+            onClearFinishSessionConfirm: () => setIsConfirmingFinishSession(false),
+            onFinishSession: handleFinishSession,
+            onToggleFinishSessionConfirm: () => setIsConfirmingFinishSession((current) => !current),
+          }}
         />
       ),
       onBack: () => {
         setIsConfirmingFinishSession(false);
         setIsAddSheetOpen(false);
-        setIsDraftSessionOpen(false);
+        openHistory();
       },
       overlays: (
         <AddExerciseSheet
@@ -820,460 +621,52 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     });
   }
 
-  if (session === null || !isActiveSessionOpen) {
-    const completedExercises = latestEndedSummary?.exercises ?? [];
-    const hasActiveSession = Boolean(session);
-    const activeSessionStartedAt = session?.session.startedAt ?? null;
-    const activeSessionSets = session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
-
-    if (selectedEndedSessionId) {
-      const endedStatus = endedSessionTimeline
-        ? buildEndedStatusStrip(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt, endedSessionTimeline.timeline)
-        : {
-          completedSetsLabel: '0 sets',
-          durationLabel: '0m',
-          microLineTokens: [],
-          workSlotKind: 'active' as const,
-          workSlotLabel: 'Completed',
-        };
-
-      return renderSessionChrome({
-        children: endedSessionTimeline === undefined ? (
-          <View style={styles.loadingInline}>
-            <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-            <ReedText tone="muted" variant="caption">Loading session.</ReedText>
-          </View>
-        ) : endedSessionTimeline === null ? (
-          <View style={styles.trainingShelf}>
-            <ReedText variant="bodyStrong">Session unavailable.</ReedText>
-          </View>
-        ) : (
-          <TimelinePage
-            activeRestAfterSetNumber={null}
-            activeRestExerciseId={null}
-            activeRestSeconds={null}
-            contentTopInset={statusStripHeight}
-            elapsedLabel={formatEndedDuration(endedSessionTimeline.startedAt, endedSessionTimeline.endedAt)}
-            errorMessage={null}
-            hasNotes={Boolean(endedSessionTimeline.userNotes?.trim())}
-            isConfirmingFinishSession={false}
-            isReadOnly
-            isWorking={false}
-            onAddExercise={() => { }}
-            onClearFinishSessionConfirm={() => { }}
-            onDeleteSet={() => { }}
-            onFinishSession={() => { }}
-            onOpenExercise={() => { }}
-            onOpenNotes={() => setIsSessionNotesOpen(true)}
-            onOpenSet={() => { }}
-            onReorderTimeline={async () => false}
-            onRemoveExercise={() => { }}
-            onToggleFinishSessionConfirm={() => { }}
-            showHeader={false}
-            timeline={endedSessionTimeline.timeline}
-          />
-        ),
-        onBack: () => {
-          setIsEndedInsightsOpen(false);
-          setIsSessionNotesOpen(false);
-          setSelectedEndedSessionId(null);
-        },
-        onOpenInsights: () => setIsEndedInsightsOpen(true),
-        overlays: (
-          <>
-            {endedSessionInsights ? (
-              <WorkoutSessionInsightsSheet
-                fullInsights={endedSessionInsights.fullInsights as LiveSessionFullInsights}
-                isOpen={isEndedInsightsOpen}
-                onClose={() => setIsEndedInsightsOpen(false)}
-                summary={endedSessionInsights.summary as LiveSessionSummary}
-              />
-            ) : null}
-
-            {endedSessionTimeline && selectedEndedSessionId ? (
-              <WorkoutSessionNotesSheet
-                initialNotes={endedSessionTimeline.userNotes ?? ''}
-                isOpen={isSessionNotesOpen}
-                isSaving={isSavingSessionNotes}
-                onClose={() => setIsSessionNotesOpen(false)}
-                onSave={notes => handleSaveSessionNotes(selectedEndedSessionId, notes)}
-              />
-            ) : null}
-          </>
-        ),
-        status: endedStatus,
-      });
-    }
-
-    return (
-      <ScrollView
-        contentContainerStyle={[styles.startStateScroll, { paddingTop: insets.top + 8 }]}
-        showsVerticalScrollIndicator={false}
-        style={styles.startState}
-      >
-        {showStartBackButton ? (
-          <View style={styles.startTopRow}>
-            <Pressable accessibilityLabel="Exit workout" onPress={onExitWorkout} style={({ pressed }) => [styles.navButton, getTapScaleStyle(pressed)]}>
-              <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
-            </Pressable>
-          </View>
-        ) : null}
-
-        <GlassSurface contentStyle={styles.startHeroContent} style={styles.startHeroSurface}>
-          <View style={styles.startHeroTopRow}>
-            <View style={styles.startCopy}>
-              <ReedText variant="section">{hasActiveSession ? 'Resume session' : 'Start session'}</ReedText>
-              <ReedText tone="muted">
-                {hasActiveSession ? 'A workout is already open.' : 'Start empty. Add exercises as you train.'}
-              </ReedText>
-            </View>
-            <Pressable
-              accessibilityLabel={hasActiveSession ? 'Resume active workout session' : 'Start a live workout session'}
-              onPress={hasActiveSession ? () => setIsActiveSessionOpen(true) : handleStartSession}
-              style={({ pressed }) => [
-                styles.startHeroButton,
-                {
-                  backgroundColor: theme.colors.accentPrimary,
-                  ...getTapScaleStyle(pressed, isWorking),
-                },
-              ]}
-            >
-              <Ionicons color={String(theme.colors.accentPrimaryText)} name="arrow-forward" size={18} />
-            </Pressable>
-          </View>
-        </GlassSurface>
-
-        {session && activeSessionStartedAt ? (
-          <View style={styles.startHistory}>
-            <Pressable
-              accessibilityLabel="Resume ongoing workout session"
-              onPress={() => setIsActiveSessionOpen(true)}
-              style={({ pressed }) => [
-                styles.ongoingSessionRow,
-                {
-                  borderBottomColor: theme.colors.borderSoft,
-                },
-                getTapScaleStyle(pressed),
-              ]}
-            >
-              <View
-                style={[
-                  styles.ongoingSessionMark,
-                  {
-                    backgroundColor: theme.colors.accentPrimary,
-                    borderColor: theme.colors.accentPrimary,
-                  },
-                ]}
-              >
-                <View style={[styles.ongoingSessionPulse, { backgroundColor: theme.colors.accentPrimaryText }]} />
-              </View>
-              <View style={styles.sessionSummaryCopy}>
-                <View style={styles.sessionSummaryHeader}>
-                  <ReedText numberOfLines={1} style={styles.quickLogDayTitle} variant="bodyStrong">
-                    Ongoing session
-                  </ReedText>
-                </View>
-                <ReedText numberOfLines={1} style={styles.sessionExercisePreview} tone="muted" variant="caption">
-                  {formatSessionDate(activeSessionStartedAt)} · {formatElapsedCompact(activeSessionStartedAt, elapsedNow)}
-                </ReedText>
-                <View style={styles.sessionMetricRow}>
-                  <View
-                    style={[
-                      styles.sessionMetricChip,
-                      {
-                        backgroundColor: theme.colors.controlFill,
-                        borderColor: theme.colors.controlBorder,
-                      },
-                    ]}
-                  >
-                    <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={12} />
-                    <ReedText numberOfLines={1} tone="muted" variant="caption">
-                      {session.timeline.length} {session.timeline.length === 1 ? 'exercise' : 'exercises'}
-                    </ReedText>
-                  </View>
-                  <View
-                    style={[
-                      styles.sessionMetricChip,
-                      {
-                        backgroundColor: theme.colors.controlFill,
-                        borderColor: theme.colors.controlBorder,
-                      },
-                    ]}
-                  >
-                    <Ionicons color={String(theme.colors.textMuted)} name="checkmark" size={12} />
-                    <ReedText numberOfLines={1} tone="muted" variant="caption">
-                      {activeSessionSets} {activeSessionSets === 1 ? 'set' : 'sets'}
-                    </ReedText>
-                  </View>
-                </View>
-              </View>
-              <View style={styles.sessionOpenIcon}>
-                <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={17} />
-              </View>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View style={styles.startHistory}>
-          <View style={styles.startHistoryHeader}>
-            <ReedText variant="bodyStrong">Sessions</ReedText>
-            <View style={styles.sessionHeaderActions}>
-              <Pressable
-                accessibilityLabel={isHistoryExpanded ? 'Collapse sessions' : 'Expand sessions'}
-                onPress={() => setIsHistoryExpanded(current => !current)}
-                style={({ pressed }) => [styles.sessionPagerButton, getTapScaleStyle(pressed)]}
-              >
-                <Ionicons color={String(theme.colors.textMuted)} name={isHistoryExpanded ? 'chevron-up' : 'chevron-down'} size={18} />
-              </Pressable>
-            </View>
-          </View>
-          {!isHistoryExpanded ? null : endedSessionsPage === undefined ? (
-            <View style={styles.loadingInline}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted" variant="caption">Loading sessions.</ReedText>
-            </View>
-          ) : endedSessionsPage.summaries.length > 0 ? (
-            <>
-              <View style={styles.lastSessionList}>
-                {endedSessionsPage.summaries.map((item: EndedSessionSummary, index: number) => {
-                  const exercisePreview = formatSessionExercisePreview(item);
-                  const totalSets = item.exercises.reduce((total, exercise) => total + exercise.setCount, 0);
-
-                  return (
-                    <Pressable
-                      accessibilityLabel={`Open session from ${formatSessionDate(item.startedAt)}`}
-                      key={item.sessionId}
-                      onPress={() => {
-                        setIsEndedInsightsOpen(false);
-                        setSelectedEndedSessionId(item.sessionId);
-                      }}
-                      style={({ pressed }) => [
-                        styles.sessionSummaryRow,
-                        index < endedSessionsPage.summaries.length - 1
-                          ? { borderBottomColor: theme.colors.borderSoft }
-                          : { borderBottomWidth: 0 },
-                        getTapScaleStyle(pressed),
-                      ]}
-                    >
-                      <View
-                        style={[
-                          styles.sessionDateMark,
-                          {
-                            backgroundColor: theme.colors.textPrimary,
-                            borderColor: theme.colors.textPrimary,
-                          },
-                        ]}
-                      >
-                        <ReedText style={[styles.sessionDateMarkWeekday, { color: theme.colors.canvas }]} variant="label">
-                          {formatSessionWeekday(item.startedAt)}
-                        </ReedText>
-                        <ReedText style={[styles.sessionDateMarkDay, { color: theme.colors.canvas }]} variant="section">
-                          {formatSessionDay(item.startedAt)}
-                        </ReedText>
-                      </View>
-                      <View style={styles.sessionSummaryCopy}>
-                        <View style={styles.sessionSummaryHeader}>
-                          <ReedText numberOfLines={1} style={styles.sessionSummaryTitle} variant="bodyStrong">
-                            Free session
-                          </ReedText>
-                        </View>
-                        <ReedText numberOfLines={2} style={styles.sessionExercisePreview} tone="muted" variant="caption">
-                          {exercisePreview}
-                        </ReedText>
-                        <View style={styles.sessionMetricRow}>
-                          <View
-                            style={[
-                              styles.sessionMetricChip,
-                              {
-                                backgroundColor: theme.colors.controlFill,
-                                borderColor: theme.colors.controlBorder,
-                              },
-                            ]}
-                          >
-                            <Ionicons color={String(theme.colors.textMuted)} name="time-outline" size={12} />
-                            <ReedText numberOfLines={1} tone="muted" variant="caption">{formatSessionDuration(item.startedAt, item.endedAt)}</ReedText>
-                          </View>
-                          <View
-                            style={[
-                              styles.sessionMetricChip,
-                              {
-                                backgroundColor: theme.colors.controlFill,
-                                borderColor: theme.colors.controlBorder,
-                              },
-                            ]}
-                          >
-                            <Ionicons color={String(theme.colors.textMuted)} name="barbell-outline" size={12} />
-                            <ReedText numberOfLines={1} tone="muted" variant="caption">{totalSets} {totalSets === 1 ? 'set' : 'sets'}</ReedText>
-                          </View>
-                        </View>
-                      </View>
-                      <View style={styles.sessionOpenIcon}>
-                        <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={17} />
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {(sessionPageCursorStack.length > 0 || endedSessionsPage.nextBeforeStartedAt) ? (
-                <View style={styles.sessionPaginationRow}>
-                  <Pressable
-                    accessibilityLabel="Show newer sessions"
-                    disabled={sessionPageCursorStack.length === 0}
-                    onPress={() => setSessionPageCursorStack(current => current.slice(0, -1))}
-                    style={({ pressed }) => [styles.sessionPageControl, { opacity: sessionPageCursorStack.length === 0 ? 0.35 : 1 }, getTapScaleStyle(pressed, sessionPageCursorStack.length === 0)]}
-                  >
-                    <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={15} />
-                    <ReedText tone="muted" variant="caption">Newer</ReedText>
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel="Show earlier sessions"
-                    disabled={!endedSessionsPage.nextBeforeStartedAt}
-                    onPress={() => {
-                      if (endedSessionsPage.nextBeforeStartedAt) {
-                        setSessionPageCursorStack(current => [...current, endedSessionsPage.nextBeforeStartedAt!]);
-                      }
-                    }}
-                    style={({ pressed }) => [styles.sessionPageControl, { opacity: endedSessionsPage.nextBeforeStartedAt ? 1 : 0.35 }, getTapScaleStyle(pressed, !endedSessionsPage.nextBeforeStartedAt)]}
-                  >
-                    <ReedText tone="muted" variant="caption">Earlier</ReedText>
-                    <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={15} />
-                  </Pressable>
-                </View>
-              ) : null}
-            </>
-          ) : completedExercises.length > 0 ? (
-            <ReedText tone="muted" variant="caption">Earlier sessions will appear here.</ReedText>
-          ) : (
-            <View style={styles.trainingShelf}>
-              <ReedText variant="bodyStrong">Reed is ready when you are.</ReedText>
-              <ReedText tone="muted" variant="caption">Log a few sessions and this page will surface patterns, records, and useful repeats.</ReedText>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.startHistory}>
-          <View style={styles.startHistoryHeader}>
-            <ReedText variant="bodyStrong">Quick logs</ReedText>
-          </View>
-          {quickLogActivity === undefined ? (
-            <View style={styles.loadingInline}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted" variant="caption">Loading quick logs.</ReedText>
-            </View>
-          ) : quickLogDayGroups.length > 0 ? (
-            <View style={styles.quickLogDayList}>
-              {quickLogDayGroups.map((group, index) => {
-                const isExpanded = expandedQuickLogDays.includes(group.dayKey);
-                const preview = formatQuickLogDayPreview(group.logs);
-
-                return (
-                  <View
-                    key={group.dayKey}
-                    style={[
-                      styles.quickLogDayBlock,
-                      index < quickLogDayGroups.length - 1
-                        ? { borderBottomColor: theme.colors.borderSoft }
-                        : { borderBottomWidth: 0 },
-                    ]}
-                  >
-                    <Pressable
-                      accessibilityLabel={`${isExpanded ? 'Collapse' : 'Expand'} quick logs from ${formatSessionDate(group.latestLoggedAt)}`}
-                      onPress={() => toggleStringInState(group.dayKey, setExpandedQuickLogDays)}
-                      style={({ pressed }) => [styles.quickLogDayHeader, getTapScaleStyle(pressed)]}
-                    >
-                      <View
-                        style={[
-                          styles.sessionDateMark,
-                          {
-                            backgroundColor: theme.colors.controlFill,
-                            borderColor: theme.colors.controlBorder,
-                          },
-                        ]}
-                      >
-                        <ReedText style={[styles.sessionDateMarkWeekday, { color: theme.colors.textPrimary }]} variant="label">
-                          {formatSessionWeekday(group.latestLoggedAt)}
-                        </ReedText>
-                        <ReedText style={[styles.sessionDateMarkDay, { color: theme.colors.textPrimary }]} variant="section">
-                          {formatSessionDay(group.latestLoggedAt)}
-                        </ReedText>
-                      </View>
-                      <View style={styles.sessionSummaryCopy}>
-                        <View style={styles.sessionSummaryHeader}>
-                          <ReedText numberOfLines={1} style={styles.quickLogDayTitle} variant="bodyStrong">
-                            {group.logs.length} {group.logs.length === 1 ? 'quick log' : 'quick logs'}
-                          </ReedText>
-                        </View>
-                        <ReedText numberOfLines={2} style={styles.sessionExercisePreview} tone="muted" variant="caption">
-                          {preview}
-                        </ReedText>
-                      </View>
-                      <View style={styles.sessionOpenIcon}>
-                        <Ionicons color={String(theme.colors.textMuted)} name={isExpanded ? 'chevron-up' : 'chevron-down'} size={17} />
-                      </View>
-                    </Pressable>
-
-                    {isExpanded ? (
-                      <View style={styles.quickLogEntries}>
-                        {group.logs.map(logEntry => (
-                          <View key={logEntry._id} style={styles.quickLogEntryRow}>
-                            <View style={[styles.quickLogEntryDot, { backgroundColor: theme.colors.textMuted }]} />
-                            <View style={styles.quickLogEntryCopy}>
-                              <ReedText numberOfLines={1} variant="caption">
-                                {logEntry.exerciseName}
-                              </ReedText>
-                              <ReedText numberOfLines={1} tone="muted" variant="caption">
-                                {logEntry.summary}
-                              </ReedText>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                );
-              })}
-            </View>
-          ) : (
-            <ReedText tone="muted" variant="caption">Quick logs will appear here.</ReedText>
-          )}
-        </View>
-
-        {errorMessage ? (
-          <ReedText style={styles.inlineError} tone="danger">
-            {errorMessage}
-          </ReedText>
-        ) : null}
-      </ScrollView>
-    );
+  if (session === null || view.kind !== 'active') {
+    return <WorkoutHistoryScreen
+      selectedEndedSessionId={view.kind === 'past-session' ? view.sessionId : null}
+      onOpenSession={openSession}
+      onShowHistory={openHistory}
+      onResume={openActive}
+      onStart={handleStartSession}
+      onBack={onBack}
+      contentTopInset={statusStripHeight}
+      renderSessionChrome={renderSessionChrome}
+    />;
   }
 
   const renderWorkoutPage = (targetPage: WorkoutPage) =>
     targetPage === 'timeline' ? (
       <TimelinePage
-        activeRestAfterSetNumber={restRuntime ? restRuntime.nextSetNumber - 1 : null}
-        activeRestExerciseId={restRuntime?.sessionExerciseId ?? null}
-        activeRestSeconds={restRuntime ? restRemaining : null}
+        activeRestCard={restRuntime}
         contentTopInset={statusStripHeight}
-        elapsedLabel={elapsedLabel}
-        errorMessage={errorMessage}
+        elapsedLabel={null}
+        sessionStartedAt={session.session.startedAt}
+        errorMessage={
+          errorMessage ??
+          (restPermissionDenied ? 'Enable notifications to get rest alerts when the app is in the background.' : null)
+        }
         hasNotes={Boolean(session.session.userNotes?.trim())}
-        isConfirmingFinishSession={isConfirmingFinishSession}
-        isWorking={isTimelineMutationPending}
-        onAddExercise={() => {
-          setIsConfirmingFinishSession(false);
-          setIsAddSheetOpen(true);
-        }}
-        onClearFinishSessionConfirm={() => setIsConfirmingFinishSession(false)}
-        onDeleteSet={handleDeleteSet}
-        onFinishSession={handleFinishSession}
-        onOpenExercise={handleSelectExercise}
         onOpenNotes={() => setIsSessionNotesOpen(true)}
-        onOpenSet={handleOpenSet}
-        onReorderTimeline={handleReorderTimeline}
-        onRemoveExercise={handleRemoveExercise}
-        onToggleFinishSessionConfirm={() => setIsConfirmingFinishSession(current => !current)}
-        showHeader={false}
         timeline={session.timeline}
+        editor={{
+          kind: 'active',
+          isConfirmingFinishSession: isConfirmingFinishSession,
+          isWorking: isTimelineMutationPending,
+          onAddExercise: () => {
+            setIsConfirmingFinishSession(false);
+            setIsAddSheetOpen(true);
+          },
+          onClearFinishSessionConfirm: () => setIsConfirmingFinishSession(false),
+          onFinishSession: handleFinishSession,
+          onToggleFinishSessionConfirm: () => setIsConfirmingFinishSession((current) => !current),
+          exercises: {
+            onDeleteSet: handleDeleteSet,
+            onOpenExercise: handleSelectExercise,
+            onOpenSet: handleOpenSet,
+            onReorderTimeline: handleReorderTimeline,
+            onRemoveExercise: handleRemoveExercise,
+          },
+        }}
       />
     ) : (
       <ExercisePage
@@ -1291,17 +684,16 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           onPickerInteractionEnd: () => setIsPickerInteracting(false),
           onPickerInteractionStart: () => setIsPickerInteracting(true),
           onUpdateMetric: (key, nextValue) =>
-            setMetricValues(current => ({
+            setMetricValues((current) => ({
               ...current,
               [key]: nextValue,
             })),
-          onWarmupToggle: () => setWarmup(current => !current),
+          onWarmupToggle: () => setWarmup((current) => !current),
           setOutcomeDetails,
           warmup,
         }}
         liveCardio={{
           card: liveCardioCard,
-          elapsedSeconds: liveElapsedSeconds,
           errorMessage,
           finishSummary: liveCardioFinishSummary,
           isWorking,
@@ -1315,20 +707,18 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           onBackToTimeline: () => {
             setEditingSet(null);
             setLiveCardioFinishSummary(null);
-            setPage('timeline');
+            showPage('timeline');
           },
         }}
         rest={{
           card: restCard,
           errorMessage,
-          isRunning: restRunning,
           isWorking,
           onAdjust: handleAdjustRest,
           onPreset: handlePresetRest,
           onSwipeLeft: handleRestSwipeLeft,
           onSwipeRight: handleRestSwipeRight,
           onToggleRunning: handleToggleRestRunning,
-          remaining: restRemaining,
         }}
       />
     );
@@ -1337,7 +727,7 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
     // Workout has a local landing level plus the active session level.
     // Nested exercise/rest/live-cardio surfaces return to the session timeline first.
     if (page === 'timeline') {
-      setIsActiveSessionOpen(false);
+      openHistory();
       setIsConfirmingFinishSession(false);
       setIsInsightsOpen(false);
       setIsSessionNotesOpen(false);
@@ -1346,13 +736,16 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
 
     setEditingSet(null);
     setLiveCardioFinishSummary(null);
-    setPage('timeline');
+    showPage('timeline');
   }
 
   return renderSessionChrome({
     children: renderWorkoutPage(page),
     onBack: handleStatusStripBack,
-    onOpenInsights: () => setIsInsightsOpen(true),
+    onOpenInsights: () => {
+      setIsInsightsOpen(true);
+      void refreshSessionInsights();
+    },
     overlays: (
       <>
         <AddExerciseSheet
@@ -1364,21 +757,23 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
           onToggleFavorite={handleToggleFavorite}
         />
 
-        {sessionInsights ? (
-          <WorkoutSessionInsightsSheet
-            fullInsights={sessionInsights.fullInsights as LiveSessionFullInsights}
-            isOpen={isInsightsOpen}
-            onClose={() => setIsInsightsOpen(false)}
-            summary={sessionInsights.summary as LiveSessionSummary}
-          />
-        ) : null}
+        <WorkoutSessionInsightsSheet
+          errorMessage={sessionInsightsError}
+          insights={sessionInsights}
+          isLoading={isSessionInsightsLoading}
+          isOpen={isInsightsOpen}
+          onClose={() => setIsInsightsOpen(false)}
+          onRetry={() => {
+            void refreshSessionInsights();
+          }}
+        />
 
         <WorkoutSessionNotesSheet
           initialNotes={session.session.userNotes ?? ''}
           isOpen={isSessionNotesOpen}
           isSaving={isSavingSessionNotes}
           onClose={() => setIsSessionNotesOpen(false)}
-          onSave={notes => handleSaveSessionNotes(session.session.sessionId, notes)}
+          onSave={(notes) => handleSaveSessionNotes(session.session.sessionId, notes)}
         />
       </>
     ),
@@ -1386,79 +781,11 @@ export function WorkoutSurface({ onExitWorkout, showStartBackButton = true }: Wo
   });
 }
 
-function formatSessionDate(timestamp: number) {
-  return new Intl.DateTimeFormat('en', {
-    day: 'numeric',
-    month: 'short',
-    weekday: 'short',
-  }).format(new Date(timestamp));
-}
-
-function formatSessionWeekday(timestamp: number) {
-  return new Intl.DateTimeFormat('en', { weekday: 'short' }).format(new Date(timestamp));
-}
-
-function formatSessionDay(timestamp: number) {
-  return new Intl.DateTimeFormat('en', { day: 'numeric' }).format(new Date(timestamp));
-}
-
-function formatSessionExercisePreview(session: EndedSessionSummary) {
-  const visibleExercises = session.exercises.slice(0, 2).map(exercise => exercise.exerciseName);
-  const remaining = Math.max(0, session.exerciseCount - visibleExercises.length);
-  if (visibleExercises.length === 0) return 'No exercises logged';
-  return `${visibleExercises.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
-}
-
-function getLocalDayKey(timestamp: number) {
-  const date = new Date(timestamp);
-  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-}
-
-function formatQuickLogDayPreview(logs: QuickLogActivity[]) {
-  const visibleLogs = logs.slice(0, 2).map(logEntry => logEntry.exerciseName);
-  const remaining = Math.max(0, logs.length - visibleLogs.length);
-  return `${visibleLogs.join(' · ')}${remaining > 0 ? ` +${remaining}` : ''}`;
-}
-
-function toggleStringInState(
-  value: string,
-  setValues: (updater: (current: string[]) => string[]) => void,
-) {
-  setValues(current => (current.includes(value) ? current.filter(existing => existing !== value) : [...current, value]));
-}
-
-function formatSessionDuration(startedAt: number, endedAt: number) {
-  const minutes = Math.max(1, Math.round((endedAt - startedAt) / 60000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
-function formatEndedDuration(startedAt: number, endedAt: number) {
-  const minutes = Math.max(0, Math.round((endedAt - startedAt) / 60000));
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
-}
-
-function buildEndedStatusStrip(startedAt: number, endedAt: number, timeline: TimelineRow[]): LiveSessionStatusStrip {
-  const completedSets = timeline.reduce((total, row) => total + row.setCount, 0);
-  return {
-    completedSetsLabel: `${completedSets} ${completedSets === 1 ? 'set' : 'sets'}`,
-    durationLabel: formatEndedDuration(startedAt, endedAt),
-    microLineTokens: [],
-    workSlotKind: 'active',
-    workSlotLabel: 'Completed',
-  };
-}
-
 function getNextTimelineExerciseId(
   timeline: TimelineRow[],
   currentId: Id<'liveSessionExercises'>,
 ): Id<'liveSessionExercises'> | null {
-  const currentIndex = timeline.findIndex(row => row.sessionExerciseId === currentId);
+  const currentIndex = timeline.findIndex((row) => row.sessionExerciseId === currentId);
 
   if (currentIndex < 0) {
     return null;
@@ -1468,6 +795,12 @@ function getNextTimelineExerciseId(
   return nextRow?.sessionExerciseId ?? null;
 }
 
-function clampRestSeconds(value: number) {
-  return Math.max(15, Math.min(240, Math.round(value)));
+export function WorkoutSurface(props: WorkoutSurfaceProps) {
+  return (
+    <StageRecedeProvider>
+      <SessionMascotProvider>
+        <WorkoutSurfaceContent {...props} />
+      </SessionMascotProvider>
+    </StageRecedeProvider>
+  );
 }

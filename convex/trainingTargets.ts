@@ -3,8 +3,10 @@ import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { mutation, query } from './_generated/server';
 import { requireViewerProfile } from './profiles';
+import { loadProfileTimeZone } from './profileTimeZone';
+import { normalizeTimeZone } from './localCalendar';
 import { targetRuleValidator } from './targetValidators';
-import { emptyTargetProgress, evaluateTargetProgress, isEligibleTargetEvidence } from '../domains/goals/target-evaluation';
+import { emptyTargetProgress, evaluateTargetProgress, isEligibleTargetEvidence, isTrainingDayMetric } from '../domains/goals/target-evaluation';
 
 type TargetDoc = Doc<'trainingTargets'>;
 type ActivityLog = Doc<'activityLogs'>;
@@ -34,7 +36,7 @@ export const create = mutation({
     const profile = await requireViewerProfile(ctx);
     const now = Date.now();
     const startsAt = args.startsAt ?? now;
-    const timeZone = normalizeTimeZone(args.timeZone);
+    const timeZone = normalizeTimeZone(args.timeZone ?? await loadProfileTimeZone(ctx, profile._id));
     const endsAt = getEffectiveEndsAt({
       endsAt: args.endsAt,
       rule: args.rule,
@@ -225,15 +227,5 @@ function validateTargetInput(args: { endsAt: number; notes?: string; previewText
   if (!Number.isFinite(args.startsAt) || !Number.isFinite(args.endsAt) || args.endsAt <= args.startsAt) throw new ConvexError('Goal needs a valid time boundary.');
   normalizeTimeZone(args.timeZone);
   if (!Number.isFinite(args.rule.threshold) || args.rule.threshold <= 0) throw new ConvexError('Goal threshold must be positive.');
-  if ((args.rule.metricKind !== 'sessionCount') !== Boolean(args.rule.exerciseCatalogId)) throw new ConvexError('Exercise goals need an exercise; session goals cannot have one.');
-}
-
-function normalizeTimeZone(timeZone?: string) {
-  if (!timeZone || timeZone.length > 80) return 'UTC';
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
-    return timeZone;
-  } catch {
-    return 'UTC';
-  }
+  if (isTrainingDayMetric(args.rule.metricKind) === Boolean(args.rule.exerciseCatalogId)) throw new ConvexError('Exercise goals need an exercise; training-day goals cannot have one.');
 }

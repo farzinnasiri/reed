@@ -19,6 +19,7 @@ export const targetMetricKindValidator = v.union(
   v.literal('cardioDurationSeconds'),
   v.literal('cardioDistanceWithinDuration'),
   v.literal('sessionCount'),
+  v.literal('trainingDays'),
 );
 
 export const targetCadenceValidator = v.union(

@@ -9,8 +9,17 @@ export default function Root({ children }: { children: React.ReactNode }) {
     <html lang="en">
       <head>
         <meta charSet="utf-8" />
+        <title>Reed</title>
         <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
         <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+        <meta name="theme-color" content="#121110" />
+        <meta name="description" content="Reed. Your coach for everything you do with your body." />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+        <meta name="apple-mobile-web-app-title" content="Reed" />
+        <link rel="manifest" href="/manifest.webmanifest" />
+        {process.env.NODE_ENV === 'production' ? <script defer src="/register-sw.js" /> : null}
+        <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
         {/* 
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native. 
@@ -18,7 +27,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
         */}
         <ScrollViewStyleReset />
 
-        {/* Using raw CSS styles as an escape-hatch to ensure the background color never flickers in dark-mode. */}
+        {/* Raw CSS as an escape-hatch so the background never flashes light before the app mounts. */}
         <style dangerouslySetInnerHTML={{ __html: responsiveBackground }} />
         {/* Add any additional <head> elements that you want globally available on web... */}
       </head>
@@ -27,12 +36,12 @@ export default function Root({ children }: { children: React.ReactNode }) {
   );
 }
 
+// Reed is dark only: the canvas colour (design/system.ts) paints the page before JS runs.
 const responsiveBackground = `
 html,
 body,
-#root,
-#__next {
-  background-color: #f7f7f4;
+#root {
+  background-color: #121110;
   min-height: 100%;
 }
 
@@ -40,16 +49,6 @@ body {
   overflow: hidden;
 }
 
-#root,
-#__next {
+#root {
   isolation: isolate;
-}
-
-@media (prefers-color-scheme: dark) {
-  html,
-  body,
-  #root,
-  #__next {
-    background-color: #040404;
-  }
 }`;

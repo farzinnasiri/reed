@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · Overview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .hero-demo { display: flex; justify-content: center; gap: 28px; margin: 10px auto 0; flex-wrap: wrap }
+  .hero-demo figure { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 120px }
+  .hero-demo figcaption { font: 500 11px/1.3 "Geist Mono", monospace; color: #8a8a92; text-align: center }
+  .hero-demo .bubble { width: 112px; height: 112px; border-radius: 56px; background: transparent; display: grid; place-items: center; position: relative; overflow: hidden }
+  .hero-demo .bubble::before { content: ""; position: absolute; inset: -30px; background: radial-gradient(closest-side, rgba(61, 102, 242, var(--e, .2)), transparent); border-radius: 50% }
+  .hero-demo reed-face { position: relative }
+</style>
+</head>
+<body>
+<script>document.write(REED.nav('index.html'))</script>
+
+<section class="intro">
+  <div class="kicker">Reed · Interaction design · v1 for discussion</div>
+  <h1>Reed should feel present, not just answer</h1>
+  <p>The home screen works as a chat, but it behaves like a form: you type, a spinner-ish line appears, text drops in. This set of pages designs the <b>interaction layer</b> on top of the v2 visual design: how Reed reacts while you type, how a message leaves your hands, how history arrives, what suggestions do, what touching Reed does, and how Reed shows up during a session.</p>
+  <p><b>The core idea: Reed has one state at a time, and everything shows it.</b> The mascot's face, the glow behind the Pulse, the composer's edge and the haptics all read the same state. They never tell different stories.</p>
+</section>
+
+<div class="hero-demo" id="moods"></div>
+
+<div class="prose">
+  <h2>One state, every surface</h2>
+  <p>Derived on the client from things we already know (composer focus, typed text, pending reply, reply arrived, send failed, live session). No backend involved. Every page after this one shows these states in context.</p>
+  <table>
+    <thead><tr><th>State</th><th>When</th><th>Mascot</th><th>Glow</th><th>Composer</th><th>Haptic</th></tr></thead>
+    <tbody>
+      <tr><td>Resting</td><td>Nothing happening</td><td><code>idle</code>: breathes, blinks</td><td>energy .35, slow drift (one orbit ≈ 30 s)</td><td>Quiet, no rim</td><td>none</td></tr>
+      <tr><td>Listening</td><td>Composer focused, or Reed tapped</td><td><code>listening</code>, eyes on the composer</td><td>energy .5, leans down toward the dock</td><td>Pops, accent rim</td><td>none (keyboard)</td></tr>
+      <tr><td>Following</td><td>You type</td><td><code>listening</code> + a tiny nod per word (≤ 1 per 450 ms)</td><td>+.06 energy per word, decays in 400 ms</td><td>Rim brighter</td><td>none</td></tr>
+      <tr><td>Received</td><td>You send</td><td>hop, then <code>thinking</code> after 300 ms</td><td>One wave rises bottom → top (900 ms)</td><td>Text lifts into the thread, field clears</td><td>light</td></tr>
+      <tr><td>Thinking</td><td>Reply pending</td><td><code>thinking</code> (ring + spinner)</td><td>Breathes (±32 % every 2.4 s), drifts faster, a touch warmer</td><td>Usable; Send waits until the reply lands</td><td>none</td></tr>
+      <tr><td>Speaking</td><td>Reply revealing</td><td><code>speaking</code> (sound bars), eyes on the new text</td><td>Settles to .45 over 820 ms</td><td>Normal</td><td>light, only if a card lands</td></tr>
+      <tr><td>Waiting on you</td><td>Reply ended with chips or a card</td><td><code>encouraging</code> 1.6 s, then <code>idle</code>, eyes on the chips</td><td>Resting</td><td>Normal</td><td>none</td></tr>
+      <tr><td>Concerned</td><td>Send failed</td><td><code>concerned</code></td><td>Dim (.22), no warmth</td><td>Retry on the bubble</td><td>warning</td></tr>
+      <tr><td>Watching</td><td>Live session, you're logging</td><td><code>watching</code> in the workout header</td><td>none (no glow in workout)</td><td>n/a</td><td>none</td></tr>
+      <tr><td>Celebrating</td><td>PR, last set, session done</td><td><code>excited</code> → <code>happy</code></td><td>n/a</td><td>n/a</td><td>success (existing workout haptic)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Settled with Farzin (2026-10-03)</h2>
+  <ol class="rules">
+    <li data-n="01"><b>Skia is in.</b> <code>@shopify/react-native-skia</code> draws the glow field. Web (QA only) keeps a static glow.</li>
+    <li data-n="02"><b>Chapters are a business rule.</b> The thread is split into chapters by the server: a gap longer than a configurable threshold (default 60 min, tunable without an app release), or a workout session starting or ending in between. The same rule decides when home opens in today mode, so there is one definition of "a new conversation".</li>
+    <li data-n="03"><b>Earlier chapters come by pulling.</b> Scroll to the top of what's shown, keep pulling: rubber-band resistance, a threshold, release, the content springs back and the previous chapter unfolds above. Nothing older is rendered until you ask.</li>
+    <li data-n="04"><b>Primary interactions are taps.</b> No long-press or double-tap as main units; they aren't discoverable. Those gestures are easter eggs. Voice stays on the mic button.</li>
+    <li data-n="05"><b>In a session, Reed is another interface onto the same conversation.</b> Same backend thread and logic, different surface: a mascot in the workout header opens a Reed sheet. Reed is both proactive (reacts to what you log) and on call (form, "what now?", "machine's taken").</li>
+    <li data-n="06"><b>The logging layout does not change.</b> Reed in the session is additive: a header mascot, a whisper line, a sheet.</li>
+  </ol>
+
+  <h2>Rules for every interaction</h2>
+  <ol class="rules">
+    <li data-n="R1"><b>One state at a time</b>, and every surface reads it. A new feature that wants its own animation must map to a state first.</li>
+    <li data-n="R2"><b>Blue with a little warmth, never rainbow.</b> The accent stays the only saturated colour; warmth (<code>#e5a36f</code>) appears only while Reed thinks.</li>
+    <li data-n="R3"><b>Ambient is slow, reactions are fast.</b> Loops are ≥ 2.4 s cycles at low amplitude. Anything that reacts to you starts within one frame and settles within 1 s.</li>
+    <li data-n="R4"><b>Nothing runs when nobody is looking.</b> Glow and mascot loops pause when home isn't focused, when the app is in the background, and in Low Power Mode.</li>
+    <li data-n="R5"><b>Reduce Motion</b>: the glow is static, the mascot doesn't breathe, every move becomes a ≤ 200 ms crossfade. Every step in these pages lists its Reduce Motion version; toggle it under any phone.</li>
+    <li data-n="R6"><b>Everything is interruptible.</b> A new input retargets the running spring from where it is. Never remount to restart an animation; animate shared values.</li>
+    <li data-n="R7"><b>Haptics mark commitments</b> (send, a card landing, a pull threshold crossed, a success), never keystrokes or decoration.</li>
+    <li data-n="R8"><b>No spinners in the thread.</b> The mascot is the progress indicator. Skeletons only when a wait is long enough to need one (> 300 ms).</li>
+    <li data-n="R9"><b>Small mascots need readable faces.</b> Below ~80 px (workout header 40, sheet 56) never use the vertical-eye expressions (<code>encouraging</code>, <code>excited</code>, <code>ready</code>): they read as a pause button or the letter “I”. Use <code>happy</code>, <code>watching</code>, <code>surprised</code>, <code>concerned</code>, <code>thinking</code>.</li>
+    <li data-n="R10"><b>The mockup approximates.</b> Mascot glyphs and the canvas glow are stand-ins. Names, numbers, order and rules in the notes are the contract.</li>
+  </ol>
+
+  <h2>The pages</h2>
+  <p>Each page is a step player: the steps on the left, the phone in the middle, the notes for the current step on the right, and the full spec for every step underneath. Use <b>½×</b> or <b>⅕×</b> to watch an animation slowly, and <b>Reduce Motion</b> to see its fallback. Arrow keys step through. The small <span class="mono">haptic</span> badge above the phone lights up when a haptic fires.</p>
+  <div class="cards" id="cards"></div>
+
+  <h2>Out of scope here</h2>
+  <p>Visual polish of the current screens (that's <code>.scratch/ui-v2/POLISH-BRIEF.md</code>, running separately), new settings, any change to how sets are logged, and new backend features beyond the two flagged in <a href="09-build.html">Build reference</a> (chapters, session context on messages).</p>
+</div>
+
+<script>
+document.write(REED.pager('index.html'));
+const moods = ['idle', 'listening', 'thinking', 'speaking', 'encouraging', 'concerned', 'watching', 'excited', 'happy'];
+const energy = { idle: .16, listening: .26, thinking: .34, speaking: .24, encouraging: .2, concerned: .1, watching: .14, excited: .3, happy: .22 };
+document.getElementById('moods').innerHTML = moods.map(m => `<figure><div class="bubble" style="--e:${energy[m]}"><reed-face size="84" mood="${m}"></reed-face></div><figcaption>${m}</figcaption></figure>`).join('');
+const blurbs = {
+  '01': 'The state model live: resting, listening, following, received, thinking, speaking, waiting, concerned.',
+  '02': 'Focus pop, the rim, mic → send, growing to five lines, text lifting into the thread, typing while Reed thinks.',
+  '03': 'Today mode to a full answer: chip tap, the glide, thinking, the reply revealing, a card landing, chips arriving.',
+  '04': 'The chapter rule, opening on the current chapter only, and pull-to-load-earlier with rubber band and unfold. Drag the phone.',
+  '05': 'Where suggestions live, how many, how they arrive, step aside while you type, and become a message.',
+  '06': 'Tap Reed to talk. Eyes that follow what matters. And the easter eggs. Tap and hold the mascot yourself.',
+  '07': 'Reed during a workout without a chat: the header mascot reacts to sets and PRs, and whispers one line on rest.',
+  '08': 'Ask Reed mid-session: the Reed sheet over the workout, context chip, session chips, a swap applied in place.',
+  '09': 'Tokens, components, libraries, files, backend needs, performance budget and the order to build it.',
+};
+document.getElementById('cards').innerHTML = REED.pages.slice(1).map(([href, n, label]) => `<a href="${href}"><b>${n}</b><span>${label}</span><small>${blurbs[n]}</small></a>`).join('');
+</script>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import { sessionDurationSeconds } from '../domains/workout/session-duration';
 import { v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
@@ -107,7 +108,7 @@ export const loadReconciliationContext = internalQuery({
         id: profile._id,
       },
       sessions: sessions.map(session => ({
-        durationMin: session.endedAt ? Math.round((session.endedAt - session.startedAt) / 60000) : null,
+        durationMin: session.endedAt ? Math.round(sessionDurationSeconds(session, session.endedAt) / 60) : null,
         endedAt: session.endedAt ?? null,
         id: session._id,
         startedAt: session.startedAt,

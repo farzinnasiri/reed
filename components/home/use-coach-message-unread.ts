@@ -31,10 +31,11 @@ export function useCoachMessageUnread(message: string | null | undefined) {
       return;
     }
 
-    setSeenMessageKey(messageKey);
-    void AsyncStorage.setItem(SEEN_COACH_MESSAGE_KEY, messageKey).catch(() => {
-      setSeenMessageKey(current => (current === messageKey ? null : current));
-    });
+    let active = true;
+    void AsyncStorage.setItem(SEEN_COACH_MESSAGE_KEY, messageKey).then(() => {
+      if (active) setSeenMessageKey(messageKey);
+    }).catch(() => {});
+    return () => { active = false; };
   }, [messageKey, seenMessageKey]);
 
   const markCoachMessageRead = useCallback(() => {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { useQuery } from 'convex/react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePaginatedQuery, useQuery } from 'convex/react';
 import type { Id } from '@/convex/_generated/dataModel';
 import { api } from '@/convex/_generated/api';
 import type { AddExerciseSheetData } from './workout-surface.types';
@@ -18,9 +18,12 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
   const [muscleSearchText, setMuscleSearchText] = useState('');
   const [equipmentSearchText, setEquipmentSearchText] = useState('');
   const [activeFilterSection, setActiveFilterSection] = useState<AddExerciseFilterSectionKey>('muscles');
-  const data = useQuery(
-    api.exerciseCatalog.searchForAddSheet,
-    isOpen
+  const bootstrap = useQuery(api.exerciseCatalog.getPickerBootstrap, isOpen ? {} : 'skip');
+  const hasCommittedSearchContext =
+    debouncedSearchText.length > 0 || selectedFocusAreas.length > 0 || selectedTargetAreas.length > 0 || selectedEquipment.length > 0;
+  const search = usePaginatedQuery(
+    api.exerciseCatalog.searchForPicker,
+    isOpen && hasCommittedSearchContext
       ? {
           equipment: selectedEquipment.length > 0 ? selectedEquipment : undefined,
           focusAreas: selectedFocusAreas.length > 0 ? selectedFocusAreas : undefined,
@@ -28,25 +31,42 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
           query: debouncedSearchText || undefined,
         }
       : 'skip',
+    { initialNumItems: 40 },
   );
-  // Keep the last successful payload while a follow-up query resolves so the
-  // sheet doesn't flicker to empty between keystrokes/filter changes.
-  const [stableData, setStableData] = useState<AddExerciseSheetData | undefined>(data);
-  const effectiveData = data ?? stableData;
+  const [stableResults, setStableResults] = useState<AddExerciseSheetData['results']>([]);
+  const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
+  const { loadMore } = search;
+  const lastSettledResultCountRef = useRef(0);
+  const searchSignature = `${debouncedSearchText}|${selectedFocusAreas.join(',')}|${selectedTargetAreas.join(',')}|${selectedEquipment.join(',')}`;
+  const [previousSearchSignature, setPreviousSearchSignature] = useState(searchSignature);
+  if (previousSearchSignature !== searchSignature) {
+    setPreviousSearchSignature(searchSignature);
+    setHasCompletedSearch(false);
+  }
+  useEffect(() => { lastSettledResultCountRef.current = 0; }, [searchSignature]);
+  useEffect(() => {
+    if (search.status !== 'CanLoadMore') return;
+    if (search.results.length === lastSettledResultCountRef.current) {
+      loadMore(40);
+      return;
+    }
+    lastSettledResultCountRef.current = search.results.length;
+  }, [loadMore, search.results.length, search.status]);
+  if (search.status !== 'LoadingFirstPage' && stableResults !== search.results) {
+    setStableResults(search.results);
+    setHasCompletedSearch(true);
+  }
+  const displayedResults = search.status === 'LoadingFirstPage' ? stableResults : search.results;
+  const effectiveData = useMemo<AddExerciseSheetData | undefined>(
+    () => bootstrap ? { ...bootstrap, results: displayedResults } : undefined,
+    [bootstrap, displayedResults],
+  );
   const selectedExerciseIdsSet = useMemo(() => new Set(selectedExerciseIds), [selectedExerciseIds]);
-  const hasSearchContext =
-    searchText.trim().length > 0 || selectedFocusAreas.length > 0 || selectedTargetAreas.length > 0 || selectedEquipment.length > 0;
   const activeFilterCount = selectedFocusAreas.length + selectedTargetAreas.length + selectedEquipment.length;
   const selectedCount = selectedExerciseIds.length;
-  useEffect(() => {
-    if (data) {
-      setStableData(current => (current === data ? current : data));
-    }
-  }, [data]);
 
   useEffect(() => {
     if (!isOpen) {
-      setDebouncedSearchText('');
       return;
     }
 
@@ -67,7 +87,7 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     );
   }
 
-  function resetSearchSession() {
+  const resetSearchSession = useCallback(() => {
     setSearchText('');
     setDebouncedSearchText('');
     setSelectedFocusAreas([]);
@@ -77,14 +97,21 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     setMuscleSearchText('');
     setEquipmentSearchText('');
     setActiveFilterSection('muscles');
-  }
+  }, []);
 
   return {
     activeFilterCount,
     activeFilterSection,
     effectiveData,
     equipmentSearchText,
-    hasSearchContext,
+    hasSearchContext: hasCommittedSearchContext && (hasCompletedSearch || stableResults.length > 0),
+    hasMoreResults: search.status === 'CanLoadMore',
+    isLoadingMoreResults: search.status === 'LoadingMore',
+    loadMoreResults: () => {
+      if (search.status === 'CanLoadMore') {
+        loadMore(40);
+      }
+    },
     muscleSearchText,
     searchText,
     selectedCount,

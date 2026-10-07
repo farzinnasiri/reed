@@ -19,6 +19,23 @@ type SessionExerciseWithRecipe = Doc<'liveSessionExercises'> & {
   recipeKey: NonNullable<Doc<'liveSessionExercises'>['recipeKey']>;
 };
 
+export function getRequestedActiveSessionExerciseId(session: ActiveSession, firstExerciseId: Id<'liveSessionExercises'> | null) {
+  return (session.activeProcess?.kind === 'live_cardio' ? session.activeProcess.sessionExerciseId : null)
+    ?? session.activeSessionExerciseId ?? firstExerciseId;
+}
+
+export function resolveCurrentSessionExercise<T extends Pick<Doc<'liveSessionExercises'>, '_id'>>(
+  session: ActiveSession,
+  sessionExercises: T[],
+) {
+  const requestedId = getRequestedActiveSessionExerciseId(session, sessionExercises[0]?._id ?? null);
+  return sessionExercises.find(entry => entry._id === requestedId) ?? sessionExercises[0] ?? null;
+}
+
+export function getNextSessionSetNumber(loggedSets: readonly Pick<Doc<'activityLogs'>, '_id'>[]) {
+  return loggedSets.length + 1;
+}
+
 export function buildCurrentLiveSessionState(args: {
   logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>;
   session: ActiveSession;
@@ -27,8 +44,7 @@ export function buildCurrentLiveSessionState(args: {
   const { logsByExercise, session, sessionExercises } = args;
   const restProcess = session.activeProcess?.kind === 'rest' ? session.activeProcess : null;
   const liveCardioProcess = session.activeProcess?.kind === 'live_cardio' ? session.activeProcess : null;
-  const requestedActiveSessionExerciseId =
-    liveCardioProcess?.sessionExerciseId ?? session.activeSessionExerciseId ?? sessionExercises[0]?._id ?? null;
+  const requestedActiveSessionExerciseId = getRequestedActiveSessionExerciseId(session, sessionExercises[0]?._id ?? null);
 
   const timeline = sessionExercises.map(sessionExercise => {
     const logs = logsByExercise.get(sessionExercise._id) ?? [];
@@ -66,10 +82,7 @@ export function buildCurrentLiveSessionState(args: {
     };
   });
 
-  const requestedSessionExercise = requestedActiveSessionExerciseId
-    ? sessionExercises.find(entry => entry._id === requestedActiveSessionExerciseId) ?? null
-    : null;
-  const activeSessionExercise = requestedSessionExercise ?? sessionExercises[0] ?? null;
+  const activeSessionExercise = resolveCurrentSessionExercise(session, sessionExercises);
 
   if (!activeSessionExercise) {
     return {
@@ -79,6 +92,7 @@ export function buildCurrentLiveSessionState(args: {
       session: {
         sessionId: session._id,
         startedAt: session.startedAt,
+        manualDurationSeconds: session.manualDurationSeconds,
         status: session.status,
         userNotes: session.userNotes ?? '',
         userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
@@ -101,8 +115,9 @@ export function buildCurrentLiveSessionState(args: {
           elapsedSeconds: liveCardioSnapshot.elapsedSeconds,
           exerciseName: activeSessionExercise.exerciseName,
           isRunning: liveCardioSnapshot.isRunning,
+          lastResumedAt: liveCardioProcess.lastResumedAt,
           layoutKind: activeRecipeDefinition.layoutKind,
-          nextSetNumber: activeLogs.length + 1,
+          nextSetNumber: getNextSessionSetNumber(activeLogs),
           previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
           processKind: activeRecipeDefinition.processKind,
           recipeKey: liveCardioProcess.recipeKey,
@@ -118,6 +133,7 @@ export function buildCurrentLiveSessionState(args: {
       session: {
         sessionId: session._id,
         startedAt: session.startedAt,
+        manualDurationSeconds: session.manualDurationSeconds,
         status: session.status,
         userNotes: session.userNotes ?? '',
         userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
@@ -130,13 +146,20 @@ export function buildCurrentLiveSessionState(args: {
     !previousSet && activeSessionExercise.recipeKey === 'assist_bodyweight'
       ? { assistLoad: activeSessionExercise.setupModifiers?.assistanceSupportKg ?? 0 }
       : null;
-  const captureInput = prepareRecipeCaptureInput(activeSessionExercise.recipeKey, previousSet?.metrics ?? setupSeedMetrics);
+  const captureInput = prepareRecipeCaptureInput(
+    activeSessionExercise.recipeKey,
+    previousSet?.metrics ?? setupSeedMetrics,
+  );
+  const targetMetrics = activeSessionExercise.targetDefaults?.[activeLogs.length]?.metrics;
   const captureCard = {
-    currentSetNumber: activeLogs.length + 1,
+    exerciseCatalogId: activeSessionExercise.exerciseCatalogId,
+    currentSetNumber: getNextSessionSetNumber(activeLogs),
     exerciseName: activeSessionExercise.exerciseName,
     exerciseSetupModifiers: activeSessionExercise.setupModifiers ?? {},
     fields: captureInput.fields,
-    initialMetrics: captureInput.initialMetrics,
+    initialMetrics: targetMetrics
+      ? prepareRecipeCaptureInput(activeSessionExercise.recipeKey, targetMetrics).initialMetrics
+      : captureInput.initialMetrics,
     layoutKind: captureInput.layoutKind,
     modifierCapabilities: normalizeExerciseModifierCapabilities(
       activeSessionExercise.modifierCapabilities ?? emptyExerciseModifierCapabilities,
@@ -160,6 +183,7 @@ export function buildCurrentLiveSessionState(args: {
       session: {
         sessionId: session._id,
         startedAt: session.startedAt,
+        manualDurationSeconds: session.manualDurationSeconds,
         status: session.status,
         userNotes: session.userNotes ?? '',
         userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
@@ -179,6 +203,7 @@ export function buildCurrentLiveSessionState(args: {
     session: {
       sessionId: session._id,
       startedAt: session.startedAt,
+        manualDurationSeconds: session.manualDurationSeconds,
       status: session.status,
       userNotes: session.userNotes ?? '',
       userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
@@ -199,16 +224,18 @@ function buildRestCard(
 
   const restLogs = logsByExercise.get(restExercise._id) ?? [];
   const previousSet = restLogs.at(-1);
+  // Keep base duration and start together. Clients calculate elapsed time from this pair.
   const restSnapshot = getRestSnapshot(restProcess);
 
   return {
     durationSeconds: restSnapshot.durationSeconds,
     exerciseName: restExercise.exerciseName,
     isComplete: restSnapshot.isComplete,
-    isRunning: restSnapshot.isRunning,
+    isRunning: restProcess.isRunning,
     nextSetNumber: restProcess.nextSetNumber,
     previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
-    remainingSeconds: restSnapshot.remainingSeconds,
+    remainingSeconds: restProcess.remainingSeconds,
+    startedAt: restProcess.startedAt,
     sessionExerciseId: restExercise._id,
   };
 }

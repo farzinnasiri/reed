@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 09 Build reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .prose h3 { font-size: 16px; color: #f0f0f3; margin: 26px 0 8px }
+  .prose ul.plain { list-style: none; margin-top: 8px }
+  .prose ul.plain li { font-size: 14px; line-height: 1.6; color: #b4b4bb; padding: 8px 0 8px 16px; border-top: 1px solid #242428; position: relative }
+  .prose ul.plain li::before { content: ""; position: absolute; left: 0; top: 1.15em; width: 7px; height: 1px; background: #66666d }
+  .prose ul.plain li b { color: #ececf0 }
+  .curve { width: 120px; height: 44px; display: block }
+</style>
+</head>
+<body>
+<script>document.write(REED.nav('09-build.html'))</script>
+<section class="intro">
+  <div class="kicker">Reed · Interaction · 09</div>
+  <h1>Build reference</h1>
+  <p>Everything the implementing agent needs beyond the step notes: libraries, tokens, haptics, the files to add or change, what the backend must provide, the performance budget, and the order to build in. Each page’s “Full spec” section has the per-step detail.</p>
+</section>
+
+<div class="prose">
+  <h2>Libraries</h2>
+  <table>
+    <thead><tr><th>Package</th><th>Status</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td>@shopify/react-native-skia</td><td>add (<code>npx expo install</code>)</td><td>The glow field only: 3 radial gradients + a wave, driven by Reanimated shared values. Not for the mascot (it stays SVG) and not for text.</td></tr>
+      <tr><td>expo-sensors</td><td>add</td><td><code>DeviceMotion</code> at 30 Hz for the glow tilt. Unsubscribe when paused.</td></tr>
+      <tr><td>expo-battery</td><td>add</td><td><code>isLowPowerModeEnabledAsync</code> + listener: Low Power Mode pauses ambient loops.</td></tr>
+      <tr><td>react-native-reanimated 4.3</td><td>have</td><td>All animation. Springs as <code>withSpring({ duration, dampingRatio })</code>. UI-thread only.</td></tr>
+      <tr><td>react-native-gesture-handler 2.31</td><td>have</td><td>Pull-to-load pan (simultaneous with list scroll), mascot tap/long-press/pan composition.</td></tr>
+      <tr><td>react-native-keyboard-controller 1.21</td><td>have</td><td>Dock, thread inset and mascot overlay ride the keyboard on the UI thread; interactive dismiss.</td></tr>
+      <tr><td>@gorhom/bottom-sheet 5.2</td><td>have</td><td>The in-session Reed sheet, via <code>ReedSheet</code>.</td></tr>
+      <tr><td>expo-haptics</td><td>have</td><td>Through <code>design/haptics.ts</code> only.</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:14px">No Lottie, no Rive, no three.js. The mascot is already a parametric SVG engine; the “3D” is tilt parallax on the glow.</p>
+
+  <h2>Motion tokens</h2>
+  <p>Names are the contract; add the two new ones to <code>design/motion.ts</code>. The curves below are what the mockup plays.</p>
+  <table id="springs"><thead><tr><th>Token</th><th>Config</th><th>Use</th><th>Curve</th></tr></thead><tbody></tbody></table>
+  <h3>Other numbers</h3>
+  <ul class="plain">
+    <li><b>Press-in</b>: scale .97 (chips, buttons) or .92 (mascot), 90 ms timing; release with <code>snappy</code> (buttons) or <code>pop</code> (mascot, composer).</li>
+    <li><b>Composer pop</b>: <code>withSequence(withTiming(1.03, {duration: 110}), withSpring(1, pop))</code>.</li>
+    <li><b>Reveal</b>: per sentence 180 ms fade + 4 px rise, 90 ms stagger. Cards: 12 px rise, scale .96, <code>smooth</code>.</li>
+    <li><b>Rubber band</b>: <code>d = (1 − 1 / (x · 0.55 / H + 1)) · H</code>, H = list height. Threshold 64 pt on screen.</li>
+    <li><b>Hints</b> (“Thinking”) appear after 400 ms, never sooner. “Still thinking” at 8 s.</li>
+    <li><b>Whisper</b>: lives 6 s; ≤ 80 characters; one per exercise + PR + caution.</li>
+    <li><b>Idle</b>: glance every 20–40 s after 45 s idle; sleepy after 3 min.</li>
+    <li><b>Glow</b> props: <code>energy · cy · spread · warmth · breath · speed</code> + <code>wave()</code>; smoothing τ 350 ms; breath ±32 % over 2.4 s.</li>
+  </ul>
+
+  <h2>Haptics</h2>
+  <table>
+    <thead><tr><th>Name</th><th>expo-haptics</th><th>When</th></tr></thead>
+    <tbody>
+      <tr><td>selection</td><td><code>selectionAsync</code></td><td>Chip tap, mascot tap, + menu open, pull threshold crossed, “Earlier” tap.</td></tr>
+      <tr><td>light</td><td>Impact Light</td><td>Send (typed, chip, voice), a card lands, Reed sheet opens, voice start, 5th easter-egg tap.</td></tr>
+      <tr><td>soft <i>(new)</i></td><td>Impact Soft</td><td>Hold-squish reaches 500 ms.</td></tr>
+      <tr><td>medium <i>(new)</i></td><td>Impact Medium</td><td>Hold-squish released.</td></tr>
+      <tr><td>success</td><td>Notification Success</td><td>Swap applied. PR (shared with the existing workout haptic, never doubled).</td></tr>
+      <tr><td>warning <i>(new)</i></td><td>Notification Warning</td><td>A send failed (once).</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:14px">Never on keystrokes, scrolling, reveals or ambient changes.</p>
+
+  <h2>Files</h2>
+  <h3>New</h3>
+  <ul class="plain">
+    <li><b>components/reed/presence/use-reed-presence.ts</b>: the one state (resting · listening · following · received · thinking · speaking · waitingOnYou · concerned · watching · celebrating) + <code>lookAt()</code>, <code>react()</code>. Everything else reads from it.</li>
+    <li><b>components/reed/presence/reed-glow-field.tsx</b>: Skia field with the props above; pause rules inside.</li>
+    <li><b>components/reed/presence/lift-overlay.tsx</b>: measured overlay for composer → bubble and chip → bubble (shares the mascot overlay layer).</li>
+    <li><b>components/reed/thread/pull-earlier.tsx</b>: the pan gesture, rubber band, pill and threshold haptic.</li>
+    <li><b>components/reed/session/reed-session-sheet.tsx</b>, <b>session-whisper.tsx</b>, <b>session-header-mascot.tsx</b>.</li>
+    <li><b>components/reed/widgets/widget-enter.tsx</b>: one entering animation for every fresh widget.</li>
+  </ul>
+  <h3>Changed</h3>
+  <ul class="plain">
+    <li><b>reed-composer.tsx / reed-dock.tsx</b>: focus pop, rim, session-button collapse, mic ↔ send, growth to 5 lines, waiting Send. Placeholder never changes.</li>
+    <li><b>reed-thread.tsx</b>: chapter-only data, fresh-message reveal, “Latest” moves to the presence row, filler “thinking” rows not rendered.</li>
+    <li><b>presence-row.tsx</b>: chips rules (page 05), “Latest”, hint timing.</li>
+    <li><b>presence-mascot.tsx / mascot-engine.ts</b>: tap to talk, gaze targets, reactions (bounce, wobble, nod, tick, hop, squish/spring, shake), new <code>dizzy</code> expression; port pointer gaze from the POC.</li>
+    <li><b>use-home-mode.ts</b>: today mode from the server’s chapter boundary instead of <code>COLD_AFTER_MS</code>.</li>
+    <li><b>today-view.tsx</b>: open choreography (page 03 step 1).</li>
+    <li><b>workout-session-status-strip.tsx</b>: the 40 px Reed button. <b>The only layout change in the workout module.</b> Title/metric roll on Reed-applied changes in the capture card.</li>
+    <li><b>design/motion.ts</b> (+ <code>pop</code>, <code>lift</code>), <b>design/haptics.ts</b> (+ soft, medium, warning), <b>DESIGN.md</b> (a “Presence” section summarising page 00 and these tokens).</li>
+  </ul>
+
+  <h2>Backend (Convex) needs</h2>
+  <ul class="plain">
+    <li><b>Chapters.</b> Assign <code>chapterId</code> when a message is written: new chapter if the gap to the previous message &gt; <code>chapterGapMinutes</code> (server config, default 60) or a workout session started/ended in between. Chapter doc: <code>startedAt</code> (UTC), <code>sessionId?</code>, <code>closedAt?</code>. Backfill existing threads. Queries: current chapter messages (paginated, newest 30), previous chapter by cursor, chapter label data. <code>getPresence</code> adds <code>currentChapterId</code> and whether a new chapter would start now (<code>now</code> arg, as with other time-based queries).</li>
+    <li><b>Message context.</b> Optional <code>context: { sessionId, exerciseId?, setIndex? }</code> on user messages; included in Reed’s prompt context; validated against the user’s live session.</li>
+    <li><b>Session whisper.</b> <code>reed.getSessionWhisper({ sessionId, exerciseId, now })</code> → <code>null | { kind: 'info' | 'pr' | 'caution', text }</code>. Deterministic from existing session data; no LLM in v1. Rate rules enforced server-side (one per exercise + pr + caution).</li>
+    <li>No cancel/stop for replies, no streaming: the design works without them. If streaming comes later, keep the per-sentence reveal.</li>
+  </ul>
+
+  <h2>Performance budget</h2>
+  <ul class="plain">
+    <li>60 fps on a mid-range Android (the owner’s device class) for every step. No animation on the JS thread.</li>
+    <li>Glow: ≤ 2 ms per frame on the UI thread; render at 30 fps while resting (skip frames), 60 fps during reactions (wave, focus).</li>
+    <li>Ambient loops (glow, breathing, idle glances) pause when home is not focused, the app is not active, Low Power Mode is on, or Reduce Motion is on.</li>
+    <li>No new re-renders per keystroke beyond today’s; word-boundary reactions only touch shared values.</li>
+    <li>Thread: only the current chapter is rendered on open (typically &lt; 30 rows).</li>
+  </ul>
+
+  <h2>Build order</h2>
+  <ol class="rules">
+    <li data-n="1"><b>Presence hook</b> + mascot API (gaze, react) with no visual change yet. Pages 01, 06.</li>
+    <li data-n="2"><b>Composer</b>: pop, rim, button collapse, mic ↔ send, growth, waiting Send. Page 02.</li>
+    <li data-n="3"><b>Send and receive</b>: lift overlay, make-room, sentence reveal, widget enter, hint timing, filler rows removed. Pages 01, 03.</li>
+    <li data-n="4"><b>Chapters</b> (backend first), chapter-only thread, pull-to-load, “Earlier”, “Latest”, today mode from the chapter rule. Page 04.</li>
+    <li data-n="5"><b>Suggestions</b> rules. Page 05.</li>
+    <li data-n="6"><b>Glow field</b> (Skia), states, wave, tilt, pause rules. Page 01.</li>
+    <li data-n="7"><b>Touching Reed</b>: tap to talk and eyes first; easter eggs last. Page 06.</li>
+    <li data-n="8"><b>Session, proactive</b>: header mascot, set nod, whispers (backend whisper query). Page 07.</li>
+    <li data-n="9"><b>Session, on call</b>: Reed sheet, context, session chips, swap roll, voice. Page 08.</li>
+    <li data-n="10"><b>Reduce Motion, pause rules, device QA</b> on Android and iOS for every step of every page.</li>
+  </ol>
+
+  <h2>How to check the work</h2>
+  <ul class="plain">
+    <li>For every step on every page: a screen recording from a real Android device next to the mockup at ½× and 1×. Timings within ±15 %, order identical, nothing extra moving.</li>
+    <li>Toggle Reduce Motion on the device and repeat; every step must match its Reduce Motion line.</li>
+    <li>Interrupt everything: tap during the glide, pull during a reveal, send during a pull. Nothing jumps; springs retarget.</li>
+    <li>Leave home and come back mid-animation: no stuck states, ambient loops resume.</li>
+  </ul>
+</div>
+<script>
+document.write(REED.pager('09-build.html'));
+const use = { snappy: 'press release, toggles', smooth: 'reveals, inserts, make-room, gaze', gentle: 'hero entrance', morph: 'glide, recede, Pulse', sheet: 'sheets', pop: 'composer, chips, mascot reactions, + menu', lift: 'text/chip → bubble' };
+const tb = document.querySelector('#springs tbody');
+for (const [name, s] of Object.entries(REED.springs)) {
+  const pts = s.css.slice(7, -1).split(', ').map(Number);
+  const max = Math.max(1.1, ...pts);
+  const d = pts.map((y, i) => `${i ? 'L' : 'M'} ${(i / (pts.length - 1)) * 116 + 2} ${42 - (y / max) * 38}`).join(' ');
+  tb.insertAdjacentHTML('beforeend', `<tr><td>${name}</td><td><code>${s.real || `duration ${s.duration}, dampingRatio ${s.dampingRatio}`}</code><br><span style="color:#7c7c84;font-size:12px">${s.note}</span></td><td>${use[name]}</td><td><svg class="curve" viewBox="0 0 120 44"><path d="M 2 ${42 - 38 / max} H 118" stroke="#2c2c31" stroke-dasharray="3 3" fill="none"/><path d="${d}" stroke="#aec2ff" stroke-width="1.6" fill="none"/></svg></td></tr>`);
+}
+</script>
+</body>
+</html>

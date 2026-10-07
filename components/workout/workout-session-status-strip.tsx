@@ -1,34 +1,38 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Pressable, View, type ColorValue } from 'react-native';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { Surface } from '@/components/ui/surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { workoutSemanticPalette } from '@/design/system';
-import { styles } from './workout-surface.styles';
+import { styles } from './workout-session-status-strip.styles';
 import type { LiveSessionStatusStrip } from './workout-surface.types';
+import { WorkoutDuration, type WorkoutTiming } from './workout-duration';
 
 type WorkoutSessionStatusStripProps = {
+  reed?: React.ReactNode;
   onBack: () => void;
   onOpenInsights?: () => void;
   status: LiveSessionStatusStrip;
+  timing?: WorkoutTiming;
 };
 
 export function WorkoutSessionStatusStrip({
   onBack,
   onOpenInsights,
   status,
+  timing,
+  reed,
 }: WorkoutSessionStatusStripProps) {
   const { theme } = useReedTheme();
   const hasMicroTokens = status.microLineTokens.length > 0;
-  const workSlotLabelColor = getWorkSlotLabelColor(status.workSlotKind, theme.colors.textPrimary);
-  const workSlotIconColor = getWorkSlotIconColor(status.workSlotKind, theme.colors.textMuted);
+  const workSlotLabelColor = getWorkSlotLabelColor(status.workSlotKind, theme.colors.ink);
+  const workSlotIconColor = getWorkSlotIconColor(status.workSlotKind, theme.colors.inkMuted);
   const workSlotIcon = getWorkSlotIcon(status.workSlotKind);
 
   return (
-    <GlassSurface
+    <Surface
       contentStyle={styles.statusStripContent}
-      elevated={false}
       style={styles.statusStripShell}
     >
       <View style={styles.statusStripRow}>
@@ -37,25 +41,25 @@ export function WorkoutSessionStatusStrip({
           onPress={onBack}
           style={({ pressed }) => [styles.navButton, styles.statusStripNavButton, getTapScaleStyle(pressed)]}
         >
-          <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={17} />
+          <Ionicons color={String(theme.colors.ink)} name="arrow-back" size={17} />
         </Pressable>
 
         <View style={styles.statusStripMetrics}>
           <View style={hasMicroTokens ? styles.statusStripCenter : [styles.statusStripCenter, styles.statusStripCenterSingle]}>
             <View style={styles.statusStripPrimaryRow}>
-              <MetricSegment
-                icon="time-outline"
-                label={status.durationLabel}
-              />
+              <View style={styles.statusStripSegment}>
+                <Ionicons name="time-outline" size={14} color={String(theme.colors.inkMuted)} />
+                <WorkoutDuration timing={timing} fallback={status.durationLabel} />
+              </View>
 
-              <View style={[styles.statusStripDot, { backgroundColor: theme.colors.textMuted }]} />
+              <View style={[styles.statusStripDot, { backgroundColor: theme.colors.inkMuted }]} />
 
               <MetricSegment
                 icon="barbell-outline"
                 label={status.completedSetsLabel}
               />
 
-              <View style={[styles.statusStripDot, { backgroundColor: theme.colors.textMuted }]} />
+              <View style={[styles.statusStripDot, { backgroundColor: theme.colors.inkMuted }]} />
 
               <MetricSegment
                 icon={workSlotIcon}
@@ -72,7 +76,7 @@ export function WorkoutSessionStatusStrip({
                     <ReedText
                       style={[
                         styles.statusStripMicroText,
-                        { color: getMicroTokenColor(token, theme.colors.textMuted) },
+                        { color: getMicroTokenColor(token, theme.colors.inkMuted) },
                       ]}
                       variant="bodyStrong"
                     >
@@ -82,7 +86,7 @@ export function WorkoutSessionStatusStrip({
                       <View
                         style={[
                           styles.statusStripMicroDot,
-                          { backgroundColor: theme.colors.textMuted },
+                          { backgroundColor: theme.colors.inkMuted },
                         ]}
                       />
                     ) : null}
@@ -93,19 +97,20 @@ export function WorkoutSessionStatusStrip({
           </View>
         </View>
 
+        {reed}
         {onOpenInsights ? (
           <Pressable
             accessibilityLabel="Open live session insights"
             onPress={onOpenInsights}
             style={({ pressed }) => [styles.navButton, styles.statusStripNavButton, getTapScaleStyle(pressed)]}
           >
-            <Ionicons color={String(theme.colors.textPrimary)} name="ellipsis-vertical" size={16} />
+            <Ionicons color={String(theme.colors.ink)} name="ellipsis-vertical" size={16} />
           </Pressable>
         ) : (
           <View style={[styles.navButton, styles.statusStripNavButton]} />
         )}
       </View>
-    </GlassSurface>
+    </Surface>
   );
 }
 
@@ -125,7 +130,7 @@ function MetricSegment({
   return (
     <View style={styles.statusStripSegment}>
       <Ionicons
-        color={String(iconColor ?? theme.colors.textMuted)}
+        color={String(iconColor ?? theme.colors.inkMuted)}
         name={icon}
         size={14}
       />

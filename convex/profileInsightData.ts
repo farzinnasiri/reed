@@ -1,8 +1,12 @@
+import { VALUE_LABELS } from '../domains/profile/onboarding';
+import { trainingCadence } from './trainingProfileRead';
 import { internalQuery } from './_generated/server';
 import { v } from 'convex/values';
 import { summarizeTrainingWindow } from '../domains/trainingKnowledge/trainingHistory';
 import { buildBodyweightTrend } from '../domains/trainingKnowledge/bodyStatus';
 import type { RecipeKey } from '../domains/workout/recipes';
+import { readProfileConsistency } from './consistencyReader';
+import { resolveWeeklyActiveDaysTarget } from './weeklyTrainingTarget';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -10,7 +14,8 @@ export const snapshot = internalQuery({
   args: { profileId: v.id('profiles') },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const weekStartAt = now - 7 * DAY_MS;
+    const consistency = await readProfileConsistency(ctx, args.profileId, now);
+    const weekStartAt = consistency.currentWeek.weekStartAt;
     const bodyStartAt = now - 90 * DAY_MS;
     const trainingProfile = await ctx.db.query('trainingProfiles').withIndex('by_profile_id', q => q.eq('profileId', args.profileId)).unique();
     const logs = await ctx.db.query('activityLogs').withIndex('by_profile_id_and_logged_at', q => q.eq('profileId', args.profileId).gte('loggedAt', weekStartAt).lte('loggedAt', now)).take(500);
@@ -44,12 +49,15 @@ export const snapshot = internalQuery({
     return {
       now,
       trainingProfile: trainingProfile ? {
-        weeklyTarget: trainingProfile.trainingReality.weeklySessions,
-        constraints: trainingProfile.constraints.areas,
+        weeklyTarget: resolveWeeklyActiveDaysTarget(trainingCadence(trainingProfile)),
+        constraints: trainingProfile.onboarding?.discomfort.map(p => p.regionId) ?? [],
+        onboarding: trainingProfile.onboarding ?? null,
       } : null,
-      primaryGoal: trainingProfile?.rankedGoals[0] ?? null,
+      topMotivation: trainingProfile?.onboarding?.values[0] ? VALUE_LABELS[trainingProfile.onboarding.values[0]] : null,
       week: {
-        activeDays: new Set(logs.map(log => new Date(log.loggedAt).toISOString().slice(0, 10))).size,
+        activeDays: consistency.currentWeek.activeDays,
+        startAt: weekStartAt,
+        timeZone: consistency.timeZone,
         sets: summary.activityCount,
         topExercises: summary.byExercise.slice(0, 5).map(exercise => `${exercise.exerciseName} (${exercise.setCount})`),
         topGroups: summary.work.groups.filter(group => group.setCount > 0).slice(0, 4).map(group => `${group.label} (${group.setCount})`),

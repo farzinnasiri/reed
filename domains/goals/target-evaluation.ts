@@ -10,7 +10,8 @@ export type TargetRule = {
     | 'exerciseRepsAtLoad'
     | 'exerciseTotalDurationSeconds'
     | 'exerciseTotalReps'
-    | 'sessionCount';
+    | 'sessionCount'
+    | 'trainingDays';
   minDurationSeconds?: number;
   minLoadKg?: number;
   minReps?: number;
@@ -68,8 +69,19 @@ export type TargetEvaluationResult = {
   verifiedSnapshot?: TargetVerifiedSnapshot;
 };
 
+/** `sessionCount` is the stored name for training days. Both kinds count local days. */
+export function isTrainingDayMetric(metricKind: string) {
+  return metricKind === 'sessionCount' || metricKind === 'trainingDays';
+}
+
+/** Training-day goals count local days. Older goals may still store the unit "sessions". */
+export function displayedGoalUnit(rule: { metricKind: string; thresholdUnit: string }) {
+  return isTrainingDayMetric(rule.metricKind) ? 'days' : rule.thresholdUnit;
+}
+
 export function emptyTargetProgress(rule: TargetRule): TargetProgressSummary {
-  return progress(rule.threshold, 0, progressLabel(0, rule.threshold, rule.thresholdUnit, goalScopeLabel(rule.cadence)), `${formatNumber(rule.threshold)} ${rule.thresholdUnit}`, goalScopeLabel(rule.cadence));
+  const unit = displayedGoalUnit(rule);
+  return progress(rule.threshold, 0, progressLabel(0, rule.threshold, unit, goalScopeLabel(rule.cadence)), `${formatNumber(rule.threshold)} ${unit}`, goalScopeLabel(rule.cadence));
 }
 
 export function isEligibleTargetEvidence(log: TargetEvidenceLog) {
@@ -86,12 +98,13 @@ export function evaluateTargetProgress(subject: TargetEvaluationSubject, evidenc
     return evaluatePeriodQuota(subject, logs, now);
   }
 
+  const unit = displayedGoalUnit(rule);
   const current = aggregateMetricValue(rule, logs, rule.cadence, subject.timeZone);
   const completed = current >= rule.threshold;
   return {
     completed,
-    progressSummary: progress(rule.threshold, current, progressLabel(current, rule.threshold, rule.thresholdUnit, 'total'), unitLabel(rule.thresholdUnit, rule.threshold), 'total'),
-    verifiedSnapshot: completed ? snapshot(now, logs, `${formatNumber(current)} / ${formatNumber(rule.threshold)} ${rule.thresholdUnit}`) : undefined,
+    progressSummary: progress(rule.threshold, current, progressLabel(current, rule.threshold, unit, 'total'), unitLabel(unit, rule.threshold), 'total'),
+    verifiedSnapshot: completed ? snapshot(now, logs, `${formatNumber(current)} / ${formatNumber(rule.threshold)} ${unit}`) : undefined,
   };
 }
 
@@ -117,16 +130,18 @@ function evaluatePeriodQuota(subject: TargetEvaluationSubject, logs: TargetEvide
 
   const requiredPeriods = periods.length;
   const completed = requiredPeriods > 0 && satisfied >= requiredPeriods;
+  const unit = displayedGoalUnit(rule);
+  const periodScope = rule.cadence === 'daily' ? 'today' : 'this week';
   return {
     completed,
     progressSummary: {
       current: currentPeriodValue,
-      currentLabel: progressLabel(currentPeriodValue, rule.threshold, rule.thresholdUnit, rule.cadence === 'daily' ? 'today' : 'this week'),
+      currentLabel: progressLabel(currentPeriodValue, rule.threshold, unit, periodScope),
       currentPeriod: {
         current: currentPeriodValue,
         label: rule.cadence === 'daily' ? 'Today' : 'This week',
         required: rule.threshold,
-        valueLabel: progressLabel(currentPeriodValue, rule.threshold, rule.thresholdUnit, rule.cadence === 'daily' ? 'today' : 'this week'),
+        valueLabel: progressLabel(currentPeriodValue, rule.threshold, unit, periodScope),
       },
       overall: {
         current: satisfied,
@@ -135,7 +150,7 @@ function evaluatePeriodQuota(subject: TargetEvaluationSubject, logs: TargetEvide
         valueLabel: `${formatNumber(satisfied)} / ${formatNumber(requiredPeriods)} ${rule.cadence === 'daily' ? 'days hit' : 'weeks hit'}`,
       },
       required: rule.threshold,
-      requiredLabel: `${formatNumber(rule.threshold)} ${rule.thresholdUnit}`,
+      requiredLabel: `${formatNumber(rule.threshold)} ${unit}`,
       satisfiedPeriods: satisfied,
       totalPeriods: requiredPeriods,
     },
@@ -157,20 +172,21 @@ function metricValue(rule: TargetRule, log: TargetEvidenceLog) {
       return log.metrics.duration ?? log.metrics.leftDuration ?? log.metrics.rightDuration ?? 0;
     case 'exerciseTotalDurationSeconds':
     case 'cardioDurationSeconds':
-      return (log.metrics.duration ?? 0) + (log.metrics.leftDuration ?? 0) + (log.metrics.rightDuration ?? 0);
+      return effortDurationSeconds(log.metrics);
     case 'cardioDistanceMeters':
       return (log.metrics.distance ?? 0) * 1000;
     case 'cardioDistanceWithinDuration': {
-      const duration = log.metrics.duration ?? 0;
+      const duration = effortDurationSeconds(log.metrics);
       return duration > 0 && duration <= (rule.minDurationSeconds ?? Number.MAX_SAFE_INTEGER) ? (log.metrics.distance ?? 0) * 1000 : 0;
     }
     case 'sessionCount':
+    case 'trainingDays':
       return 1;
   }
 }
 
 function aggregateMetricValue(rule: TargetRule, logs: TargetEvidenceLog[], cadence: TargetRule['cadence'], timeZone?: string) {
-  if (rule.metricKind === 'sessionCount') {
+  if (isTrainingDayMetric(rule.metricKind)) {
     return countActiveDays(logs, timeZone);
   }
 
@@ -193,6 +209,14 @@ function isBestEffortMetric(metricKind: TargetRule['metricKind']) {
 
 function totalReps(log: TargetEvidenceLog) {
   return (log.metrics.reps ?? 0) + (log.metrics.leftReps ?? 0) + (log.metrics.rightReps ?? 0);
+}
+
+// Side durations are the whole effort. A shared duration or manual-cardio `time` is the fallback, not an extra addend.
+function effortDurationSeconds(metrics: Record<string, number>) {
+  const left = metrics.leftDuration ?? 0;
+  const right = metrics.rightDuration ?? 0;
+  if (left > 0 || right > 0) return left + right;
+  return metrics.duration || metrics.time || 0;
 }
 
 function buildPeriods({

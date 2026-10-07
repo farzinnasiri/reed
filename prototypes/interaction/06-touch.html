@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 06 Touching Reed</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .app .mascot-layer { touch-action: none }
+  .app .label-tag { position: absolute; z-index: 55; font: 500 11px/1 "Geist Mono", monospace; color: #f2c38f; background: #3a2e1d; padding: 5px 8px; border-radius: 8px; opacity: 0; pointer-events: none; white-space: nowrap }
+  .app .pulse.open { box-shadow: 0 0 0 1px rgba(110, 145, 255, .4) }
+</style>
+</head>
+<body>
+<script>
+const { icon, ui, chat } = REED;
+
+function tag(c, text, x, y) {
+  let el = c.$('.label-tag');
+  if (!el) { el = document.createElement('div'); el.className = 'label-tag'; c.app.appendChild(el); }
+  el.textContent = text;
+  el.style.left = `${x}px`; el.style.top = `${y}px`;
+  return c.anim(el, [{ opacity: 0 }, { opacity: 1 }], { dur: 150 });
+}
+
+// live touch handling on the mascot (tap, rapid taps, hold, drag)
+function wire(c) {
+  const layer = c.$('.mascot-layer');
+  const face = () => c.face;
+  let down = 0, sx = 0, sy = 0, holdT = 0, held = false, dragging = false, taps = [];
+  const inner = () => layer.querySelector('reed-face');
+  layer.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    layer.setPointerCapture(e.pointerId);
+    down = performance.now(); sx = e.clientX; sy = e.clientY; held = false; dragging = false;
+    inner().animate([{ transform: 'scale(1)' }, { transform: 'scale(.92)' }], { duration: 90, fill: 'forwards' });
+    holdT = setTimeout(() => { held = true; c.haptic('soft'); face().mood('happy'); face().act('squish'); }, 500);
+  });
+  layer.addEventListener('pointermove', e => {
+    if (!down) return;
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!dragging && Math.hypot(dx, dy) > 8) { dragging = true; clearTimeout(holdT); }
+    if (dragging) {
+      const d = Math.hypot(dx, dy), m = 14 * (1 - 1 / (d / 60 + 1));
+      const ux = dx / (d || 1), uy = dy / (d || 1);
+      inner().style.transform = `translate(${ux * m * 1.6}px, ${uy * m * 1.6}px) scale(${1 + m / 140}, ${1 - m / 200})`;
+      face().gaze(Math.max(-1, Math.min(1, dx / 60)), Math.max(-1, Math.min(1, dy / 60)));
+    }
+  });
+  const up = async () => {
+    if (!down) return;
+    down = 0;
+    clearTimeout(holdT);
+    inner().getAnimations().forEach(a => a.cancel());
+    if (dragging) {
+      const from = inner().style.transform;
+      inner().style.transform = '';
+      inner().animate([{ transform: from }, { transform: 'none' }], { duration: REED.springs.pop.duration, easing: REED.springs.pop.css });
+      face().gaze(0, 0);
+      return;
+    }
+    if (held) {
+      face()._held?.cancel();
+      c.haptic('medium');
+      await face().act('spring');
+      face().mood('idle');
+      return;
+    }
+    inner().animate([{ transform: 'scale(.92)' }, { transform: 'scale(1)' }], { duration: REED.springs.pop.duration, easing: REED.springs.pop.css });
+    const now = performance.now();
+    taps = taps.filter(t => now - t < 1600);
+    taps.push(now);
+    if (taps.length >= 5) {
+      taps = [];
+      c.haptic('light');
+      face().mood('surprised'); await face().act('shake');
+      face().mood('dizzy'); await new Promise(r => setTimeout(r, 1200));
+      face().mood('happy'); face().act('hop'); await new Promise(r => setTimeout(r, 900));
+      face().mood('listening');
+      return;
+    }
+    c.haptic('selection');
+    face().act('bounce');
+    if (!c.app.classList.contains('kb-up')) chat.focus(c, { gaze: [0.5, 0.6] });
+  };
+  layer.addEventListener('pointerup', up);
+  layer.addEventListener('pointercancel', up);
+}
+
+REED.page({
+  kicker: 'Reed · Interaction · 06',
+  title: 'Touching Reed',
+  intro: [
+    '<b>Tapping Reed means “I want to talk to you”</b>: Reed reacts and the composer opens. That is the only primary interaction on the mascot. Everything else here (rapid taps, press and hold, dragging) is an easter egg: delightful if found, never needed.',
+    '<b>Try it on the phone:</b> tap Reed, tap it 5 times quickly, press and hold then let go, or drag it a little.',
+  ],
+  hint: 'The mascot is live on every step: tap, 5 quick taps, press-and-hold, drag.',
+  build(c) {
+    c.app.innerHTML = `<canvas class="glow"></canvas>${ui.pulse()}
+      <div class="stage">
+        <div class="thread"><div class="tscroll">
+          <div class="chapter">Today · 9:12</div>
+          <div class="you">What’s the plan for Friday?</div>
+          <div class="voice">Lower body, a bit lighter than Tuesday. Squats <strong>3 × 6</strong> at 80 kg.</div>
+        </div></div>
+        <div class="presence"><div class="corner-slot"></div><span class="hint"></span><div class="chips"></div></div>
+        ${ui.dock()}
+      </div>
+      ${ui.mascotLayer()}${REED.keyboard}`;
+  },
+  async settle(c) { await c.placeMascot(c.$('.corner-slot')); wire(c); },
+  steps: [
+    {
+      t: 'Tap Reed', u: 'You tap the mascot in the corner (or the hero in today mode).',
+      async run(c) {
+        const inner = c.$('.mascot-layer reed-face');
+        await c.anim(inner, [{ transform: 'scale(1)' }, { transform: 'scale(.92)' }], { dur: 90 });
+        c.haptic('selection');
+        await Promise.all([
+          c.anim(inner, [{ transform: 'scale(.92)' }, { transform: 'scale(1)' }], { dur: REED.springs.pop.duration, spring: 'pop' }),
+          c.face.act('bounce'),
+          chat.focus(c),
+        ]);
+        await c.wait(600);
+      },
+      when: [
+        ['down', 'Press-in: Reed squeezes to .92 (90 ms).'],
+        ['up', 'Release: springs back with <code>pop</code> and a small bounce. Haptic selection.'],
+        ['up', 'Reed → <code>listening</code>, eyes on the composer. The composer focuses (with its pop), keyboard rises.'],
+      ],
+      spec: [
+        'Hit area: the whole 96 px corner mascot (112 hero). Accessibility label “Talk to Reed”, role button.',
+        'In today mode the hero does the same; it does not glide until you actually send.',
+        'If the composer is already focused, tapping Reed only reacts (bounce) and keeps focus.',
+      ],
+      haptic: 'selection',
+      reduce: 'No squeeze or bounce; composer focuses.',
+      build: ['Pressable around the mascot layer in <code>presence-mascot.tsx</code>; <code>onPress</code> → <code>composerRef.focus()</code>.'],
+    },
+    {
+      t: 'Tap while Reed thinks', u: 'You tap Reed while it’s working on a reply.',
+      async run(c) {
+        await chat.blur(c);
+        c.face.mood('thinking'); c.state('thinking'); c.glow.set({ breath: 1, speed: 2.5, warmth: .15, energy: .5 });
+        await c.wait(600);
+        c.haptic('selection');
+        await c.face.act('wobble');
+        await c.wait(600);
+      },
+      when: [
+        ['up', 'A small wobble (scale 1.06 × .95, 480 ms). Reed stays <code>thinking</code>; no expression change.'],
+        ['up', 'The composer focuses as usual (you may want to add something).'],
+      ],
+      spec: ['The reaction depends on state, the meaning does not: tap always = talk.'],
+      haptic: 'selection',
+      reduce: 'No wobble.',
+      build: ['<code>mascot.react(state)</code> picks bounce / wobble.'],
+    },
+    {
+      t: 'Eyes follow what matters', u: 'Reed looks at whatever is happening.',
+      async run(c) {
+        c.face.mood('idle'); c.state('resting'); c.glow.set({ breath: 0, speed: 1, warmth: 0, energy: .35 });
+        const seq = [
+          ['you type → composer', [0.6, 0.6], 150, 668],
+          ['new reply → the text', [0.3, -0.8], 150, 548],
+          ['chips arrive → chips', [0.9, 0.05], 200, 700],
+          ['Pulse opens → up', [0.1, -1], 150, 130],
+          ['nothing → back to you', [0, 0.1], 150, 600],
+        ];
+        for (const [label, g, x, y] of seq) {
+          c.face.gaze(...g);
+          await tag(c, label, x, y);
+          await c.wait(1200);
+        }
+      },
+      when: [
+        ['typing', 'Toward the composer (.6, .6).'],
+        ['reply', 'Up toward the newest text (.3, −.8) while it reveals.'],
+        ['chips', 'Toward the chips (.9, 0).'],
+        ['Pulse', 'Up (.1, −1) while the Pulse is open (visible behind the scrim edge).'],
+        ['idle', 'Drifts back to you (0, .1) after 3 s of nothing.'],
+      ],
+      spec: ['Gaze moves with <code>smooth</code> (480 ms). Never tracks per frame except during a drag or pull.', 'Values are the engine’s <code>gazeX/gazeY</code> (±1 → ±6 units).'],
+      haptic: 'none',
+      reduce: 'Gaze changes instantly, no travel.',
+      build: ['<code>use-reed-mascot-presence.ts</code> exposes <code>lookAt(target)</code>; targets are semantic (composer, reply, chips, pulse, user).', 'Pointer gaze is <code>gazeX</code>/<code>gazeY</code> on the mascot controller (<code>components/reed/mascot</code>).'],
+    },
+    {
+      t: 'Easter egg: five quick taps', u: 'You tap Reed 5 times within 1.6 s.',
+      async run(c) {
+        const inner = c.$('.mascot-layer reed-face');
+        for (let i = 0; i < 4; i++) { c.haptic('selection'); await c.anim(inner, [{ transform: 'scale(1)' }, { transform: 'scale(.92)' }, { transform: 'scale(1)' }], { dur: 220 }); await c.wait(90); }
+        c.haptic('light');
+        c.face.mood('surprised'); await c.face.act('shake');
+        c.face.mood('dizzy'); await c.wait(1200);
+        c.face.mood('happy'); await c.face.act('hop'); await c.wait(700);
+        c.face.mood('idle');
+      },
+      when: [
+        ['taps 1–4', 'Normal tap reactions.'],
+        ['tap 5', 'Reed is <code>surprised</code> and shakes (± 7°, 520 ms). Haptic light.'],
+        ['+520', '<code>dizzy</code> for 1.2 s (eyes spinning).'],
+        ['+1.7 s', '<code>happy</code> hop, then back to normal.'],
+      ],
+      spec: ['Only one composer focus happens (on the first tap). Max once per minute; further rapid taps are normal taps.', '<code>dizzy</code> is a new expression for the engine (two small turning rings).'],
+      haptic: 'selection per tap, light on the 5th',
+      reduce: 'Expression changes without shake or hop.',
+      build: ['Tap counter in the mascot pressable; new <code>dizzy</code> expression in <code>mascot-engine.ts</code>.'],
+    },
+    {
+      t: 'Easter egg: press and hold', u: 'You hold Reed for half a second, then let go.',
+      async run(c) {
+        c.haptic('soft');
+        c.face.mood('happy');
+        await c.face.act('squish');
+        await c.wait(700);
+        c.face._held?.cancel();
+        c.haptic('medium');
+        await c.face.act('spring');
+        c.face.mood('idle');
+        await c.wait(400);
+      },
+      when: [
+        ['500 ms', 'Reed squashes (1.1 × .84, 8 px down) and closes its eyes happily. Haptic soft.'],
+        ['release', 'It springs up (22 px jump with stretch) and lands. Haptic medium.'],
+      ],
+      spec: ['Not voice, not a menu: just a toy. Under 500 ms it is a normal tap.', 'Mic remains the only way to start voice.'],
+      haptic: 'soft at 500 ms, medium on release',
+      reduce: 'Expression only.',
+      build: ['<code>Gesture.LongPress().minDuration(500)</code> composed with the tap (<code>Gesture.Exclusive</code>).'],
+    },
+    {
+      t: 'Easter egg: tug', u: 'You drag Reed a little.',
+      async run(c) {
+        const inner = c.$('.mascot-layer reed-face');
+        c.face.gaze(1, -0.5);
+        await c.anim(inner, [{ transform: 'none' }, { transform: 'translate(16px,-8px) scale(1.08,.95)' }], { dur: 300, easing: 'ease-out' });
+        await c.wait(300);
+        c.face.gaze(0, 0);
+        await c.anim(inner, [{ transform: 'translate(16px,-8px) scale(1.08,.95)' }, { transform: 'none' }], { dur: REED.springs.pop.duration, spring: 'pop' });
+        await c.wait(400);
+      },
+      when: [
+        ['drag', 'Reed stretches toward your finger with resistance (max ~22 px) and its eyes follow the finger.'],
+        ['release', 'Snaps home with <code>pop</code> (one visible overshoot).'],
+      ],
+      spec: ['Reed never leaves its anchor. Dragging does not move it permanently or dismiss it.'],
+      haptic: 'none',
+      reduce: 'No stretch.',
+      build: ['<code>Gesture.Pan()</code> on the mascot; translation through a rubber function; spring back on end.'],
+    },
+    {
+      t: 'Idle life', u: 'You leave home open and don’t touch anything.',
+      async run(c) {
+        await chat.blur(c);
+        await tag(c, '45 s: a glance around', 140, 668);
+        c.face.gaze(-.6, -.6); await c.wait(900); c.face.gaze(.7, -.2); await c.wait(900); c.face.gaze(0, 0); await c.wait(700);
+        await tag(c, '3 min: dozes', 140, 668);
+        c.face.mood('sleepy'); c.glow.set({ energy: .22, speed: .5 }); await c.wait(1600);
+        await tag(c, 'touch anything: wakes', 140, 668);
+        c.face.mood('surprised'); await c.face.act('hop'); c.face.mood('idle'); c.glow.set({ energy: .35, speed: 1 });
+        await c.wait(600);
+      },
+      when: [
+        ['45 s', 'Occasional glance (look away and back) every 20–40 s, random.'],
+        ['3 min', '<code>sleepy</code> (the engine’s <code>rest</code>/low pose); glow dims to .22 and slows.'],
+        ['any input', 'Wakes: brief <code>surprised</code>, hop, back to idle.'],
+      ],
+      spec: ['Only while home is visible and the app is active. Never wakes the screen or plays when locked.'],
+      haptic: 'none',
+      reduce: 'No glances; sleepy is a static pose.',
+      build: ['A small idle timer in the presence hook; reset by any touch on home.'],
+    },
+  ],
+});
+</script>
+</body>
+</html>

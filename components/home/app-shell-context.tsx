@@ -1,13 +1,19 @@
 import { createContext, useContext } from 'react';
 
+// The open session as the home screen shows it (the Pulse and the dock); null when none is open.
+export type ActiveWorkout = {
+  currentExerciseName: string | null;
+  currentSetNumber: number | null;
+  sessionId: string;
+  startedAt: number;
+  manualDurationSeconds?: number;
+};
+
 type AppShellContextValue = {
+  activeWorkout: ActiveWorkout | null;
   displayName: string;
-  dockReservedSpace: number;
   hasUnreadCoachMessage: boolean;
-  hasActiveWorkoutSession: boolean;
   markCoachMessageRead: () => void;
-  setIsEditingSettingsProfile: (isEditing: boolean) => void;
-  setIsWorkoutSessionFullscreen: (isFullscreen: boolean) => void;
 };
 
 export const AppShellContext = createContext<AppShellContextValue | null>(null);

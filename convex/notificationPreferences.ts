@@ -9,6 +9,7 @@ import {
 } from './notificationTypes';
 import type { Id } from './_generated/dataModel';
 import type { MutationCtx } from './_generated/server';
+import { loadProfileTimeZone, updateProfileTimeZone } from './profileTimeZone';
 
 export function defaultNotificationPreferences(profileId: Id<'profiles'>, now: number) {
   return {
@@ -30,10 +31,11 @@ export async function getOrCreateNotificationPreferences(ctx: MutationCtx, profi
     .withIndex('by_profile_id', q => q.eq('profileId', profileId))
     .unique();
 
-  if (existing) return existing;
+  if (existing) return { ...existing, timeZone: await loadProfileTimeZone(ctx, profileId) };
 
   const id = await ctx.db.insert('notificationPreferences', defaultNotificationPreferences(profileId, now));
-  return await ctx.db.get(id);
+  const created = await ctx.db.get(id);
+  return created ? { ...created, timeZone: await loadProfileTimeZone(ctx, profileId) } : null;
 }
 
 export function isNotificationKindEnabled(
@@ -63,7 +65,7 @@ export function isInsideNotificationQuietHours(now: number, preferences: {
 
   const formatter = new Intl.DateTimeFormat('en-US', {
     hour: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
     minute: '2-digit',
     timeZone: preferences.timeZone ?? 'UTC',
   });
@@ -80,10 +82,11 @@ export const viewerPreferences = query({
   args: {},
   handler: async ctx => {
     const profile = await requireViewerProfile(ctx);
-    return await ctx.db
+    const preferences = await ctx.db
       .query('notificationPreferences')
       .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
       .unique();
+    return preferences ? { ...preferences, timeZone: await loadProfileTimeZone(ctx, profile._id) } : null;
   },
 });
 
@@ -109,6 +112,9 @@ export const updatePreferences = mutation({
     assertOptionalClockTime(args.quietHoursStart, 'Quiet hours start');
     assertOptionalClockTime(args.quietHoursEnd, 'Quiet hours end');
     assertOptionalTimeZone(args.timeZone);
+    if (args.timeZone !== undefined && args.timeZone !== null) {
+      await updateProfileTimeZone(ctx, profile, args.timeZone);
+    }
 
     await ctx.db.patch(existing._id, {
       coachCatchups: args.coachCatchups ?? existing.coachCatchups,
@@ -120,7 +126,9 @@ export const updatePreferences = mutation({
       quietHoursStart: args.quietHoursStart === undefined ? existing.quietHoursStart : args.quietHoursStart ?? undefined,
       reminders: args.reminders ?? existing.reminders,
       rewards: args.rewards ?? existing.rewards,
-      timeZone: args.timeZone === undefined ? existing.timeZone : args.timeZone ?? undefined,
+      // Keep the old optional field only as a fallback for unmigrated rows.
+      // A legacy clear removes that fallback, never the profile's device zone.
+      ...(args.timeZone === null ? { timeZone: undefined } : {}),
       updatedAt: now,
     });
 

@@ -8,16 +8,13 @@ import { buildLiveSessionInsights } from '../../domains/workout/session-insights
 const INSIGHTS_HISTORY_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
 const INSIGHTS_HISTORY_MAX_SESSIONS = 120;
 
-export const getCurrent = query({
-  args: {},
-  handler: async ctx => {
+export const getForActiveSession = query({
+  args: { sessionId: v.id('liveSessions') },
+  handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
-    const session = await ctx.db
-      .query('liveSessions')
-      .withIndex('by_profile_id_and_status', q => q.eq('profileId', profile._id).eq('status', 'active'))
-      .unique();
+    const session = await ctx.db.get(args.sessionId);
 
-    if (!session) {
+    if (!session || session.profileId !== profile._id || session.status !== 'active') {
       return null;
     }
 
@@ -131,7 +128,7 @@ async function buildInsightsForSession(
       setNumber: log.setNumber,
       warmup: log.warmup,
     })),
-    now: Date.now(),
+    now: session.endedAt ?? Date.now(),
     sessionExercises: sessionExercises.flatMap(sessionExercise => {
       const catalogExercise = catalogExercises.get(sessionExercise.exerciseCatalogId);
       if (!catalogExercise || !sessionExercise.recipeKey) {
@@ -154,6 +151,7 @@ async function buildInsightsForSession(
       ];
     }),
     sessionStartedAt: session.startedAt,
+    durationMs: session.manualDurationSeconds === undefined ? undefined : session.manualDurationSeconds * 1000,
   });
 }
 

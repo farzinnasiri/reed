@@ -2,17 +2,6 @@ import { StyleSheet } from 'react-native';
 import { reedRadii } from '@/design/system';
 
 export const styles = StyleSheet.create({
-  sessionInsightsOverlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: 12,
-  },
-  sessionInsightsFrame: {
-    minHeight: 320,
-  },
-  sessionInsightsPanel: {
-    flex: 1,
-  },
   sessionInsightsContent: {
     flex: 1,
     gap: 12,
@@ -21,16 +10,14 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 10,
   },
-  sessionInsightsHandleArea: {
+  sessionInsightsLoadingBody: {
     alignItems: 'center',
+    flex: 1,
     justifyContent: 'center',
-    paddingBottom: 6,
-    paddingTop: 2,
   },
-  sessionInsightsHandle: {
-    borderRadius: reedRadii.pill,
-    height: 4,
-    width: 44,
+  sessionInsightsRetry: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
   },
   sessionInsightsHeader: {
     alignItems: 'center',
@@ -58,7 +45,6 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsSectionCard: {
     borderRadius: reedRadii.lg,
-    borderWidth: 1,
     gap: 10,
     paddingHorizontal: 12,
     paddingBottom: 12,
@@ -92,7 +78,6 @@ export const styles = StyleSheet.create({
   sessionInsightsSnapshotTile: {
     alignItems: 'center',
     borderRadius: reedRadii.md,
-    borderWidth: 1,
     flex: 1,
     minHeight: 102,
     justifyContent: 'center',
@@ -100,7 +85,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   sessionInsightsSnapshotValue: {
-    fontFamily: 'Outfit_800ExtraBold',
+    fontFamily: 'Figtree_600SemiBold',
     fontSize: 19.4,
     letterSpacing: -0.35,
     lineHeight: 22.6,
@@ -108,7 +93,7 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   sessionInsightsSnapshotLabel: {
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
     lineHeight: 16,
     marginTop: 6,
     textAlign: 'center',
@@ -121,7 +106,6 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsMetricTile: {
     borderRadius: reedRadii.md,
-    borderWidth: 1,
     gap: 4,
     minWidth: '47%',
     paddingHorizontal: 12,
@@ -144,7 +128,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   sessionInsightsShapeChipText: {
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
   },
   sessionInsightsShapeStack: {
     borderRadius: reedRadii.pill,
@@ -164,7 +148,7 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsShapeStackText: {
     color: '#f8fafc',
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
     fontSize: 11,
     lineHeight: 12,
   },
@@ -185,7 +169,7 @@ export const styles = StyleSheet.create({
     width: 9,
   },
   sessionInsightsShapeLegendText: {
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
   },
   sessionInsightsMuscleGroupList: {
     gap: 8,
@@ -267,8 +251,7 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsBreakdownEmpty: {
     alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
+    borderRadius: reedRadii.md,
     height: 84,
     justifyContent: 'center',
     minWidth: 84,
@@ -310,7 +293,6 @@ export const styles = StyleSheet.create({
   },
   sessionInsightsChip: {
     borderRadius: reedRadii.pill,
-    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -320,7 +302,6 @@ export const styles = StyleSheet.create({
   sessionInsightsHighlightsSummaryShell: {
     alignItems: 'stretch',
     borderRadius: reedRadii.md,
-    borderWidth: 1,
     flexDirection: 'row',
     overflow: 'hidden',
   },
@@ -338,12 +319,12 @@ export const styles = StyleSheet.create({
     width: 1,
   },
   sessionInsightsHighlightsSummaryLabel: {
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
     marginTop: 4,
     textAlign: 'center',
   },
   sessionInsightsHighlightsSummaryValue: {
-    fontFamily: 'Outfit_800ExtraBold',
+    fontFamily: 'Figtree_600SemiBold',
     fontSize: 30,
     letterSpacing: -0.4,
     lineHeight: 34,
@@ -386,7 +367,7 @@ export const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   sessionInsightsHighlightTypeText: {
-    fontFamily: 'Outfit_600SemiBold',
+    fontFamily: 'Figtree_600SemiBold',
     minWidth: 76,
     textAlign: 'right',
   },

@@ -293,6 +293,7 @@ export const sendDue = internalAction({
               content: message.chatMessageText,
               createdAt: Date.now(),
               profileId: message.profileId,
+              relatedSessionId: message.data.sessionId,
             });
             reedMessageId = saved.messageId;
             await ctx.runMutation(internal.outboundMessages.markChatMaterialized, {

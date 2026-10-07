@@ -1,27 +1,23 @@
 "use node";
 
+import { reactionHistorySignal, type MessageReaction } from '../domains/reed/reactions';
 import { HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { ChatOpenAI } from '@langchain/openai';
-import { ChatXAI } from '@langchain/xai';
-import { createAgent } from 'langchain';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { ReedContextBlock } from './reedContextTypes';
 import { runReedContextGraph } from './reedContextGraph';
 import { internal } from './_generated/api';
 import { v } from 'convex/values';
 import { createChatModel, hasApiKeyForModel, providerForModel, supportedModelSettings } from './aiModelProvider';
+import { invokeCoachReply } from './reedReplyModel';
 import type { Id } from './_generated/dataModel';
 import { formatReedTimelineTime } from './reedContextTime';
+import { normalizeTimeZone } from './localCalendar';
 import { traceText, withLangfuseGeneration, withLangfuseObservation, withLangfuseTrace } from './langfuseTracing';
 import { contextAgentGateDecision } from './reedContextGate';
+import { REED_SESSION_ACTION_PROMPT, REED_PLANNING_PROMPT, REED_PRESENTATION_PROMPT, REED_PRESENTATION_PROMPT_VERSION } from './reedWidgets';
 
-const CHAT_MODEL_PROVIDER = 'xai';
-const CHAT_MODEL_NAME = process.env.REED_CHAT_MODEL ?? 'grok-4.3';
-const CHAT_REASONING_MODE = 'low';
-const CHAT_MODEL_ATTEMPTS = 2;
-const CHAT_MODEL_TIMEOUT_MS = 25_000;
-const CHAT_MODEL_RETRY_DELAY_MS = 900;
 const SUMMARY_MODEL_NAME = process.env.REED_SUMMARY_MODEL ?? 'gemini-2.5-flash-lite';
 const COACH_STATE_MODEL_PROVIDER = 'openai';
 const COACH_STATE_MODEL_NAME = process.env.REED_COACH_STATE_MODEL ?? 'gpt-5.2';
@@ -41,6 +37,8 @@ export const runAssistant = internalAction({
   },
   handler: async (ctx, args) => {
     try {
+      // One snapshot per turn; a settings update affects the next turn, including retries.
+      const aiSettings = await ctx.runQuery(internal.aiSettings.load, {});
       let context = await ctx.runQuery(internal.reed.loadAssistantContext, args);
 
       await withLangfuseTrace({
@@ -53,12 +51,14 @@ export const runAssistant = internalAction({
           reentryState: context.reentryState,
           threadId: context.thread._id,
           userMessageId: context.userMessage._id,
+          settingsRevision: aiSettings.revision,
+          backupModel: aiSettings.coachReplyBackup.model,
         },
         name: 'reed.chat.response',
         sessionId: context.thread._id,
         tags: ['reed', 'chat'],
         userId: context.profile._id,
-        version: CHAT_MODEL_NAME,
+        version: aiSettings.coachReply.model,
       }, async () => {
         if (context.reentryState === 'cold') {
           await compactThreadHandler(ctx, { threadId: context.thread._id, beforeMessageId: context.userMessage._id });
@@ -70,17 +70,45 @@ export const runAssistant = internalAction({
 
         const contextBlocks = await buildContextBlocks(ctx, context);
         const coachingMemory = await ctx.runQuery(internal.reedCoachingMemory.loadPromptMemory, { profileId: context.profile._id });
-        const response = await invokeChatModel(buildChatPrompt(context, contextBlocks, coachingMemory));
+        const planning = await ctx.runQuery(internal.plannedSessions.loadPlanningContext, { profileId: context.profile._id });
+        const chatPrompt = buildChatPrompt(context, contextBlocks, coachingMemory);
+        const sessionActionContext = await ctx.runQuery(internal.reedSessionActions.loadSessionActionContext, { profileId: context.profile._id });
+        chatPrompt.system += '\n' + REED_SESSION_ACTION_PROMPT + '\nsessionActionContext: ' + JSON.stringify(sessionActionContext);
+        chatPrompt.system += '\n' + REED_PLANNING_PROMPT + '\nplanningContext: ' + JSON.stringify(planning);
+        if (planning.plans[0] && (!sessionActionContext || /\bplan(?:ned)?\b/i.test(context.userMessage.content)) && /\b(shorter|longer|swap|replace|change|revise|shorten|lengthen)\b/i.test(context.userMessage.content)) {
+          chatPrompt.system += '\nFor this plan revision request, the saved operation must be in the plan field. The latest ready plan reference is ' + JSON.stringify({ plannedSessionId: planning.plans[0].plannedSessionId, expectedRevision: planning.plans[0].revision }) + '. Supply the full exercise list with exerciseCatalogId, setCount, restSeconds. The plan field is required to persist a revision.';
+        }
+        const response = await invokeCoachReply(chatPrompt, aiSettings.coachReply, aiSettings.coachReplyBackup,
+          phase => ctx.runMutation(internal.reed.markAssistantRecovery, {
+            assistantMessageId: context.assistantMessage._id,
+            threadId: context.thread._id,
+            phase,
+          }));
 
-        await ctx.runMutation(internal.reed.completeAssistantMessage, {
+        const decision = await ctx.runMutation(internal.reed.completeAssistantMessage, {
           threadId: context.thread._id,
           assistantMessageId: context.assistantMessage._id,
-          content: response,
+          content: response.response,
+          ...(response.reaction ? { reaction: response.reaction } : {}),
+          userMessageId: context.userMessage._id,
+          ...(response.sessionAction !== undefined ? { sessionAction: response.sessionAction } : {}),
+          ...(response.plan !== undefined ? { plan: response.plan } : {}),
+          ...(response.widget !== undefined ? { widget: response.widget } : {}),
+          ...(response.replies !== undefined ? { replies: response.replies } : {}),
           completedAt: Date.now(),
           reentryState: context.reentryState,
         });
 
-        return response;
+        try {
+          await withLangfuseObservation({
+            name: 'reed.chat.presentation',
+            metadata: { modelPlanPresent: response.plan !== undefined, modelActionPresent: response.sessionAction !== undefined, actionDecision: decision.actionDecision, planDecision: decision.planDecision, widgetKind: decision.widgetKind, replyCount: decision.replyCount, outputContract: REED_PRESENTATION_PROMPT_VERSION },
+          }, async () => decision);
+        } catch {
+          // Optional presentation telemetry must not fail an already stored reply.
+          console.error('[REED_PRESENTATION_TRACE_FAILED]');
+        }
+        return response.response;
       });
     } catch (error) {
       console.error('[REED_ASSISTANT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -127,9 +155,9 @@ export const refreshCoachState = internalAction({
           previousCoachState: context.previousState?.content ?? null,
           rollingSummary: context.activeSummary?.content ?? null,
           journeyContext: context.journeySummary,
-          recentMessages: context.recentMessages.map((message: { role: string; content: string }) => ({
+          recentMessages: context.recentMessages.map((message: { role: string; content: string; reaction?: MessageReaction }) => ({
             role: message.role,
-            content: message.content,
+            content: message.content + reactionHistorySignal(message),
           })),
         });
         const content = await invokeCoachStateModel(prompt);
@@ -177,7 +205,7 @@ async function compactThreadHandler(ctx: ActionCtx, args: { beforeMessageId?: Id
     const prompt = await buildSummaryPrompt({
       systemPrompt: context.prompt.content,
       priorSummary: context.activeSummary?.content ?? null,
-      messages: messages.map((message: { role: string; content: string }) => ({ role: message.role, content: message.content })),
+      messages: messages.map((message: { role: string; content: string; reaction?: MessageReaction }) => ({ role: message.role, content: message.content + reactionHistorySignal(message) })),
     });
 
     const content = await invokeSummaryModel(prompt);
@@ -309,8 +337,9 @@ function buildChatPrompt(
     context.prompt.content,
     '',
     'Required output format:',
-    '- Return strict JSON only: {"response":"user-facing reply"}.',
-    '- response: the exact text shown to the user.',
+    REED_PRESENTATION_PROMPT,
+    'Available widget references (latest ended session first):',
+    JSON.stringify(context.widgetChoices),
     '',
     'Current time:',
     `- ${formatCurrentTime(context.clientNow, context.clientTimeZone)}`,
@@ -324,6 +353,7 @@ function buildChatPrompt(
     ...buildContinuityLines(context),
     '- Do not mention hidden routing, prompt versions, reentry labels, or internal summaries.',
     '',
+    ...(context.messageContext ? ['Question context:', context.messageContext, ''] : []),
     'Journey context:',
     context.journeySummary ?? 'No journey snapshot is available yet.',
     ...buildCoachingMemoryLines(coachingMemory),
@@ -334,8 +364,10 @@ function buildChatPrompt(
     context.memorySummary ?? 'No compacted chat memory yet.',
     ...buildCoachStatePromptLines(context.coachState?.content ?? null),
     '',
+    context.reactionAllowed ? 'A reaction is allowed this turn if the message merits it.' : 'Reaction cooldown: omit reaction this turn.',
+    ...context.recentReactionSignals.map(message => `Recent feedback on earlier response: ${JSON.stringify(message.content)}${reactionHistorySignal(message)}`),
     recentSegmentHeading(context),
-    ...context.recentMessages.map((message: { role: string; content: string; createdAt: number }) => formatMessageLine(message, context.clientNow, context.clientTimeZone)),
+    ...context.recentMessages.map((message: { role: string; content: string; createdAt: number; reaction?: MessageReaction }) => formatMessageLine(message, context.clientNow, context.clientTimeZone)),
     `Current user message at ${formatTimelineTime(context.userMessage.createdAt, context)}: ${context.userMessage.content}`,
   ];
 
@@ -464,8 +496,8 @@ function recentSegmentHeading(context: Awaited<ReturnType<typeof loadContextType
   return 'Recent active segment (limited bridge context):';
 }
 
-function formatMessageLine(message: { role: string; content: string; createdAt: number }, now: number, timeZone?: string) {
-  return `[${formatReedTimelineTime({ timestamp: message.createdAt, now, timeZone })}] ${message.role.toUpperCase()}: ${message.content}`;
+function formatMessageLine(message: { role: string; content: string; createdAt: number; reaction?: MessageReaction }, now: number, timeZone?: string) {
+  return `[${formatReedTimelineTime({ timestamp: message.createdAt, now, timeZone })}] ${message.role.toUpperCase()}: ${message.content}${reactionHistorySignal(message)}`;
 }
 
 function formatCurrentTime(timestamp: number, timeZone?: string) {
@@ -487,16 +519,6 @@ function formatTimelineTime(timestamp: number, context: Awaited<ReturnType<typeo
   });
 }
 
-function normalizeTimeZone(timeZone?: string) {
-  if (!timeZone || timeZone.length > 80) return null;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
-    return timeZone;
-  } catch {
-    return null;
-  }
-}
-
 function formatElapsed(ageMs: number) {
   const minutes = Math.max(1, Math.round(Math.max(0, ageMs) / 60_000));
   if (minutes < 2) return 'about a minute';
@@ -515,93 +537,6 @@ function formatElapsed(ageMs: number) {
 
   const months = Math.round(days / 30);
   return months < 2 ? 'about a month' : `about ${months} months`;
-}
-
-async function invokeChatModel(prompt: { system: string; user: string }) {
-  if (!process.env.XAI_API_KEY) {
-    return fallbackAssistantReply(prompt.user);
-  }
-
-  console.log('[REED_CHAT_MODEL_REQUEST]', {
-    model: CHAT_MODEL_NAME,
-    systemChars: prompt.system.length,
-    userChars: prompt.user.length,
-  });
-
-  const responseText = await withLangfuseGeneration({
-    input: {
-      system: traceText(prompt.system),
-      user: traceText(prompt.user),
-    },
-    model: CHAT_MODEL_NAME,
-    modelParameters: {
-      reasoningEffort: CHAT_REASONING_MODE,
-      temperature: 0.45,
-    },
-    name: 'reed.chat.model',
-  }, async () => retryModelCall(
-    () => invokeChatModelOnce(prompt),
-    {
-      attempts: CHAT_MODEL_ATTEMPTS,
-      label: 'REED_CHAT_MODEL',
-      retryDelayMs: CHAT_MODEL_RETRY_DELAY_MS,
-      timeoutMs: CHAT_MODEL_TIMEOUT_MS,
-    },
-  ));
-
-  console.log('[REED_CHAT_MODEL_RESPONSE]', {
-    model: CHAT_MODEL_NAME,
-    responseChars: responseText.length,
-  });
-
-  return parseChatResult(responseText);
-}
-
-async function invokeChatModelOnce(prompt: { system: string; user: string }, signal?: AbortSignal) {
-  const model = new ChatXAI({
-    apiKey: process.env.XAI_API_KEY,
-    model: CHAT_MODEL_NAME,
-    temperature: 0.45,
-    maxRetries: 0,
-    // xAI-specific reasoning controls differ by model/API version; keep isolated here.
-    reasoningEffort: CHAT_REASONING_MODE,
-  } as ConstructorParameters<typeof ChatXAI>[0] & { reasoningEffort?: string });
-
-  const agent = createAgent({
-    model,
-    tools: [],
-    systemPrompt: prompt.system,
-  });
-
-  const result = await agent.invoke(
-    { messages: [new HumanMessage(prompt.user)] },
-    { recursionLimit: 4, signal } as { recursionLimit: number; signal?: AbortSignal },
-  );
-  return extractLastText(result.messages) || fallbackAssistantReply(prompt.user);
-}
-
-function parseChatResult(text: string) {
-  const fallback = text.trim() || fallbackAssistantReply('');
-  try {
-    const value = JSON.parse(extractJsonObject(text));
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return fallback;
-    const record = value as Record<string, unknown>;
-    return typeof record.response === 'string' && record.response.trim()
-      ? record.response.trim()
-      : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function extractJsonObject(text: string) {
-  const trimmed = text.trim();
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
-  const start = trimmed.indexOf('{');
-  const end = trimmed.lastIndexOf('}');
-  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
-  return trimmed;
 }
 
 async function invokeCoachStateModel(prompt: string) {
@@ -747,10 +682,6 @@ async function renderMustachePrompt(template: string, values: Record<string, str
   return await PromptTemplate.fromTemplate(template, { templateFormat: 'mustache' }).format(values);
 }
 
-function fallbackAssistantReply(userMessage: string) {
-  return `I’m here. Based on what you said, the useful next move is to make this specific: ${userMessage.slice(0, 180)}\n\nWhat I see: you’re asking for coaching direction.\nWhy it matters: Reed can give better guidance when the goal and recent training context are clear.\nNext focus: tell me what you did most recently, or ask me to review a specific lift, session, or week.`;
-}
-
 function deterministicSummary(prompt: string) {
   const lines = prompt
     .split('\n')
@@ -770,57 +701,6 @@ function deterministicCoachState(prompt: string) {
     .map(line => line.slice(0, 220));
   const recent = lines.length > 0 ? ` Recent evidence: ${lines.join(' / ')}` : '';
   return `I do not have enough model-backed evidence to update this deeply yet. I should stay steady, practical, and honest: keep pressure moderate, warmth/trust stable, depth brief unless the user asks for more, and agency collaborative. I should avoid pretending certainty or switching into a persona.${recent} Reconsider after the next meaningful exchange.`;
-}
-
-async function retryModelCall<T>(
-  call: (signal?: AbortSignal) => Promise<T>,
-  options: { attempts: number; label: string; retryDelayMs: number; timeoutMs: number },
-) {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= options.attempts; attempt += 1) {
-    try {
-      return await callWithTimeout(signal => call(signal), options.timeoutMs);
-    } catch (error) {
-      lastError = error;
-      console.error(`[${options.label}_ATTEMPT_FAILED]`, {
-        attempt,
-        message: error instanceof Error ? error.message : String(error),
-      });
-      if (attempt < options.attempts) {
-        await delay(options.retryDelayMs);
-      }
-    }
-  }
-
-  throw lastError instanceof Error ? lastError : new Error(String(lastError));
-}
-
-async function callWithTimeout<T>(call: (signal: AbortSignal) => Promise<T>, timeoutMs: number) {
-  const controller = new AbortController();
-  let timeout: ReturnType<typeof setTimeout> | null = null;
-  try {
-    return await Promise.race([
-      call(controller.signal),
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => {
-          controller.abort();
-          reject(new Error(`Model call timed out after ${timeoutMs}ms.`));
-        }, timeoutMs);
-      }),
-    ]);
-  } finally {
-    if (timeout) clearTimeout(timeout);
-  }
-}
-
-function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-function extractLastText(messages: unknown) {
-  if (!Array.isArray(messages) || messages.length === 0) return '';
-  const last = messages[messages.length - 1] as { content?: unknown };
-  return textFromContent(last.content);
 }
 
 function textFromContent(content: unknown): string {
@@ -860,7 +740,11 @@ declare function loadContextType(): Promise<{
   imageObservations: Array<{ narrative: string; sortOrder: number; status: 'analyzed' | 'failed' }>;
   appTimeline: Array<{ at: number; summary: string }>;
   currentAppState: string;
+  messageContext: string | null;
   journeySummary: string | null;
   memorySummary: string | null;
-  recentMessages: Array<{ _id: Id<'reedMessages'>; role: string; content: string; createdAt: number }>;
+  reactionAllowed: boolean;
+  recentReactionSignals: Array<{ role: string; content: string; reaction?: MessageReaction }>;
+  recentMessages: Array<{ _id: Id<'reedMessages'>; role: string; content: string; createdAt: number; reaction?: MessageReaction }>;
+  widgetChoices: { sessions: Array<{ sessionId: Id<'liveSessions'>; endedAt: number }>; presets: Array<{ key: string; label: string }> };
 }>;

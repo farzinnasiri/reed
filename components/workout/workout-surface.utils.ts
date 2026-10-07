@@ -73,14 +73,6 @@ export function getErrorMessage(error: unknown) {
   return 'Something went wrong.';
 }
 
-export function formatCompactDistance(value: number) {
-  return `${formatCompactNumber(value, 1)} km`;
-}
-
-export function formatCompactLoad(value: number) {
-  return `${Math.round(value).toLocaleString('en-US')} kg`;
-}
-
 export function formatCompactMinutes(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.round(totalSeconds));
   const hours = Math.floor(safeSeconds / 3600);

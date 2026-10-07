@@ -1,12 +1,25 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useRef } from 'react';
-import { Animated, PanResponder, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
-import { getSolidGlassCardTokens } from '@/components/ui/glass-material';
+import { useCallback, useMemo } from 'react';
+import { StyleSheet, useWindowDimensions, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  Extrapolation,
+  cancelAnimation,
+  interpolate,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { scheduleOnRN } from 'react-native-worklets';
 import { ReedText } from '@/components/ui/reed-text';
-import { createTiming, reedEasing, reedMotion } from '@/design/motion';
+import { ReedButton } from '@/components/ui/reed-button';
+import { reedMotion, reedReanimatedEasing } from '@/design/motion';
+import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
+
+const RIGHT_GRADIENT_COLORS = ['rgba(22, 163, 74, 0.52)', 'transparent'] as const;
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -24,7 +37,6 @@ type SwipeCardProps = {
 };
 
 const SWIPE_THRESHOLD = 96;
-const SHOULD_USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 export function WorkoutSwipeCard({
   children,
@@ -39,238 +51,203 @@ export function WorkoutSwipeCard({
   rightLabel,
 }: SwipeCardProps) {
   const { theme } = useReedTheme();
-  const solidGlass = getSolidGlassCardTokens(theme);
+  const reducedMotion = useReedReducedMotion();
+  const cardSurface = { backgroundColor: theme.colors.surface } as const;
   const { width } = useWindowDimensions();
-  const translateX = useRef(new Animated.Value(0)).current;
-  const entryScale = useRef(new Animated.Value(1)).current;
-  const entryTranslateY = useRef(new Animated.Value(0)).current;
-  const isHandlingSwipe = useRef(false);
-  const dragXRef = useRef(0);
+  const translateX = useSharedValue(0);
+  const entryScale = useSharedValue(1);
+  const entryTranslateY = useSharedValue(0);
+  const isHandlingSwipe = useSharedValue(false);
   const flyoutDistance = Math.max(width * 1.05, 360);
-
-  const rotation = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [-flyoutDistance, 0, flyoutDistance],
-        outputRange: ['-20deg', '0deg', '20deg'],
-        extrapolate: 'clamp',
-      }),
-    [flyoutDistance, translateX],
-  );
-
-  const dragScale = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [-220, 0, 220],
-        outputRange: [0.96, 1, 0.96],
-        extrapolate: 'clamp',
-      }),
-    [translateX],
-  );
-
-  const scale = useMemo(() => Animated.multiply(dragScale, entryScale), [dragScale, entryScale]);
   const leftGradientColors = useMemo(
     () =>
       leftTone === 'danger'
         ? ([String(theme.colors.dangerFill), 'transparent'] as const)
-        : ([String(theme.colors.controlFill), 'transparent'] as const),
-    [leftTone, theme.colors.controlFill, theme.colors.dangerFill],
+        : ([String(theme.colors.surface), 'transparent'] as const),
+    [leftTone, theme.colors.surface, theme.colors.dangerFill],
   );
-  const leftForegroundColor = leftTone === 'danger' ? theme.colors.dangerText : theme.colors.textPrimary;
-  const rightUnderlayStrongGreen = useMemo(
-    () => (theme.mode === 'dark' ? 'rgba(22, 163, 74, 0.52)' : 'rgba(22, 163, 74, 0.42)'),
-    [theme.mode],
-  );
-  const rightGradientColors = useMemo(
-    () => [rightUnderlayStrongGreen, 'transparent'] as const,
-    [rightUnderlayStrongGreen],
-  );
-  const rightForegroundColor = theme.colors.accentPrimaryText;
+  const leftForegroundColor = leftTone === 'danger' ? theme.colors.dangerInk : theme.colors.ink;
+  const rightForegroundColor = theme.colors.accentText;
 
-  const leftOpacity = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [-140, -24, 0],
-        outputRange: [1, 0.28, 0],
-        extrapolate: 'clamp',
-      }),
-    [translateX],
-  );
-
-  const rightOpacity = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [0, 24, 140],
-        outputRange: [0, 0.28, 1],
-        extrapolate: 'clamp',
-      }),
-    [translateX],
-  );
-
-  const leftCopyX = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [-140, 0],
-        outputRange: [0, -16],
-        extrapolate: 'clamp',
-      }),
-    [translateX],
-  );
-
-  const rightCopyX = useMemo(
-    () =>
-      translateX.interpolate({
-        inputRange: [0, 140],
-        outputRange: [16, 0],
-        extrapolate: 'clamp',
-      }),
-    [translateX],
-  );
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          !disabled &&
-          !isHandlingSwipe.current &&
-          Math.abs(gestureState.dx) > Math.abs(gestureState.dy) &&
-          Math.abs(gestureState.dx) > 8,
-        onPanResponderGrant: () => {
-          translateX.stopAnimation();
-          dragXRef.current = 0;
-        },
-        onPanResponderMove: (_, gestureState) => {
-          const nextX = gestureState.dx;
-          dragXRef.current = nextX;
-          translateX.setValue(nextX);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          void handleSwipeEnd(gestureState.dx);
-        },
-        onPanResponderTerminate: () => {
-          resetSwipePosition();
-        },
-      }),
-    [disabled, onSwipeLeft, onSwipeRight, translateX, width],
-  );
-
-  function resetSwipePosition() {
-    dragXRef.current = 0;
-    createTiming(translateX, 0, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER).start();
-  }
-
-  async function handleSwipeEnd(deltaX: number) {
-    if (isHandlingSwipe.current) {
-      return;
-    }
-
-    const completedRight = deltaX > SWIPE_THRESHOLD && onSwipeRight;
-    const completedLeft = deltaX < -SWIPE_THRESHOLD && onSwipeLeft;
-
-    if (!completedRight && !completedLeft) {
-      resetSwipePosition();
-      return;
-    }
-
-    isHandlingSwipe.current = true;
-    dragXRef.current = 0;
-    const target = completedRight ? flyoutDistance : -flyoutDistance;
-
-    await new Promise<void>(resolve => {
-      createTiming(
-        translateX,
-        target,
-        reedMotion.durations.standard,
-        reedEasing.easeOut,
-        SHOULD_USE_NATIVE_DRIVER,
-      ).start(() => resolve());
-    });
-
-    try {
-      if (completedRight) {
-        await onSwipeRight?.();
-      } else {
-        await onSwipeLeft?.();
+  const handleCompletedSwipe = useCallback(
+    async (direction: 'left' | 'right') => {
+      try {
+        if (direction === 'right') {
+          await onSwipeRight?.();
+        } else {
+          await onSwipeLeft?.();
+        }
+      } finally {
+        translateX.value = 0;
+        entryScale.value = reducedMotion ? 1 : 0.98;
+        entryTranslateY.value = reducedMotion ? 0 : 8;
+        entryScale.value = withTiming(1, {
+          duration: reducedMotion ? 0 : reedMotion.durations.standard,
+          easing: reedReanimatedEasing.easeOut,
+        });
+        entryTranslateY.value = withTiming(0, {
+          duration: reducedMotion ? 0 : reedMotion.durations.standard,
+          easing: reedReanimatedEasing.easeOut,
+        });
+        isHandlingSwipe.value = false;
       }
-    } finally {
-      translateX.setValue(0);
-      entryScale.setValue(0.98);
-      entryTranslateY.setValue(8);
-      Animated.parallel([
-        createTiming(entryScale, 1, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER),
-        createTiming(entryTranslateY, 0, reedMotion.durations.standard, reedEasing.easeOut, SHOULD_USE_NATIVE_DRIVER),
-      ]).start();
-      isHandlingSwipe.current = false;
-    }
-  }
+    },
+    [entryScale, entryTranslateY, isHandlingSwipe, onSwipeLeft, onSwipeRight, reducedMotion, translateX],
+  );
+
+  const gesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .enabled(!disabled)
+        .activeOffsetX([-8, 8])
+        .failOffsetY([-8, 8])
+        .onBegin(() => cancelAnimation(translateX))
+        .onUpdate((event) => {
+          if (!isHandlingSwipe.value) translateX.value = event.translationX;
+        })
+        .onEnd((event) => {
+          const direction =
+            event.translationX > SWIPE_THRESHOLD && onSwipeRight
+              ? 'right'
+              : event.translationX < -SWIPE_THRESHOLD && onSwipeLeft
+                ? 'left'
+                : null;
+          if (!direction) {
+            translateX.value = withTiming(0, {
+              duration: reedMotion.durations.standard,
+              easing: reedReanimatedEasing.easeOut,
+            });
+            return;
+          }
+          isHandlingSwipe.value = true;
+          if (reducedMotion) {
+            scheduleOnRN(handleCompletedSwipe, direction);
+            return;
+          }
+          translateX.value = withTiming(
+            direction === 'right' ? flyoutDistance : -flyoutDistance,
+            { duration: reedMotion.durations.standard, easing: reedReanimatedEasing.easeOut },
+            (finished) => {
+              if (finished) scheduleOnRN(handleCompletedSwipe, direction);
+            },
+          );
+        })
+        .onFinalize(() => {
+          if (!isHandlingSwipe.value && Math.abs(translateX.value) < flyoutDistance) {
+            translateX.value = withTiming(0, {
+              duration: reedMotion.durations.standard,
+              easing: reedReanimatedEasing.easeOut,
+            });
+          }
+        }),
+    [
+      disabled,
+      flyoutDistance,
+      handleCompletedSwipe,
+      isHandlingSwipe,
+      onSwipeLeft,
+      onSwipeRight,
+      reducedMotion,
+      translateX,
+    ],
+  );
+
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: entryTranslateY.value },
+      {
+        rotate: `${interpolate(translateX.value, [-flyoutDistance, 0, flyoutDistance], [-20, 0, 20], Extrapolation.CLAMP)}deg`,
+      },
+      { scale: interpolate(translateX.value, [-220, 0, 220], [0.96, 1, 0.96], Extrapolation.CLAMP) * entryScale.value },
+    ],
+  }));
+  const leftUnderlayStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [-140, -24, 0], [1, 0.28, 0], Extrapolation.CLAMP),
+  }));
+  const rightUnderlayStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(translateX.value, [0, 24, 140], [0, 0.28, 1], Extrapolation.CLAMP),
+  }));
+  const leftCopyStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(translateX.value, [-140, 0], [0, -16], Extrapolation.CLAMP) }],
+  }));
+  const rightCopyStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: interpolate(translateX.value, [0, 140], [16, 0], Extrapolation.CLAMP) }],
+  }));
 
   return (
     <View style={styles.container}>
-      <Animated.View
-        style={[
-          styles.underlay,
-          styles.leftUnderlay,
-          { pointerEvents: 'none' },
-          {
-            opacity: leftOpacity,
-          },
-        ]}
-      >
+      <Animated.View style={[styles.underlay, styles.leftUnderlay, { pointerEvents: 'none' }, leftUnderlayStyle]}>
         <LinearGradient
           colors={leftGradientColors}
           end={{ x: 1, y: 0.5 }}
           start={{ x: 0, y: 0.5 }}
           style={StyleSheet.absoluteFill}
         />
-        <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: leftCopyX }] }]}>
+        <Animated.View style={[styles.underlayCopy, leftCopyStyle]}>
           <Ionicons color={String(leftForegroundColor)} name={leftIcon} size={32} />
-          <ReedText style={[styles.underlayText, { color: leftForegroundColor }]} variant="label">
+          <ReedText style={{ color: leftForegroundColor }} variant="caption">
             {leftLabel}
           </ReedText>
         </Animated.View>
       </Animated.View>
 
-      <Animated.View
-        style={[
-          styles.underlay,
-          styles.rightUnderlay,
-          { pointerEvents: 'none' },
-          {
-            opacity: rightOpacity,
-          },
-        ]}
-      >
+      <Animated.View style={[styles.underlay, styles.rightUnderlay, { pointerEvents: 'none' }, rightUnderlayStyle]}>
         <LinearGradient
-          colors={rightGradientColors}
+          colors={RIGHT_GRADIENT_COLORS}
           end={{ x: 0, y: 0.5 }}
           start={{ x: 1, y: 0.5 }}
           style={StyleSheet.absoluteFill}
         />
-        <Animated.View style={[styles.underlayCopy, { transform: [{ translateX: rightCopyX }] }]}>
+        <Animated.View style={[styles.underlayCopy, rightCopyStyle]}>
           <Ionicons color={String(rightForegroundColor)} name={rightIcon} size={32} />
-          <ReedText style={[styles.underlayText, { color: rightForegroundColor }]} variant="label">
+          <ReedText style={{ color: rightForegroundColor }} variant="caption">
             {rightLabel}
           </ReedText>
         </Animated.View>
       </Animated.View>
 
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[
-          styles.card,
-          solidGlass,
-          {
-            transform: [{ translateX }, { translateY: entryTranslateY }, { rotate: rotation }, { scale }],
-          },
-        ]}
-      >
-        <View style={styles.cardContent}>{children}</View>
-        <View style={styles.foot}>
-          <ReedText tone="muted" variant="caption">
-            {hint}
-          </ReedText>
-        </View>
-      </Animated.View>
+      <GestureDetector gesture={gesture}>
+        <Animated.View
+          accessibilityActions={[
+            ...(onSwipeRight ? [{ name: 'commit', label: rightLabel }] : []),
+            ...(onSwipeLeft ? [{ name: 'secondary', label: leftLabel }] : []),
+          ]}
+          onAccessibilityAction={(event) => {
+            if (disabled || isHandlingSwipe.value) return;
+            const direction =
+              event.nativeEvent.actionName === 'commit'
+                ? 'right'
+                : event.nativeEvent.actionName === 'secondary'
+                  ? 'left'
+                  : null;
+            if (direction) {
+              isHandlingSwipe.value = true;
+              void handleCompletedSwipe(direction);
+            }
+          }}
+          style={[styles.card, cardSurface, cardAnimatedStyle]}
+        >
+          <View style={styles.cardContent}>{children}</View>
+          <View style={styles.foot}>
+            <ReedText tone="muted" variant="caption">
+              {hint}
+            </ReedText>
+            {onSwipeRight ? (
+              <ReedButton
+                disabled={disabled}
+                label={rightLabel}
+                onPress={() => {
+                  if (isHandlingSwipe.value) return;
+                  isHandlingSwipe.value = true;
+                  void handleCompletedSwipe('right');
+                }}
+                variant="quiet"
+              />
+            ) : null}
+          </View>
+        </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -283,7 +260,7 @@ const styles = StyleSheet.create({
   },
   underlay: {
     alignItems: 'center',
-    borderRadius: reedRadii.xl,
+    borderRadius: reedRadii.card,
     bottom: 0,
     justifyContent: 'center',
     overflow: 'hidden',
@@ -303,12 +280,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  underlayText: {
-    letterSpacing: 1.6,
-  },
   card: {
-    borderRadius: reedRadii.xl,
-    borderWidth: 1.5,
+    borderRadius: reedRadii.card,
     flex: 1,
     overflow: 'hidden',
   },

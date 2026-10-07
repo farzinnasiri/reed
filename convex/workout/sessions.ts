@@ -1,3 +1,7 @@
+import { validateManualWorkoutDuration } from '../../domains/workout/session-duration';
+import { saveSessionWhisper } from '../reedSessionWhispers';
+import { patchSessionStructure } from './structure';
+import { closeChapterForSession } from '../reedChapters';
 import { ConvexError, v } from 'convex/values';
 import { mutation, query } from '../_generated/server';
 import { internal } from '../_generated/api';
@@ -28,7 +32,8 @@ import {
   patchLiveSessionSetActivity,
   summarizeSetMetrics,
 } from './setLogging';
-import { buildCurrentLiveSessionState } from './sessionState';
+import { buildCurrentLiveSessionState, getNextSessionSetNumber, getRequestedActiveSessionExerciseId, resolveCurrentSessionExercise } from './sessionState';
+import { buildLiveSessionStatusStrip } from '../../domains/workout/session-insights';
 import { setMetricsValidator, setOutcomeDetailsValidator } from './validators';
 
 const DEFAULT_REST_SECONDS = 90;
@@ -54,23 +59,98 @@ export const getCurrent = query({
       .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
       .collect()) as SessionExerciseWithRecipe[];
 
-    const allLogs = await Promise.all(
-      sessionExercises.map(sessionExercise =>
-        ctx.db
-          .query('activityLogs')
-          .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
-          .collect(),
-      ),
-    );
-    const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>(
-      sessionExercises.map((sessionExercise, index) => [sessionExercise._id, allLogs[index]]),
-    );
+    const allLogs = await ctx.db
+      .query('activityLogs')
+      .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id))
+      .take(2000);
+    const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>();
+    for (const sessionExercise of sessionExercises) {
+      logsByExercise.set(sessionExercise._id, []);
+    }
+    for (const log of allLogs) {
+      if (!log.sessionExerciseId) continue;
+      logsByExercise.get(log.sessionExerciseId)?.push(log);
+    }
 
-    return buildCurrentLiveSessionState({
+    const catalogRows = await Promise.all(sessionExercises.map(entry => ctx.db.get(entry.exerciseCatalogId)));
+    const statusStrip = buildLiveSessionStatusStrip({
+      logs: allLogs.flatMap(log => log.sessionExerciseId ? [{
+        derivedBodyweightKg: log.derivedBodyweightKg ?? null,
+        derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+        loggedAt: log.loggedAt,
+        metrics: log.metrics,
+        recipeKey: log.recipeKey,
+        restSeconds: log.restSeconds ?? null,
+        sessionExerciseId: log.sessionExerciseId as string,
+        setOutcome: log.setOutcomeDetails ?? null,
+        setLogId: log._id as string,
+        setNumber: log.setNumber,
+        warmup: log.warmup,
+      }] : []),
+      now: Date.now(),
+      sessionExercises: sessionExercises.flatMap((entry, index) => {
+        const catalog = catalogRows[index];
+        if (!catalog) return [];
+        return [{
+          exerciseCatalogId: entry.exerciseCatalogId as string,
+          exerciseClass: catalog.exerciseClass,
+          exerciseName: entry.exerciseName,
+          isCardio: catalog.isCardio,
+          isHold: catalog.isHold,
+          mainMuscleGroups: catalog.mainMuscleGroups,
+          movementPatterns: catalog.movementPatterns,
+          recipeKey: entry.recipeKey,
+          sessionExerciseId: entry._id as string,
+          setup: entry.setupModifiers ?? null,
+        }];
+      }),
+      sessionStartedAt: session.startedAt,
+      durationMs: session.manualDurationSeconds === undefined ? undefined : session.manualDurationSeconds * 1000,
+    });
+    const state = buildCurrentLiveSessionState({
       logsByExercise,
       session,
       sessionExercises,
     });
+    return { ...state, statusStrip };
+  },
+});
+
+export const getActiveStatus = query({
+  args: {},
+  returns: v.union(v.null(), v.object({
+    sessionId: v.id('liveSessions'),
+    startedAt: v.number(),
+    manualDurationSeconds: v.optional(v.number()),
+    currentExerciseName: v.union(v.string(), v.null()),
+    currentSetNumber: v.union(v.number(), v.null()),
+  })),
+  handler: async ctx => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await getActiveSession(ctx, profile._id);
+    if (!session) return null;
+
+    const firstExercise = await ctx.db.query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id)).first();
+    const requestedId = getRequestedActiveSessionExerciseId(session, firstExercise?._id ?? null);
+    const requestedExercise = requestedId && requestedId !== firstExercise?._id ? await ctx.db.get(requestedId) : null;
+    const exercise = resolveCurrentSessionExercise(session, [
+      ...(firstExercise ? [firstExercise] : []),
+      ...(requestedExercise?.sessionId === session._id ? [requestedExercise] : []),
+    ]);
+    const logs = exercise ? await ctx.db.query('activityLogs')
+      .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', exercise._id))
+      .take(2001) : [];
+
+    return {
+      sessionId: session._id,
+      startedAt: session.startedAt,
+      manualDurationSeconds: session.manualDurationSeconds,
+      currentExerciseName: exercise?.exerciseName ?? null,
+      // Keep the always-visible status usable when corrupt/imported data
+      // exceeds the capture limit, without presenting a truncated count.
+      currentSetNumber: exercise && logs.length <= 2000 ? getNextSessionSetNumber(logs) : null,
+    };
   },
 });
 
@@ -102,11 +182,27 @@ export const getLatestEndedSummary = query({
         endedAt: endedSession.endedAt ?? endedSession.startedAt,
         sessionId: endedSession._id,
         startedAt: endedSession.startedAt,
+        manualDurationSeconds: endedSession.manualDurationSeconds,
         userNotes: endedSession.userNotes ?? '',
         userNotesUpdatedAt: endedSession.userNotesUpdatedAt ?? null,
       };
     }
 
+    return null;
+  },
+});
+
+export const setSessionDuration = mutation({
+  args: { sessionId: v.id('liveSessions'), durationSeconds: v.union(v.number(), v.null()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await ctx.db.get(args.sessionId);
+    if (!session || session.profileId !== profile._id) throw new ConvexError('Session not found.');
+    let duration: number | null;
+    try { duration = validateManualWorkoutDuration(args.durationSeconds); }
+    catch { throw new ConvexError('Enter a duration between one second and 24 hours.'); }
+    await ctx.db.patch(session._id, { manualDurationSeconds: duration ?? undefined });
     return null;
   },
 });
@@ -145,6 +241,7 @@ export const getEndedTimeline = query({
       endedAt: session.endedAt ?? session.startedAt,
       exerciseCount: state.timeline.length,
       startedAt: session.startedAt,
+      manualDurationSeconds: session.manualDurationSeconds,
       timeline: state.timeline.map(item => ({
         ...item,
         state: item.setCount > 0 ? 'logged' as const : 'idle' as const,
@@ -187,6 +284,7 @@ export const listEndedSummaries = query({
         endedAt: endedSession.endedAt ?? endedSession.startedAt,
         sessionId: endedSession._id,
         startedAt: endedSession.startedAt,
+        manualDurationSeconds: endedSession.manualDurationSeconds,
         userNotes: endedSession.userNotes ?? '',
         userNotesUpdatedAt: endedSession.userNotesUpdatedAt ?? null,
       });
@@ -255,7 +353,7 @@ export const removeExercise = mutation({
         ? null
         : session.activeProcess;
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess,
       activeSessionExerciseId: nextActiveSessionExerciseId,
     });
@@ -303,6 +401,9 @@ export const reorderExercises = mutation({
       }),
     );
 
+    if (args.orderedSessionExerciseIds.some((id, index) => currentPositions.get(id) !== index)) {
+      await patchSessionStructure(ctx, session, {});
+    }
     return null;
   },
 });
@@ -356,6 +457,7 @@ export const start = mutation({
       status: 'active',
     });
 
+    await closeChapterForSession(ctx, profile._id, sessionId, Date.now(), 'session_started');
     return { sessionId };
   },
 });
@@ -370,7 +472,21 @@ export const finishSession = mutation({
       .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id))
       .collect();
 
-    if (sessionExercises.length === 0) {
+    const firstPerformedLog = session.sourcePlannedSessionId
+      ? await ctx.db.query('activityLogs')
+        .withIndex('by_session_id_and_set_number', q => q.eq('sessionId', session._id)).first()
+      : null;
+    if (sessionExercises.length === 0 || (session.sourcePlannedSessionId && !firstPerformedLog)) {
+      for (const exercise of sessionExercises) await ctx.db.delete(exercise._id);
+      if (session.sourcePlannedSessionId) {
+        const plan = await ctx.db.get(session.sourcePlannedSessionId);
+        if (plan?.liveSessionId === session._id) {
+          await ctx.db.patch(plan._id, {
+            // Leaving an unlogged plan puts it back in the queue. Dismissal is a separate action.
+            liveSessionId: undefined, status: 'ready', updatedAt: Date.now(),
+          });
+        }
+      }
       // Defensive: delete any orphan set logs that may have been created
       // through a race before the exercise row was removed.
       const orphanLogs = await ctx.db
@@ -380,12 +496,14 @@ export const finishSession = mutation({
       for (const log of orphanLogs) {
         await ctx.db.delete(log._id);
       }
+      await closeChapterForSession(ctx, profile._id, session._id, Date.now(), 'session_ended');
       await ctx.db.delete(session._id);
       return { deletedEmptySession: true };
     }
 
     const endedAt = Date.now();
-    await ctx.db.patch(session._id, {
+    await closeChapterForSession(ctx, profile._id, session._id, endedAt, 'session_ended');
+    await patchSessionStructure(ctx, session, {
       activeProcess: null,
       endedAt,
       status: 'ended',
@@ -425,7 +543,7 @@ export const addExercise = mutation({
     });
 
     if (!session.activeSessionExerciseId) {
-      await ctx.db.patch(session._id, { activeSessionExerciseId: sessionExerciseId });
+      await patchSessionStructure(ctx, session, { activeSessionExerciseId: sessionExerciseId });
     }
 
     return { sessionExerciseId };
@@ -459,7 +577,7 @@ export const addExercises = mutation({
     }
 
     if (!session.activeSessionExerciseId && sessionExerciseIds[0]) {
-      await ctx.db.patch(session._id, { activeSessionExerciseId: sessionExerciseIds[0] });
+      await patchSessionStructure(ctx, session, { activeSessionExerciseId: sessionExerciseIds[0] });
     }
 
     return { sessionExerciseIds };
@@ -499,7 +617,7 @@ async function insertSessionExercise({
     throw new ConvexError('This exercise is not available in the live session flow yet.');
   }
 
-  return await ctx.db.insert('liveSessionExercises', {
+  const id = await ctx.db.insert('liveSessionExercises', {
     addedAt: Date.now(),
     defaultSummaryFormat: catalogExercise.defaultSummaryFormat,
     exerciseCatalogId: catalogExercise._id,
@@ -511,6 +629,10 @@ async function insertSessionExercise({
     recipeKey: resolvedRecipeKey,
     sessionId,
   });
+  await closeChapterForSession(ctx, profileId, sessionId, Date.now(), 'session_started');
+  const session = await ctx.db.get(sessionId);
+  if (session) await patchSessionStructure(ctx, session, {});
+  return id;
 }
 
 export const selectExercise = mutation({
@@ -533,7 +655,7 @@ export const selectExercise = mutation({
       throw new ConvexError('Finish live cardio before switching to another exercise.');
     }
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeSessionExerciseId: sessionExercise._id,
     });
     return null;
@@ -571,14 +693,15 @@ export const logSet = mutation({
     const setNumber = existingLogs.length + 1;
     const shouldOpenRest = recipeDefinition.processKind === 'rest_after_log';
     const loggedAt = Date.now();
+    const restSeconds = sessionExercise.targetDefaults?.[existingLogs.length]?.restSeconds ?? DEFAULT_REST_SECONDS;
 
     await patchAssistanceSetupFromMetrics(ctx, sessionExercise, normalizedMetrics);
 
-    await insertLiveSessionSetActivity(ctx, {
+    const setLogId = await insertLiveSessionSetActivity(ctx, {
       loggedAt,
       metrics: normalizedMetrics,
       profileId: profile._id,
-      restSeconds: shouldOpenRest ? DEFAULT_REST_SECONDS : undefined,
+      restSeconds: shouldOpenRest ? restSeconds : undefined,
       sessionExercise,
       setOutcomeDetails: normalizedSetOutcomeDetails,
       sessionId: session._id,
@@ -586,14 +709,17 @@ export const logSet = mutation({
       warmup: args.warmup,
     });
 
-    await ctx.db.patch(session._id, {
+    const committedLog = await ctx.db.get(setLogId);
+    if (committedLog) await saveSessionWhisper(ctx, committedLog, sessionExercise, session, existingLogs);
+
+    await patchSessionStructure(ctx, session, {
       activeProcess: shouldOpenRest
         ? {
-            durationSeconds: DEFAULT_REST_SECONDS,
+            durationSeconds: restSeconds,
             isRunning: true,
             kind: 'rest',
             nextSetNumber: setNumber + 1,
-            remainingSeconds: DEFAULT_REST_SECONDS,
+            remainingSeconds: restSeconds,
             sessionExerciseId: sessionExercise._id,
             startedAt: Date.now(),
           }
@@ -602,6 +728,8 @@ export const logSet = mutation({
     });
 
     return {
+      setLogId,
+      loggedAt,
       enteredRest: shouldOpenRest,
       nextSetNumber: setNumber + 1,
       summary: summarizeSetMetrics(sessionExercise.recipeKey, normalizedMetrics),
@@ -647,7 +775,7 @@ export const updateSet = mutation({
       warmup: args.warmup,
     });
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeSessionExerciseId: sessionExercise._id,
     });
 
@@ -681,7 +809,7 @@ export const deleteSet = mutation({
       sessionExerciseId: setLog.sessionExerciseId,
     });
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeSessionExerciseId: result.sessionExerciseId,
     });
 
@@ -702,7 +830,7 @@ export const endRest = mutation({
     const session = await requireActiveSession(ctx, profile._id);
     const restProcess = requireRestProcess(session);
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: null,
     });
 
@@ -726,7 +854,7 @@ export const updateRestProcess = mutation({
       const nextRemaining =
         restSnapshot.remainingSeconds > 0 ? restSnapshot.remainingSeconds : restProcess.durationSeconds;
 
-      await ctx.db.patch(session._id, {
+      await patchSessionStructure(ctx, session, {
         activeProcess: restSnapshot.isRunning
           ? {
               ...restProcess,
@@ -752,7 +880,7 @@ export const updateRestProcess = mutation({
 
       const nextRemaining = clampSeconds(restSnapshot.remainingSeconds + args.deltaSeconds, 15, 240);
 
-      await ctx.db.patch(session._id, {
+      await patchSessionStructure(ctx, session, {
         activeProcess: {
           ...restProcess,
           isRunning: restSnapshot.isRunning,
@@ -770,7 +898,7 @@ export const updateRestProcess = mutation({
 
     const presetSeconds = clampSeconds(args.durationSeconds, 15, 240);
     await writeRestSecondsToCurrentSetLog(ctx, restProcess, presetSeconds);
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: {
         ...restProcess,
         durationSeconds: presetSeconds,
@@ -813,7 +941,7 @@ export const startLiveCardio = mutation({
 
     const now = Date.now();
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: {
         elapsedSeconds: 0,
         isRunning: true,
@@ -822,7 +950,10 @@ export const startLiveCardio = mutation({
         recipeKey: sessionExercise.recipeKey,
         sessionExerciseId: sessionExercise._id,
         startedAt: now,
-        trackedMetrics: liveCardioInput.trackedMetrics,
+        trackedMetrics: Object.fromEntries(liveCardioInput.trackedFields.map(field => [
+          field.key,
+          sessionExercise.targetDefaults?.[0]?.metrics[field.key] ?? liveCardioInput.trackedMetrics[field.key],
+        ])),
       },
       activeSessionExerciseId: sessionExercise._id,
     });
@@ -843,7 +974,7 @@ export const pauseLiveCardio = mutation({
     }
 
     const elapsedSeconds = getLiveCardioElapsedSeconds(liveProcess);
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: {
         ...liveProcess,
         elapsedSeconds,
@@ -867,7 +998,7 @@ export const resumeLiveCardio = mutation({
       return null;
     }
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: {
         ...liveProcess,
         isRunning: true,
@@ -900,7 +1031,7 @@ export const adjustLiveCardioMetric = mutation({
     const max = targetField.max ?? targetField.pickerMax;
     const nextValue = roundMetric(Math.max(min, Math.min(max, currentValue + args.delta)));
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: {
         ...liveProcess,
         trackedMetrics: {
@@ -944,7 +1075,7 @@ export const finishLiveCardio = mutation({
       warmup: false,
     });
 
-    await ctx.db.patch(session._id, {
+    await patchSessionStructure(ctx, session, {
       activeProcess: null,
       activeSessionExerciseId: sessionExercise._id,
     });
@@ -986,6 +1117,7 @@ async function getOrCreateActiveSession(ctx: MutationCtx, profileId: Id<'profile
     startedAt: Date.now(),
     status: 'active',
   });
+  await closeChapterForSession(ctx, profileId, sessionId, Date.now(), 'session_started');
   const session = await ctx.db.get(sessionId);
 
   if (!session || session.status !== 'active') {

@@ -1,5 +1,12 @@
+import { messageReactionValidator } from './reedReactionValues';
+import { reedMessageContextValidator } from './reedSessionContext';
+import { sessionWhisperValidator } from './reedSessionWhispers';
 import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
+import { sessionActionFields } from './reedSessionActionValues';
+import { plannedExerciseValidator, plannedStatusValidator, targetSetValidator } from './plannedSessionValues';
+import { reedWidgetValidator } from './reedWidgets';
+import { coachReplySettingsValidator } from './aiSettingsValues';
 import {
   activeProcessValidator,
   exerciseModifierCapabilitiesValidator,
@@ -9,6 +16,7 @@ import {
   setMetricsValidator,
   setOutcomeDetailsValidator,
 } from './workoutValidators';
+import { ONBOARDING_SCHEMA_VERSION } from '../domains/profile/onboarding';
 import {
   bodyMetricKeyValidator,
   bodyMetricUnitValidator,
@@ -27,12 +35,21 @@ import {
 } from './targetValidators';
 
 export default defineSchema({
+  globalSettings: defineTable({
+    key: v.literal('global'),
+    coachReply: coachReplySettingsValidator,
+    coachReplyBackup: v.optional(coachReplySettingsValidator),
+    revision: v.number(),
+    updatedAt: v.number(),
+  }).index('by_key', ['key']),
   profiles: defineTable({
     authUserId: v.string(),
     avatarUrl: v.optional(v.string()),
     displayName: v.optional(v.string()),
     email: v.string(),
     onboardingCompletedAt: v.optional(v.number()),
+    onboardingVersion: v.optional(v.literal(ONBOARDING_SCHEMA_VERSION)),
+    timeZone: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index('by_auth_user_id', ['authUserId'])
@@ -103,6 +120,7 @@ export default defineSchema({
     skillTags: v.array(v.string()),
     contextTags: v.array(v.string()),
     discoveryTags: v.optional(v.array(v.string())),
+    imageStorageId: v.optional(v.id('_storage')),
     isHold: v.boolean(),
     isCardio: v.boolean(),
     supportsLiveTracking: v.boolean(),
@@ -113,6 +131,7 @@ export default defineSchema({
   })
     .index('by_exercise_id', ['exerciseId'])
     .index('by_supported_in_live_session', ['isSupportedInLiveSession'])
+    .index('by_supported_in_live_session_and_name', ['isSupportedInLiveSession', 'name'])
     .index('by_canonical_family', ['canonicalFamily'])
     .searchIndex('search_text', {
       filterFields: ['isSupportedInLiveSession'],
@@ -136,7 +155,18 @@ export default defineSchema({
   })
     .index('by_enabled_and_sort_order', ['isEnabled', 'sortOrder'])
     .index('by_key', ['key']),
+  reedSessionActions: defineTable(sessionActionFields).index('by_profile_status_created', ['profileId', 'status', 'createdAt']).index('by_source_message', ['sourceMessageId']),
+  plannedSessions: defineTable({
+    profileId: v.id('profiles'), title: v.string(), scheduledForAt: v.optional(v.number()),
+    status: plannedStatusValidator, revision: v.number(), exercises: v.array(plannedExerciseValidator),
+    liveSessionId: v.optional(v.id('liveSessions')), creator: v.literal('reed'),
+    sourceMessageId: v.id('reedMessages'), createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_profile_status_time', ['profileId', 'status', 'scheduledForAt']),
   liveSessions: defineTable({
+    manualDurationSeconds: v.optional(v.number()),
+    structureRevision: v.optional(v.number()),
+    sourcePlannedSessionId: v.optional(v.id('plannedSessions')),
+    sourcePlannedSessionRevision: v.optional(v.number()),
     profileId: v.id('profiles'),
     status: v.union(v.literal('active'), v.literal('ended')),
     startedAt: v.number(),
@@ -148,6 +178,8 @@ export default defineSchema({
   })
     .index('by_profile_id_and_status', ['profileId', 'status'])
     .index('by_profile_id_and_status_and_started_at', ['profileId', 'status', 'startedAt'])
+    .index('by_profile_id_and_started_at', ['profileId', 'startedAt'])
+    .index('by_profile_id_and_ended_at', ['profileId', 'endedAt'])
     .index('by_status_and_started_at', ['status', 'startedAt']),
   liveSessionExercises: defineTable({
     sessionId: v.id('liveSessions'),
@@ -161,10 +193,12 @@ export default defineSchema({
     exerciseClass: v.string(),
     modifierCapabilities: v.optional(exerciseModifierCapabilitiesValidator),
     setupModifiers: v.optional(exerciseSetupModifiersValidator),
+    targetDefaults: v.optional(v.array(targetSetValidator)),
   })
     .index('by_session_id_and_position', ['sessionId', 'position'])
     .index('by_profile_id_and_added_at', ['profileId', 'addedAt']),
   activityLogs: defineTable({
+    reedWhisper: v.optional(sessionWhisperValidator),
     derivedBodyweightKg: v.optional(v.number()),
     derivedEffectiveLoadKg: v.optional(v.number()),
     exerciseCatalogId: v.id('exerciseCatalog'),
@@ -215,14 +249,30 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     lastMessageAt: v.optional(v.number()),
+    currentChapterId: v.optional(v.id('reedChapters')),
     activeSummaryId: v.optional(v.id('reedMemorySummaries')),
     compactedThroughMessageId: v.optional(v.id('reedMessages')),
   })
     .index('by_profile_id_and_status', ['profileId', 'status'])
     .index('by_profile_id_and_updated_at', ['profileId', 'updatedAt']),
-  reedMessages: defineTable({
+  reedChapters: defineTable({
     threadId: v.id('reedThreads'),
     profileId: v.id('profiles'),
+    startedAt: v.number(),
+    closedAt: v.optional(v.number()),
+    sessionId: v.optional(v.id('liveSessions')),
+    boundary: v.optional(v.union(v.literal('session_started'), v.literal('session_ended'))),
+    previousChapterId: v.optional(v.id('reedChapters')),
+    closedBySessionId: v.optional(v.id('liveSessions')),
+    closedByBoundary: v.optional(v.union(v.literal('session_started'), v.literal('session_ended'))),
+  }).index('by_thread_id_and_started_at', ['threadId', 'startedAt']),
+  reedMessages: defineTable({
+    reaction: v.optional(messageReactionValidator),
+    reactionUpdatedAt: v.optional(v.number()),
+    context: v.optional(reedMessageContextValidator),
+    threadId: v.id('reedThreads'),
+    profileId: v.id('profiles'),
+    chapterId: v.optional(v.id('reedChapters')),
     role: v.union(v.literal('user'), v.literal('assistant')),
     content: v.string(),
     source: v.union(
@@ -234,11 +284,17 @@ export default defineSchema({
     ),
     status: v.union(v.literal('pending'), v.literal('sent'), v.literal('failed')),
     createdAt: v.number(),
+    replyRecovery: v.optional(v.union(v.literal('retrying'), v.literal('backup'))),
     completedAt: v.optional(v.number()),
     error: v.optional(v.string()),
     clientNonce: v.optional(v.string()),
+    relatedSessionId: v.optional(v.id('liveSessions')),
+    widget: v.optional(reedWidgetValidator),
+    replies: v.optional(v.array(v.string())),
   })
     .index('by_thread_id_and_created_at', ['threadId', 'createdAt'])
+    .index('by_thread_id_and_reaction_updated_at', ['threadId', 'reactionUpdatedAt'])
+    .index('by_chapter_id_and_created_at', ['chapterId', 'createdAt'])
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt'])
     .index('by_created_at', ['createdAt'])
     .index('by_profile_id_and_client_nonce', ['profileId', 'clientNonce']),
@@ -401,49 +457,14 @@ export default defineSchema({
       latestSessionAt: v.union(v.number(), v.null()),
       latestSessionSummary: v.union(v.string(), v.null()),
     }),
-    profileContext: v.optional(v.object({
-      identity: v.object({
-        age: v.union(v.number(), v.null()),
-        displayName: v.optional(v.union(v.string(), v.null())),
-        genderIdentity: v.union(v.string(), v.null()),
-      }),
-      body: v.object({
-        bodyFatPercent: v.union(v.number(), v.null()),
-        bodyType: v.union(v.string(), v.null()),
-        heightCm: v.number(),
-        restingHeartRate: v.union(v.number(), v.null()),
-        skeletalMuscleMassKg: v.union(v.number(), v.null()),
-        weightKg: v.union(v.number(), v.null()),
-      }),
-      lifestyle: v.object({
-        dailyMovement: v.union(v.string(), v.null()),
-        eatingRoutine: v.union(v.string(), v.null()),
-        idleMovement: v.union(v.string(), v.null()),
-        usualSteps: v.union(v.string(), v.null()),
-      }),
-      trainingReality: v.object({
-        effort: v.string(),
-        equipmentAccess: v.array(v.string()),
-        sessionDuration: v.string(),
-        trainingAge: v.string(),
-        trainingStyles: v.array(v.string()),
-        weeklySessions: v.string(),
-      }),
-      goals: v.array(v.object({
-        detail: v.union(v.string(), v.null()),
-        focusAreas: v.array(v.string()),
-        goal: v.string(),
-      })),
-      constraints: v.array(v.object({
-        area: v.string(),
-        customDetail: v.union(v.string(), v.null()),
-        severity: v.union(v.string(), v.null()),
-        timing: v.union(v.string(), v.null()),
-      })),
-      userNotes: v.union(v.string(), v.null()),
-    })),
+    profileContext: v.object({
+      onboardingContext: v.string(),
+      identity: v.object({ displayName: v.union(v.string(), v.null()), genderIdentity: v.union(v.string(), v.null()) }),
+      body: v.object({ bodyFatPercent: v.union(v.number(), v.null()), bodyType: v.union(v.string(), v.null()), heightCm: v.number(), restingHeartRate: v.union(v.number(), v.null()), skeletalMuscleMassKg: v.union(v.number(), v.null()), weightKg: v.union(v.number(), v.null()) }),
+    }),
     watchouts: v.array(v.string()),
-    signals: v.object({
+    // Older snapshots stored unmeasured scores. New snapshots omit them; the coach reads renderedContext.
+    signals: v.optional(v.object({
       consistency: v.object({
         value: v.number(),
         trend: v.union(v.literal('up'), v.literal('flat'), v.literal('down')),
@@ -484,7 +505,7 @@ export default defineSchema({
         evidenceCount: v.number(),
         lastMaterialChangeAt: v.union(v.number(), v.null()),
       }),
-    }),
+    })),
     renderedContext: v.string(),
   })
     .index('by_profile_id_and_created_at', ['profileId', 'createdAt']),

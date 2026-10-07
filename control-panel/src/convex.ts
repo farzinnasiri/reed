@@ -1,6 +1,3 @@
-import { ConvexReactClient } from 'convex/react';
-import { makeFunctionReference } from 'convex/server';
-
 export type PromptVersion = {
   _id: string;
   content: string;
@@ -85,28 +82,47 @@ export type ReedDebugContext = {
   }>;
 };
 
-export const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
+const convexCloudUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 
-export const convex = convexUrl ? new ConvexReactClient(convexUrl, { unsavedChangesWarning: false }) : null;
+export const convexSiteUrl = convexSiteUrlFrom(convexCloudUrl);
 
-export const adminPrompts = {
-  getActivePrompt: makeFunctionReference<'query', { adminSecret: string; key?: string }, PromptVersion | null>(
-    'adminPrompts:getActivePrompt',
-  ),
-  listPromptKeys: makeFunctionReference<'query', { adminSecret: string }, string[]>('adminPrompts:listPromptKeys'),
-  listPromptVersions: makeFunctionReference<'query', { adminSecret: string; key?: string }, PromptVersion[]>(
-    'adminPrompts:listPromptVersions',
-  ),
-  rollbackPrompt: makeFunctionReference<'mutation', { adminSecret: string; key?: string; version: number }, string>(
-    'adminPrompts:rollbackPrompt',
-  ),
-  saveActivePrompt: makeFunctionReference<'mutation', { adminSecret: string; key?: string; content: string }, string>(
-    'adminPrompts:saveActivePrompt',
-  ),
-  listReedProfiles: makeFunctionReference<'query', { adminSecret: string }, ReedProfileOption[]>(
-    'adminPrompts:listReedProfiles',
-  ),
-  getReedDebugContext: makeFunctionReference<'query', { adminSecret: string; profileId: string }, ReedDebugContext>(
-    'adminPrompts:getReedDebugContext',
-  ),
-};
+export async function controlPanelRequest<T>(
+  adminSecret: string,
+  action: string,
+  args: Record<string, unknown> = {},
+): Promise<T> {
+  if (!convexSiteUrl) {
+    throw new Error('Missing VITE_CONVEX_URL. Run through make control-panel so Reed env is loaded.');
+  }
+  const response = await fetch(`${convexSiteUrl}/control-panel`, {
+    body: JSON.stringify({ action, ...args }),
+    headers: {
+      Authorization: `Bearer ${adminSecret}`,
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
+  const payload = await response.json().catch(() => null) as { error?: unknown } | null;
+  if (!response.ok) {
+    const message = payload && typeof payload.error === 'string'
+      ? payload.error
+      : `Control panel request failed (${response.status}).`;
+    throw new Error(message);
+  }
+  return payload as T;
+}
+
+function convexSiteUrlFrom(cloudUrl: string | undefined) {
+  if (!cloudUrl) return null;
+  if (cloudUrl.includes('.convex.cloud')) return cloudUrl.replace('.convex.cloud', '.convex.site').replace(/\/$/, '');
+  try {
+    const url = new URL(cloudUrl);
+    if (url.port === '3210') {
+      url.port = '3211';
+      return url.toString().replace(/\/$/, '');
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}

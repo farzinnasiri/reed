@@ -1,3 +1,5 @@
+import { resolveCatalogModifierOverride } from './catalog-modifier-overrides';
+
 export const setupModifierKeys = ['inclineAngle', 'assistanceSupport'] as const;
 export const setOutcomeDetailKeys = ['failure', 'rangeOfMotion'] as const;
 
@@ -8,8 +10,6 @@ export type ExerciseModifierCapabilities = {
   setup: SetupModifierKey[];
   setOutcome: SetOutcomeDetailKey[];
 };
-
-import { resolveCatalogModifierOverride } from './catalog-modifier-overrides';
 
 export type ExerciseCapabilityInput = {
   canonicalFamily?: string;

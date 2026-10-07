@@ -1,11 +1,11 @@
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { posthog } from '@/lib/posthog';
+import { safeExceptionType, safeOperationalAttrs } from '@/lib/telemetry-privacy';
 
 type ClientWideEventValue = string | number | boolean | null | undefined;
 type ClientWideEventAttrs = Record<string, ClientWideEventValue>;
 
-const MAX_STRING_LENGTH = 240;
 const CLIENT_WIDE_EVENT_NAME = 'client_wide_event';
 
 export type ClientWideEvent = {
@@ -50,7 +50,7 @@ export function startClientWideEvent(name: string, initialAttrs: ClientWideEvent
         'duration_ms': Date.now() - startedAt,
         'error': true,
         'exception.slug': slug,
-        'exception.type': errorType(error),
+        'exception.type': safeExceptionType(error),
       };
       captureClientWideEvent(errorAttrs);
       reportClientError(error, errorAttrs);
@@ -72,30 +72,15 @@ export function sizeBucket(bytes: number | undefined) {
 }
 
 function captureClientWideEvent(attrs: ClientWideEventAttrs) {
-  const safe: Record<string, string | number | boolean | null> = {};
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined) continue;
-    safe[key] = sanitizeValue(value);
-  }
+  const safe = safeOperationalAttrs(attrs);
   posthog.capture(CLIENT_WIDE_EVENT_NAME, safe);
   void posthog.flush().catch(() => {});
 }
 
 function reportClientError(error: unknown, attrs: ClientWideEventAttrs) {
-  const safe: Record<string, string | number | boolean | null> = {};
-  for (const [key, value] of Object.entries(attrs)) {
-    if (value === undefined) continue;
-    safe[key] = sanitizeValue(value);
-  }
+  const safe = safeOperationalAttrs(attrs);
   safe.handled = true;
-  posthog.captureException(error, safe);
-}
-
-function sanitizeValue(value: Exclude<ClientWideEventValue, undefined>) {
-  if (typeof value !== 'string') return value;
-  return value.length <= MAX_STRING_LENGTH ? value : `${value.slice(0, MAX_STRING_LENGTH)}...[truncated]`;
-}
-
-function errorType(error: unknown) {
-  return error instanceof Error ? error.name : 'Error';
+  const exception = new Error(String(safe['exception.slug'] ?? 'handled_exception'));
+  exception.name = safeExceptionType(error);
+  posthog.captureException(exception, safe);
 }

@@ -8,6 +8,7 @@ import type { Id } from './_generated/dataModel';
 import { createChatModel, hasApiKeyForModel, providerForModel, supportedModelSettings } from './aiModelProvider';
 import { traceText, withLangfuseGeneration, withLangfuseObservation } from './langfuseTracing';
 import type { ReedContextBlock, ReedContextToolCall, ReedTimeRange } from './reedContextTypes';
+import { normalizeTimeZone } from './localCalendar';
 
 const CONTEXT_AGENT_PROMPT_KEY = 'reed_context_agent_system';
 const CONTEXT_AGENT_MODEL_NAME = process.env.REED_CONTEXT_AGENT_MODEL ?? 'gpt-5.4-mini-2026-03-17';
@@ -504,14 +505,4 @@ function formatCurrentTime(timestamp: number, timeZone?: string) {
   });
   const timeZoneLabel = safeTimeZone ? ` (${safeTimeZone})` : '';
   return `${formatter.format(new Date(timestamp))}${timeZoneLabel}`;
-}
-
-function normalizeTimeZone(timeZone?: string) {
-  if (!timeZone || timeZone.length > 80) return null;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date());
-    return timeZone;
-  } catch {
-    return null;
-  }
 }

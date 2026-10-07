@@ -1,12 +1,12 @@
 import { Pressable, View, useWindowDimensions } from 'react-native';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { WorkoutRestRing } from './workout-rest-ring';
-import { styles } from './workout-surface.styles';
+import { styles } from './workout-exercise-rest-view.styles';
 import type { RestCard } from './workout-surface.types';
 import { WorkoutSwipeCard } from './workout-swipe-card';
+import { useRestCountdown } from './use-rest-countdown';
 
 type RestViewProps = {
   errorMessage: string | null;
@@ -17,8 +17,6 @@ type RestViewProps = {
   onRestSwipeRight: () => void;
   onToggleRestRunning: () => void;
   restCard: RestCard;
-  restRemaining: number;
-  restRunning: boolean;
 };
 
 export function WorkoutExerciseRestView({
@@ -30,13 +28,13 @@ export function WorkoutExerciseRestView({
   onRestSwipeRight,
   onToggleRestRunning,
   restCard,
-  restRemaining,
-  restRunning,
 }: RestViewProps) {
   const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
   const { width } = useWindowDimensions();
-  const timerRingSize = Math.max(176, Math.min(228, Math.floor(width - 150)));
+  const timerRingSize = Math.max(176, Math.min(236, Math.floor(width - 130)));
+  const countdown = useRestCountdown(restCard)!;
+  const restRemaining = countdown.remainingSeconds;
+  const restRunning = countdown.isRunning;
 
   return (
     <WorkoutSwipeCard
@@ -60,72 +58,49 @@ export function WorkoutExerciseRestView({
       </View>
 
       <View style={styles.restBody}>
-        <View style={styles.restMainGroup}>
-          <View style={styles.restTopRow}>
-            <Pressable disabled={isWorking} onPress={onToggleRestRunning} style={({ pressed }) => [styles.timerButton, getTapScaleStyle(pressed, false)]}>
-              <WorkoutRestRing
-                durationSeconds={restCard.durationSeconds}
-                isRunning={restRunning}
-                remainingSeconds={restRemaining}
-                size={timerRingSize}
-              />
-            </Pressable>
+        <Pressable disabled={isWorking} onPress={onToggleRestRunning} style={({ pressed }) => [styles.timerButton, getTapScaleStyle(pressed, false)]}>
+          <WorkoutRestRing
+            durationSeconds={restCard.durationSeconds}
+            isRunning={restRunning}
+            remainingSeconds={restRemaining}
+            size={timerRingSize}
+          />
+        </Pressable>
 
-            <View style={styles.restSteps}>
-              {[-15, 15].map(delta => (
-                <Pressable
-                  key={delta}
-                  disabled={isWorking}
-                  onPress={() => onAdjustRest(delta)}
-                  style={({ pressed }) => [
-                    styles.restStep,
-                    {
-                      backgroundColor: glassControls.shellBackgroundColor,
-                      borderColor: glassControls.shellBorderColor,
-                      ...getTapScaleStyle(pressed, false),
-                    },
-                  ]}
-                >
-                  <ReedText variant="title">{delta > 0 ? `+${delta}` : `${delta}`}</ReedText>
-                </Pressable>
-              ))}
-            </View>
-          </View>
+        <View style={styles.restSteps}>
+          {[-15, 15].map(delta => (
+            <Pressable
+              key={delta}
+              accessibilityLabel={delta > 0 ? 'Add 15 seconds' : 'Take off 15 seconds'}
+              accessibilityRole="button"
+              disabled={isWorking}
+              onPress={() => onAdjustRest(delta)}
+              style={({ pressed }) => [styles.restStep, { backgroundColor: theme.colors.surfaceRaised }, getTapScaleStyle(pressed, false)]}
+            >
+              <ReedText variant="bodyStrong">{delta > 0 ? `+${delta}s` : `−${-delta}s`}</ReedText>
+            </Pressable>
+          ))}
         </View>
 
         <View style={styles.presetRow}>
-          {[30, 60, 90, 120].map(seconds => (
-            <Pressable
-              key={seconds}
-              disabled={isWorking}
-              onPress={() => onPresetRest(seconds)}
-              style={({ pressed }) => [
-                styles.presetChip,
-                {
-                  backgroundColor:
-                    restCard.durationSeconds === seconds
-                      ? glassControls.activeBackgroundColor
-                      : 'transparent',
-                  borderColor:
-                    restCard.durationSeconds === seconds
-                      ? glassControls.activeBorderColor
-                      : 'transparent',
-                  borderWidth: restCard.durationSeconds === seconds ? 3 : 1,
-                  ...getTapScaleStyle(pressed, false),
-                },
-              ]}
-            >
-              <ReedText
-                style={{
-                  color:
-                    restCard.durationSeconds === seconds ? theme.colors.accentPrimary : theme.colors.textPrimary,
-                }}
-                variant="title"
+          {[30, 60, 90, 120].map(seconds => {
+            const selected = restCard.durationSeconds === seconds;
+            return (
+              <Pressable
+                key={seconds}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                disabled={isWorking}
+                onPress={() => onPresetRest(seconds)}
+                style={({ pressed }) => [
+                  styles.presetChip,
+                  { backgroundColor: selected ? theme.colors.accentSoft : theme.colors.surfaceRaised, ...getTapScaleStyle(pressed, false) },
+                ]}
               >
-                {seconds}s
-              </ReedText>
-            </Pressable>
-          ))}
+                <ReedText tone={selected ? 'accent' : 'secondary'} variant="bodyStrong">{seconds}s</ReedText>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
 

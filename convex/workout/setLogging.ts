@@ -126,7 +126,12 @@ export async function patchLiveSessionSetActivity(
     sessionExercise: args.sessionExercise,
   });
 
+  const previousWhisper = (await ctx.db.get(args.setLogId))?.reedWhisper;
   await ctx.db.patch(args.setLogId, {
+    // Retain the kind for the one-info-per-exercise rule, but retire edited evidence.
+    reedWhisper: previousWhisper
+      ? { ...previousWhisper, retired: true }
+      : undefined,
     ...derivedLoadFields,
     loggedAt: args.loggedAt,
     metrics: args.metrics,

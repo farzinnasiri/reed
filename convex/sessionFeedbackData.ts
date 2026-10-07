@@ -1,3 +1,4 @@
+import { sessionDurationSeconds } from '../domains/workout/session-duration';
 import { v } from 'convex/values';
 import { internalQuery } from './_generated/server';
 import type { Doc } from './_generated/dataModel';
@@ -87,7 +88,7 @@ export const snapshot = internalQuery({
         }, 0)),
         userNotes: session.userNotes ?? null,
       },
-      trainingProfile,
+      trainingProfile: trainingProfile ? { onboarding: trainingProfile.onboarding } : null,
     };
   },
 });
@@ -106,5 +107,5 @@ function groupLogsBySessionExercise(logs: Doc<'activityLogs'>[]) {
 
 function durationMinutes(session: Doc<'liveSessions'>) {
   if (!session.endedAt) return null;
-  return Math.max(1, Math.round((session.endedAt - session.startedAt) / 60_000));
+  return Math.max(1, Math.round(sessionDurationSeconds(session, session.endedAt) / 60));
 }

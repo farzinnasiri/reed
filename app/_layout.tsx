@@ -1,15 +1,15 @@
+import { onboardingComplete } from '@/domains/profile/onboarding';
 import {
-  Outfit_400Regular,
-  Outfit_600SemiBold,
-  Outfit_800ExtraBold,
-  Outfit_900Black,
+  Figtree_400Regular,
+  Figtree_500Medium,
+  Figtree_600SemiBold,
   useFonts,
-} from '@expo-google-fonts/outfit';
+} from '@expo-google-fonts/figtree';
 import { ClerkProvider, useAuth } from '@clerk/expo';
 import { tokenCache } from '@clerk/expo/token-cache';
 import { Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useConvexAuth, useQuery } from 'convex/react';
 import { ConvexProviderWithClerk } from 'convex/react-clerk';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useEffect, useRef } from 'react';
@@ -28,16 +28,18 @@ import {
   markStartupFontsReady,
   markStartupViewerReady,
 } from '@/lib/startup-observability';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { Surface } from '@/components/ui/surface';
+import { BootSplash } from '@/components/launch/boot-splash';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { ReedThemeProvider, useReedTheme } from '@/design/provider';
+import { ReedSafeArea } from '@/design/safe-area';
 import { reedRadii } from '@/design/system';
 import { appEnv } from '@/lib/env';
 import { convex, missingPublicEnv } from '@/lib/convex';
 import { api } from '@/convex/_generated/api';
 import { requestAppCapabilityPermissionsAsync } from '@/lib/app-permissions';
-import { registerPushDeviceAsync } from '@/lib/push-notifications';
+import { PushDeviceProvider } from '@/lib/push-device-provider';
 
 export {
   ErrorBoundary,
@@ -47,10 +49,9 @@ SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
   const [fontsLoaded, fontLoadError] = useFonts({
-    Outfit_400Regular,
-    Outfit_600SemiBold,
-    Outfit_800ExtraBold,
-    Outfit_900Black,
+    Figtree_400Regular,
+    Figtree_500Medium,
+    Figtree_600SemiBold,
   });
   const pathname = usePathname();
   const previousPathname = useRef<string | undefined>(undefined);
@@ -71,59 +72,59 @@ export default function RootLayout() {
   }, [fontLoadError, fontsLoaded]);
 
   if (!fontsLoaded && !fontLoadError) {
-    return null;
+    return <BootSplash />;
   }
 
   return (
     <SafeAreaProvider>
-      <ReedThemeProvider>
-        <GestureHandlerRootView style={styles.gestureRoot}>
-          <KeyboardProvider>
-            <PostHogProvider
-              client={posthog}
-              autocapture={{
-                captureScreens: false,
-                captureTouches: true,
-                propsToCapture: ['testID'],
-                maxElementsCaptured: 20,
-              }}
-            >
-              <PostHogErrorBoundary
-                additionalProperties={() => ({
-                  'error.boundary': 'root',
-                  'event.kind': 'operational',
-                  'screen.name': pathname,
-                })}
-                fallback={RootErrorFallback}
+      <ReedSafeArea>
+        <ReedThemeProvider>
+          <GestureHandlerRootView style={styles.gestureRoot}>
+            <KeyboardProvider>
+              <PostHogProvider
+                client={posthog}
+                autocapture={{
+                  captureScreens: false,
+                  captureTouches: true,
+                  propsToCapture: ['testID'],
+                  maxElementsCaptured: 20,
+                }}
               >
-                <RootApp />
-              </PostHogErrorBoundary>
-            </PostHogProvider>
-          </KeyboardProvider>
-        </GestureHandlerRootView>
-      </ReedThemeProvider>
+                <PostHogErrorBoundary
+                  additionalProperties={() => ({
+                    'error.boundary': 'root',
+                    'event.kind': 'operational',
+                    'screen.name': pathname,
+                  })}
+                  fallback={RootErrorFallback}
+                >
+                  <RootApp />
+                </PostHogErrorBoundary>
+              </PostHogProvider>
+            </KeyboardProvider>
+          </GestureHandlerRootView>
+        </ReedThemeProvider>
+      </ReedSafeArea>
     </SafeAreaProvider>
   );
 }
 
 function RootErrorFallback() {
-  const { theme } = useReedTheme();
-
   return (
     <>
       <StatusBar
         backgroundColor="transparent"
-        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+        barStyle="light-content"
         translucent
       />
       <ScreenBackdrop>
         <SafeAreaView style={styles.safeArea}>
           <View style={styles.screen}>
-            <GlassSurface>
-              <ReedText variant="brand">Reed</ReedText>
+            <Surface>
+              <ReedText variant="caption">Reed</ReedText>
               <ReedText variant="display">Something went wrong.</ReedText>
               <ReedText tone="muted">Close and reopen the app.</ReedText>
-            </GlassSurface>
+            </Surface>
           </View>
         </SafeAreaView>
       </ScreenBackdrop>
@@ -150,14 +151,14 @@ function RootApp() {
       <>
         <StatusBar
           backgroundColor="transparent"
-          barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+          barStyle="light-content"
           translucent
         />
         <ScreenBackdrop>
           <SafeAreaView style={styles.safeArea}>
             <View style={styles.screen}>
-              <GlassSurface>
-                <ReedText variant="brand">Missing environment</ReedText>
+              <Surface>
+                <ReedText variant="caption">Missing environment</ReedText>
                 <ReedText variant="display">Reed needs public Expo values before it can boot.</ReedText>
                 <ReedText tone="muted">
                   Add the missing keys to <ReedText variant="bodyStrong">.env.dev</ReedText> and
@@ -170,8 +171,8 @@ function RootApp() {
                       style={[
                         styles.missingSurface,
                         {
-                          backgroundColor: theme.colors.controlFill,
-                          borderColor: theme.colors.controlBorder,
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.line,
                         },
                       ]}
                     >
@@ -181,7 +182,7 @@ function RootApp() {
                     </View>
                   ))}
                 </View>
-              </GlassSurface>
+              </Surface>
             </View>
           </SafeAreaView>
         </ScreenBackdrop>
@@ -210,9 +211,7 @@ function RootNavigator() {
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
   const session = isSignedIn && isAuthenticated;
   const viewer = useQuery(api.profiles.viewer, session ? {} : 'skip');
-  const disableNotificationDevice = useMutation(api.notificationDevices.disableCurrentDevice);
-  const registerNotificationDevice = useMutation(api.notificationDevices.registerDevice);
-  const isAppReady = Boolean(session && viewer?.onboardingCompletedAt);
+  const isAppReady = Boolean(session && onboardingComplete(viewer));
   const isRoutingPending = !isClerkLoaded || isConvexAuthLoading || Boolean(session && viewer === undefined);
   const hasMarkedAuthReady = useRef(false);
   const hasMarkedViewerReady = useRef(false);
@@ -256,20 +255,17 @@ function RootNavigator() {
     }
 
     void requestAppCapabilityPermissionsAsync();
-    void registerPushDeviceAsync({
-      disableDevice: disableNotificationDevice,
-      registerDevice: registerNotificationDevice,
-    });
-  }, [disableNotificationDevice, isAppReady, registerNotificationDevice]);
+  }, [isAppReady]);
 
   if (isRoutingPending) {
     return (
       <>
         <StatusBar
           backgroundColor="transparent"
-          barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+          barStyle="light-content"
           translucent
         />
+        <BootSplash />
       </>
     );
   }
@@ -278,9 +274,10 @@ function RootNavigator() {
     <>
       <StatusBar
         backgroundColor="transparent"
-        barStyle={theme.mode === 'dark' ? 'light-content' : 'dark-content'}
+        barStyle="light-content"
         translucent
       />
+      <PushDeviceProvider profileId={isAppReady && viewer ? viewer._id : null}>
       <Stack
         screenOptions={{
           animation: Platform.OS === 'web' ? 'none' : 'fade_from_bottom',
@@ -297,6 +294,7 @@ function RootNavigator() {
         </Stack.Protected>
         <Stack.Screen name="+not-found" />
       </Stack>
+      </PushDeviceProvider>
     </>
   );
 }
@@ -319,9 +317,5 @@ const styles = StyleSheet.create({
   missingSurface: {
     borderRadius: reedRadii.md,
     borderWidth: 1,
-  },
-  missingItem: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
   },
 });

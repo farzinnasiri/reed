@@ -1,8 +1,17 @@
 import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 import { useReedTheme } from '@/design/provider';
 
-type ReedTextVariant = 'brand' | 'display' | 'title' | 'section' | 'body' | 'bodyStrong' | 'label' | 'caption';
-type ReedTextTone = 'default' | 'muted' | 'accent' | 'accentSecondary' | 'success' | 'danger';
+type ReedTextVariant =
+  | 'display'
+  | 'title'
+  | 'headline'
+  | 'voice'
+  | 'body'
+  | 'bodyStrong'
+  | 'caption'
+  | 'micro'
+  | 'stat';
+type ReedTextTone = 'default' | 'secondary' | 'muted' | 'accent' | 'success' | 'danger';
 
 type ReedTextProps = TextProps & {
   style?: StyleProp<TextStyle>;
@@ -20,27 +29,18 @@ export function ReedText({
 
   const toneStyle: TextStyle = {
     color:
-      tone === 'muted'
-        ? theme.colors.textMuted
-        : tone === 'accent'
-          ? theme.colors.accentPrimary
-          : tone === 'accentSecondary'
-            ? theme.colors.accentSecondary
+      tone === 'secondary'
+        ? theme.colors.inkSecondary
+        : tone === 'muted'
+          ? theme.colors.inkMuted
+          : tone === 'accent'
+            ? theme.colors.accentInk
             : tone === 'success'
-              ? theme.colors.successText
+              ? theme.colors.successInk
               : tone === 'danger'
-                ? theme.colors.dangerText
-                : theme.colors.textPrimary,
+                ? theme.colors.dangerInk
+                : theme.colors.ink,
   };
 
-  const variantStyle: TextStyle =
-    variant === 'brand'
-      ? {
-          ...theme.typography.label,
-          color: theme.colors.accentPrimary,
-          letterSpacing: 1.6,
-        }
-      : theme.typography[variant];
-
-  return <Text style={[variantStyle, toneStyle, style]} {...props} />;
+  return <Text style={[theme.typography[variant], toneStyle, style]} {...props} />;
 }

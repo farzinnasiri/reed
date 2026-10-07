@@ -1,379 +1,50 @@
+import { VALUE_LABELS, startingWeeklyTarget, rankedPractices } from '@/domains/profile/onboarding';
+import type { FunctionReturnType } from 'convex/server';
+import { BodyWeightProgress } from './profile/body-weight-progress';
+import { ProgressSkeleton, formatDate } from './profile/progress-presentation';
+import { styles } from './profile/profile.styles';
+import { getCurrentWeekBounds, type ProfilePeriod } from '@/domains/trainingKnowledge/progress-periods';
+import { useProgressPeriod } from './profile/use-progress-period';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Animated, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useMemo, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { useMutation, useQuery } from 'convex/react';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { api } from '@/convex/_generated/api';
-import { OnboardingFlow } from '@/components/onboarding/onboarding-flow';
-import { buildCompleteOnboardingPayload } from '@/components/onboarding/step-review';
-import type { OnboardingBaseStep } from '@/components/onboarding/types';
+import { ReedMascot } from '@/components/reed/mascot';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
-import { ReedButton } from '@/components/ui/reed-button';
-import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
-import { getGlassControlTokens, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
-import { GlassSurface } from '@/components/ui/glass-surface';
-import { ScreenHeader } from '@/components/ui/screen-header';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { createTiming, getTapScaleStyle, reedMotion, runReedLayoutAnimation, shouldUseNativeDriver } from '@/design/motion';
+import * as haptics from '@/design/haptics';
+import { getTapScaleStyle } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii, workoutSemanticPalette } from '@/design/system';
 import { formatWeeklyVolume } from '@/domains/workout/weekly-muscle-stats';
-import {
-  getConsistencyCellFill,
-  getConsistencyCellOpacity,
-  getConsistencyGaugeSegmentFill,
-  getConsistencyGaugeSegmentOpacity,
-} from './profile/consistency-presenter';
+import { getConsistencyCellFill, getConsistencyCellOpacity } from './profile/consistency-presenter';
 import { useAppShell } from './app-shell-context';
-import { draftFromTrainingProfile, SettingsSurface, type StoredTrainingProfile } from './settings-surface';
+import { ProgressSection } from './progress-section';
+import { useFiveMinuteNow } from './use-five-minute-now';
+import { weeklyActiveDaysProse, type StoredTrainingProfile } from './profile/profile-contract';
+import { formatBodyMetric } from './profile-facts';
 
-const goalLabels: Record<string, string> = {
-  build_muscle: 'Build muscle',
-  get_stronger: 'Get stronger',
-  improve_conditioning: 'Improve conditioning',
-  master_skill: 'Master a skill',
-  move_without_pain: 'Move without pain',
-  support_sport: 'Support sport',
-};
+const CONSISTENCY_WEEK_COUNT = 12;
 
-const weeklySessionLabels: Record<string, string> = {
-  four_plus: '4+ days/week',
-  one_to_two: '1–2 days/week',
-  two_to_four: '2–4 days/week',
-};
-
-const equipmentLabels: Record<string, string> = {
-  calisthenics_park: 'park',
-  crowded_gym: 'crowded gym',
-  full_gym: 'gym',
-  home_equipment: 'home',
-  no_fixed_equipment: 'minimal equipment',
-};
-
-const constraintLabels: Record<string, string> = {
-  heart: 'heart',
-  hip: 'hip',
-  knee: 'knee',
-  lower_back: 'lower back',
-  lungs: 'lungs',
-  neck: 'neck',
-  other: 'other',
-  shoulder: 'shoulder',
-  wrist_elbow: 'wrist/elbow',
-};
-
-const bodyMetricLabels: Record<string, string> = {
-  body_fat_percent: 'Body fat',
-  body_weight: 'Bodyweight',
-  resting_heart_rate: 'Resting heart rate',
-  skeletal_muscle_mass: 'Skeletal muscle',
-};
-
-const trainingAgeLabels: Record<string, string> = {
-  over_18_months: '18+ months',
-  six_to_18_months: '6-18 months',
-  starting: 'Starting',
-  under_6_months: 'Under 6 months',
-};
-
-const durationLabels: Record<string, string> = {
-  fortyfive_to_75: '45-75 min',
-  over_75: '75+ min',
-  under_45: 'Under 45 min',
-};
-
-const effortLabels: Record<string, string> = {
-  easy: 'Easy',
-  hard: 'Hard',
-  moderate: 'Moderate',
-};
-
-const recoveryLabels: Record<string, string> = {
-  fragile: 'Fragile',
-  mixed: 'Mixed',
-  solid: 'Solid',
-};
-
-const trainingStyleLabels: Record<string, string> = {
-  calisthenics: 'Calisthenics',
-  cardio: 'Cardio',
-  classic_gym: 'Classic gym',
-  mobility_rehab: 'Mobility / rehab',
-  sport_support: 'Sport support',
-};
-
-const anchorLabels: Record<string, string> = {
-  bench_press: 'Bench',
-  deadlift: 'Deadlift',
-  dip: 'Dip',
-  overhead_press: 'Overhead press',
-  pull_up: 'Pull-up',
-  push_up: 'Push-up',
-  run_1km: '1K run',
-  run_5km: '5K run',
-  squat: 'Squat',
-  stair_test: 'Stairs',
-};
-
-const goalDetailLabels: Record<string, string> = {
-  bench: 'bench',
-  deadlift: 'deadlift',
-  overhead_press: 'overhead press',
-  squat: 'squat',
-  weighted_pull_up: 'weighted pull-up',
-};
-const consistencyWeekdayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'] as const;
-
-type ProfileDetailKind = 'body' | 'goal' | 'training';
-type ProfilePeriod = '30d' | '90d' | 'week';
-type BodyWeightPoint = {
-  _id: string;
-  observedAt: number;
-  source: 'manual' | 'onboarding';
-  unit: 'kg' | 'percent' | 'bpm';
-  value: number;
-};
 type ProgressMetric = 'load' | 'reps' | 'sets';
-type TrainingWindowGroup = {
-  groupId: string;
-  label: string;
-  reps: number;
-  setCount: number;
-  volume: number;
-};
-type TrainingWindowSummary = {
-  activityCount: number;
-  byExercise: Array<{
-    exerciseCatalogId: string;
-    exerciseName: string;
-    lastLoggedAt: number;
-    setCount: number;
-  }>;
-  recentActivities: Array<{
-    exerciseCatalogId: string;
-    exerciseName: string;
-    loggedAt: number;
-    source: 'live_session' | 'quick_log';
-    summary: string;
-  }>;
-  work: {
-    groups: TrainingWindowGroup[];
-    totalReps: number;
-    totalSets: number;
-    totalVolume: number;
-  };
-};
-type ProfileConsistencyResult = {
-  currentOnTargetWeekRun: number;
-  currentWeek: {
-    activeDays: number;
-    isOnTarget: boolean;
-    remainingActiveDays: number;
-    targetActiveDays: number;
-    weekEndAt: number;
-    weekStartAt: number;
-  };
-  weekGrid: Array<{
-    days: Array<{
-      activityCount: number;
-      active: boolean;
-      date: string;
-      dayStartAt: number;
-      isFuture: boolean;
-      weekStartAt: number;
-    }>;
-    weekStartAt: number;
-  }>;
-  hasTrainingTarget: boolean;
-  helperLine: string;
-  recentOnTargetRate: {
-    onTargetWeeks: number;
-    percent: number;
-    totalWeeks: number;
-  };
-  subline: string;
-  summaryLine: string;
-  target: {
-    label: string;
-    targetActiveDays: number;
-  } | null;
-};
+type TrainingWindowSummary = FunctionReturnType<typeof api.trainingKnowledge.summarizeWindow>;
+type TrainingWindowGroup = TrainingWindowSummary['work']['groups'][number];
+type ProfileConsistencyResult = FunctionReturnType<typeof api.trainingKnowledge.getConsistency>;
 
-type ProfileSurfaceProps = {
-  displayName: string;
-  onEditingProfileChange?: (isEditing: boolean) => void;
-};
-
-export function ProfileSurface({ displayName, onEditingProfileChange }: ProfileSurfaceProps) {
-  const { theme } = useReedTheme();
-  const insets = useSafeAreaInsets();
+export function ProfileDashboardCards({ afterCoachNote }: { afterCoachNote?: ReactNode }) {
   const viewerTrainingProfile = useQuery(api.profiles.viewerTrainingProfile, {});
-  const updateTrainingProfile = useMutation(api.profiles.updateTrainingProfile);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [activeDetail, setActiveDetail] = useState<ProfileDetailKind | null>(null);
-  const [editStep, setEditStep] = useState<OnboardingBaseStep | null>(null);
-
-  const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
-  const bodyWeight = viewerTrainingProfile?.latestBodyMetrics?.find((metric: { metricKey: string }) => metric.metricKey === 'body_weight') ?? null;
-  const editDraft = useMemo(() => {
-    if (!viewerTrainingProfile) {
-      return null;
-    }
-
-    return draftFromTrainingProfile(viewerTrainingProfile as StoredTrainingProfile, displayName);
-  }, [displayName, viewerTrainingProfile]);
-
-  if (isSettingsOpen) {
-    return (
-      <View style={styles.fullscreenPanel}>
-        <SettingsSurface onBack={() => setIsSettingsOpen(false)} onEditingProfileChange={onEditingProfileChange} />
-      </View>
-    );
-  }
-
-  if (editStep && editDraft) {
-    return (
-      <View style={styles.fullscreenPanel}>
-        <OnboardingFlow
-          backPlacement="header"
-          cancelLabel="Close"
-          includeConsent={false}
-          initialDraft={editDraft}
-          initialStep={editStep}
-          onCancel={() => {
-            setEditStep(null);
-            onEditingProfileChange?.(false);
-          }}
-          onComplete={() => {
-            setEditStep(null);
-            onEditingProfileChange?.(false);
-          }}
-          onDecline={() => {
-            setEditStep(null);
-            onEditingProfileChange?.(false);
-          }}
-          onSaveProfile={async draft => {
-            await updateTrainingProfile(buildCompleteOnboardingPayload(draft));
-          }}
-          reviewContinueLabel="Save changes"
-        />
-      </View>
-    );
-  }
-
-  return (
-    <>
-    <ScrollView
-      contentContainerStyle={[
-        styles.content,
-        {
-          paddingBottom: 132,
-          paddingHorizontal: SCREEN_CONTENT_HORIZONTAL_MARGIN,
-          paddingTop: insets.top + theme.spacing.xl,
-        },
-      ]}
-      showsVerticalScrollIndicator={false}
-      style={styles.root}
-    >
-      <ScreenHeader
-        variant="identity"
-        action={{
-          accessibilityLabel: 'Open settings',
-          iconName: 'settings-outline',
-          onPress: () => setIsSettingsOpen(true),
-        }}
-      >
-        <ReedText variant="title">Profile</ReedText>
-      </ScreenHeader>
-
-      {viewerTrainingProfile === undefined ? (
-        <View style={styles.loadingRow}>
-          <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-          <ReedText tone="muted">Loading profile.</ReedText>
-        </View>
-      ) : (
-        <View style={styles.sectionStack}>
-          <View style={styles.profileAccordion}>
-            <ProfileAccordionItem
-              activeDetail={activeDetail}
-              detail="body"
-              icon="body-outline"
-              label="Body"
-              onEdit={step => {
-                setEditStep(step);
-                onEditingProfileChange?.(true);
-              }}
-              onToggle={() => {
-                runReedLayoutAnimation(reedMotion.durations.mode);
-                setActiveDetail(activeDetail === 'body' ? null : 'body');
-              }}
-              primary={bodyWeight ? `${formatMetric(bodyWeight.value)} ${bodyWeight.unit}` : 'Add bodyweight'}
-              profileData={viewerTrainingProfile}
-              secondary={bodyWeight ? `Logged ${formatDate(bodyWeight.observedAt)}` : 'Log weight for better estimates.'}
-            />
-            <ProfileAccordionItem
-              activeDetail={activeDetail}
-              detail="goal"
-              icon="flag-outline"
-              label="Goals"
-              onEdit={step => {
-                setEditStep(step);
-                onEditingProfileChange?.(true);
-              }}
-              onToggle={() => {
-                runReedLayoutAnimation(reedMotion.durations.mode);
-                setActiveDetail(activeDetail === 'goal' ? null : 'goal');
-              }}
-              primary={formatRankedGoalLine(trainingProfile?.rankedGoals ?? [])}
-              profileData={viewerTrainingProfile}
-              secondary={formatGoalFocusLine(trainingProfile)}
-            />
-            <ProfileAccordionItem
-              activeDetail={activeDetail}
-              detail="training"
-              icon="finger-print-outline"
-              label="Training setup"
-              onEdit={step => {
-                setEditStep(step);
-                onEditingProfileChange?.(true);
-              }}
-              onToggle={() => {
-                runReedLayoutAnimation(reedMotion.durations.mode);
-                setActiveDetail(activeDetail === 'training' ? null : 'training');
-              }}
-              primary={formatTrainingReality(trainingProfile)}
-              profileData={viewerTrainingProfile}
-              secondary={formatConstraints(trainingProfile?.constraints.areas ?? [])}
-            />
-          </View>
-        </View>
-      )}
-    </ScrollView>
-    </>
-  );
-}
-
-export function ProfileDashboardCards() {
-  const viewerTrainingProfile = useQuery(api.profiles.viewerTrainingProfile, {});
-  const bodyWeightTrend = useQuery(api.profiles.bodyWeightTrend, { rangeDays: 90 });
-  const upsertTodayBodyWeight = useMutation(api.profiles.upsertTodayBodyWeight);
-  const periodRange = useMemo(() => getProfilePeriodRange('week'), []);
+  const periodRange = useProgressPeriod('week');
   const progressSummary = useQuery(api.trainingKnowledge.summarizeWindow, {
     windowEndAt: periodRange.current.endAt,
     windowStartAt: periodRange.current.startAt,
   });
-  const consistency = useQuery(api.trainingKnowledge.getConsistency, {});
+  const clock = useFiveMinuteNow();
+  const consistency = useQuery(api.trainingKnowledge.getConsistency, { now: clock });
   const profileInsight = useQuery(api.profileInsight.getCurrent, {});
   const ensureProfileInsight = useMutation(api.profileInsight.ensureFresh);
-  const [isCoachExpanded, setIsCoachExpanded] = useState(false);
-  const [isConsistencyExpanded, setIsConsistencyExpanded] = useState(false);
-  const [isBodyWeightExpanded, setIsBodyWeightExpanded] = useState(false);
-  const [isWeightSheetOpen, setIsWeightSheetOpen] = useState(false);
   const { hasUnreadCoachMessage, markCoachMessageRead } = useAppShell();
 
   const trainingProfile = viewerTrainingProfile?.trainingProfile ?? null;
@@ -382,776 +53,166 @@ export function ProfileDashboardCards() {
     () => profileInsight?.content
       ? { lead: '', body: profileInsight.content }
       : formatCoachNote(trainingProfile, bodyWeight, progressSummary, consistency),
-    [bodyWeight, consistency, profileInsight?.content, progressSummary, trainingProfile],
+    [bodyWeight, consistency, profileInsight, progressSummary, trainingProfile],
   );
 
   useEffect(() => {
     void ensureProfileInsight({ clientNow: Date.now() });
   }, [ensureProfileInsight]);
 
+  // Progress shows the note in full, so opening it is reading it.
   useEffect(() => {
-    if (isCoachExpanded && hasUnreadCoachMessage) {
+    if (hasUnreadCoachMessage) {
       markCoachMessageRead();
     }
-  }, [hasUnreadCoachMessage, isCoachExpanded, markCoachMessageRead]);
-
-  function toggleCoach() {
-    runReedLayoutAnimation(reedMotion.durations.mode);
-    setIsCoachExpanded(current => {
-      const next = !current;
-      if (next) {
-        markCoachMessageRead();
-      }
-      return next;
-    });
-  }
-
-  function toggleConsistency() {
-    runReedLayoutAnimation(reedMotion.durations.mode);
-    setIsConsistencyExpanded(current => !current);
-  }
-
-  function toggleBodyWeight() {
-    runReedLayoutAnimation(reedMotion.durations.mode);
-    setIsBodyWeightExpanded(current => !current);
-  }
+  }, [hasUnreadCoachMessage, markCoachMessageRead]);
 
   return (
     <>
-      <CoachNoteCard expanded={isCoachExpanded} hasUnreadMessage={hasUnreadCoachMessage} note={coachNote} onToggle={toggleCoach} />
-      <ConsistencySurface consistency={consistency} expanded={isConsistencyExpanded} onToggle={toggleConsistency} />
-      <BodyWeightSurface
-        expanded={isBodyWeightExpanded}
-        latestWeight={bodyWeight}
-        onLogWeight={() => setIsWeightSheetOpen(true)}
-        onToggle={toggleBodyWeight}
-        series={bodyWeightTrend}
-      />
-      <BodyWeightLogSheet
-        latestWeight={bodyWeight}
-        onClose={() => setIsWeightSheetOpen(false)}
-        onSave={async valueKg => {
-          const now = Date.now();
-          const bounds = getLocalDayBounds(now);
-          await upsertTodayBodyWeight({
-            dayEndAt: bounds.endAt,
-            dayStartAt: bounds.startAt,
-            observedAt: now,
-            valueKg,
-          });
-        }}
-        visible={isWeightSheetOpen}
-      />
+      <CoachNote note={coachNote} />
+      {afterCoachNote}
+      <TrainingProgressExpansion />
+      <ConsistencySurface consistency={consistency} />
+      <BodyWeightProgress latestWeight={bodyWeight} />
     </>
   );
 }
 
-function ProfileAccordionItem({
-  activeDetail,
-  detail,
-  icon,
-  label,
-  onEdit,
-  onToggle,
-  primary,
-  profileData,
-  secondary,
-}: {
-  activeDetail: ProfileDetailKind | null;
-  detail: ProfileDetailKind;
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onEdit: (step: OnboardingBaseStep) => void;
-  onToggle: () => void;
-  primary: string;
-  profileData: StoredTrainingProfile | null | undefined;
-  secondary: string;
-}) {
-  const isOpen = activeDetail === detail;
-
-  return (
-    <View>
-      <LivingFact
-        icon={icon}
-        isOpen={isOpen}
-        label={label}
-        onPress={onToggle}
-        primary={primary}
-        secondary={secondary}
-      />
-      {isOpen ? (
-        <AccordionDetailReveal>
-          <ProfileDetailSurface
-            detail={detail}
-            embedded
-            onBack={onToggle}
-            onEdit={onEdit}
-            profileData={profileData}
-          />
-        </AccordionDetailReveal>
-      ) : null}
-    </View>
-  );
-}
-
-function AccordionDetailReveal({ children }: { children: ReactNode }) {
-  const progress = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    createTiming(progress, 1, reedMotion.durations.mode, undefined, shouldUseNativeDriver).start();
-  }, [progress]);
-
-  return (
-    <Animated.View
-      style={{
-        opacity: progress,
-        transform: [
-          {
-            translateY: progress.interpolate({
-              inputRange: [0, 1],
-              outputRange: [reedMotion.distances.expandContentY, 0],
-            }),
-          },
-        ],
-      }}
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
-function CoachNoteCard({
-  expanded = true,
-  hasUnreadMessage = false,
-  note,
-  onToggle,
-}: {
-  expanded?: boolean;
-  hasUnreadMessage?: boolean;
-  note: { body: string; lead: string };
-  onToggle?: () => void;
-}) {
+// Reed reading the numbers: its mascot and one note, with no card around it.
+function CoachNote({ note }: { note: { body: string; lead: string } }) {
   const { theme } = useReedTheme();
-  const showUnreadRim = hasUnreadMessage && !expanded;
-  const pulseProgress = useRef(new Animated.Value(0)).current;
-  const [isReduceMotionEnabled, setIsReduceMotionEnabled] = useState(false);
-
-  useEffect(() => {
-    let isMounted = true;
-    void AccessibilityInfo.isReduceMotionEnabled()
-      .then(enabled => {
-        if (isMounted) {
-          setIsReduceMotionEnabled(enabled);
-        }
-      })
-      .catch(() => {});
-
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', enabled => {
-      if (isMounted) {
-        setIsReduceMotionEnabled(enabled);
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      subscription.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!showUnreadRim || isReduceMotionEnabled) {
-      pulseProgress.stopAnimation();
-      pulseProgress.setValue(0);
-      return;
-    }
-
-    const animation = Animated.loop(
-      Animated.sequence([
-        createTiming(pulseProgress, 1, reedMotion.durations.mode + 820, undefined, shouldUseNativeDriver),
-        createTiming(pulseProgress, 0, reedMotion.durations.mode + 820, undefined, shouldUseNativeDriver),
-      ]),
-    );
-
-    animation.start();
-    return () => {
-      animation.stop();
-      pulseProgress.setValue(0);
-    };
-  }, [isReduceMotionEnabled, pulseProgress, showUnreadRim]);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTruncated, setIsTruncated] = useState(false);
+  const noteKey = `${note.lead}|${note.body}`;
+  const [previousNote, setPreviousNote] = useState(noteKey);
+  if (previousNote !== noteKey) { setPreviousNote(noteKey); setIsExpanded(false); }
+  const copy = <>{note.lead ? <ReedText variant="bodyStrong">{note.lead} </ReedText> : null}{note.body}</>;
 
   return (
-    <View style={styles.coachNoteFrame}>
-      <GlassSurface
-        contentStyle={styles.coachNoteContent}
-        style={[
-          styles.coachNoteSurface,
-          showUnreadRim && {
-            borderColor: theme.colors.accentPrimary,
-            shadowColor: theme.colors.accentPrimary,
-          },
-          showUnreadRim && styles.coachNoteUnreadSurface,
-        ]}
-      >
-        <View style={styles.dashboardCardHeader}>
-          <View style={styles.coachNoteTitleRow}>
-            <ReedText variant="section">Coach message</ReedText>
-            {showUnreadRim ? <View style={[styles.coachNoteUnreadDot, { backgroundColor: theme.colors.accentPrimary }]} /> : null}
-          </View>
-          {onToggle ? (
-            <Pressable
-              accessibilityLabel={expanded ? 'Collapse coach message' : 'Expand coach message'}
-              onPress={onToggle}
-              style={({ pressed }) => [styles.dashboardChevron, getTapScaleStyle(pressed)]}
-            >
-              <Ionicons color={String(theme.colors.textPrimary)} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} />
-            </Pressable>
-          ) : null}
-        </View>
-        <ReedText numberOfLines={expanded ? undefined : 2} variant="body" style={styles.coachNoteBody}>
-          {note.lead ? <ReedText variant="bodyStrong">{note.lead}</ReedText> : null}
-          {note.lead ? ' ' : ''}
-          {note.body}
-        </ReedText>
-        {expanded ? (
-          <ReedText tone="muted" variant="caption" style={styles.coachNoteSignoff}>
-            Reed
-          </ReedText>
+    <View style={styles.coachNote}>
+      <ReedMascot expression="idle" size="sm" />
+      <View style={styles.coachNoteBody}>
+        {/* Measure the same text at full length. RN Web does not implement onTextLayout. */}
+        <ReedText
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          aria-hidden
+          onLayout={event => setIsTruncated(event.nativeEvent.layout.height > theme.typography.body.lineHeight * 3 + 1)}
+          style={{ position: 'absolute', left: 0, right: 0, top: 3, opacity: 0, pointerEvents: 'none' }}
+          variant="body"
+        >{copy}</ReedText>
+        <ReedText numberOfLines={isExpanded ? undefined : 3} tone="secondary" variant="body">{copy}</ReedText>
+        {isTruncated ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={isExpanded ? 'Show less from Reed' : 'Read more from Reed'}
+            accessibilityState={{ expanded: isExpanded }}
+            hitSlop={8}
+            onPress={() => { haptics.selection(); setIsExpanded(value => !value); }}
+            style={({ pressed }) => [styles.coachNoteMore, getTapScaleStyle(pressed)]}
+          >
+            <ReedText tone="accent" variant="caption">{isExpanded ? 'Less' : 'More'}</ReedText>
+          </Pressable>
         ) : null}
-      </GlassSurface>
-      {showUnreadRim ? (
-        <Animated.View
-          pointerEvents="none"
-          style={[
-            styles.coachNotePulseRim,
-            {
-              borderColor: theme.colors.accentPrimary,
-              opacity: isReduceMotionEnabled
-                ? 0.18
-                : pulseProgress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.14, 0.38],
-                }),
-              transform: [
-                {
-                  scale: isReduceMotionEnabled
-                    ? 1
-                    : pulseProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [1, 1.012],
-                    }),
-                },
-              ],
-            },
-          ]}
-        />
-      ) : null}
+      </View>
     </View>
   );
 }
 
-function ConsistencySurface({
-  consistency,
-  expanded = true,
-  onToggle,
-}: {
-  consistency: ProfileConsistencyResult | undefined;
-  expanded?: boolean;
-  onToggle?: () => void;
-}) {
+function ConsistencySurface({ consistency }: { consistency: ProfileConsistencyResult | undefined }) {
   const { theme } = useReedTheme();
   const [isHelperVisible, setIsHelperVisible] = useState(false);
+  const rate = consistency?.recentOnTargetRate;
 
   return (
-    <GlassSurface contentStyle={styles.consistencyContent} style={styles.consistencySurface}>
-      <StreakDesignShelf
-        consistency={consistency}
-        expanded={expanded}
-        onToggle={onToggle}
-      />
-
-      {expanded ? (
+    <ProgressSection
+      meta={rate && consistency.hasTrainingTarget ? `${rate.onTargetWeeks} of last ${rate.totalWeeks} weeks on target` : undefined}
+      title="Consistency"
+    >
+      {consistency === undefined ? (
+        <ConsistencyGrid weekGrid={null} />
+      ) : (
         <>
-          <View style={styles.consistencyGridHeader}>
-            <ReedText tone="muted" variant="caption">Last 12 weeks</ReedText>
+          <ConsistencyGrid weekGrid={consistency.weekGrid} />
+          <View style={styles.consistencyFooter}>
+            <ReedText tone="muted" variant="caption">
+              {formatOnTargetRun(consistency.currentOnTargetWeekRun)}
+            </ReedText>
             <Pressable
               accessibilityLabel={isHelperVisible ? 'Hide consistency explanation' : 'Show consistency explanation'}
               onPress={() => setIsHelperVisible(value => !value)}
-              style={({ pressed }) => [
-                styles.infoButton,
-                getTapScaleStyle(pressed),
-              ]}
+              style={({ pressed }) => [styles.infoButton, getTapScaleStyle(pressed)]}
             >
-              <Ionicons color={String(theme.colors.textMuted)} name="information-circle-outline" size={18} />
+              <Ionicons color={String(theme.colors.inkMuted)} name="information-circle-outline" size={18} />
             </Pressable>
           </View>
-
-          {consistency === undefined ? (
-            <ConsistencySkeleton />
-          ) : (
-            <>
-              <ConsistencyGrid weekGrid={consistency.weekGrid} />
-
-              {isHelperVisible ? (
-                <View style={[styles.consistencyHelper, { borderTopColor: theme.colors.controlBorder }]}>
-                  <ReedText tone="muted" variant="caption">{consistency.helperLine}</ReedText>
-                </View>
-              ) : null}
-            </>
-          )}
+          {isHelperVisible ? (
+            <View style={[styles.consistencyHelper, { borderTopColor: theme.colors.line }]}>
+              <ReedText tone="muted" variant="caption">{consistency.helperLine}</ReedText>
+            </View>
+          ) : null}
         </>
-      ) : null}
-    </GlassSurface>
+      )}
+    </ProgressSection>
   );
 }
 
-function ConsistencySkeleton() {
+// The last twelve weeks as columns, oldest to the left; each column is Monday to Sunday top to
+// bottom and a filled cell is a day with logged training. `null` renders the empty skeleton.
+function ConsistencyGrid({ weekGrid }: { weekGrid: ProfileConsistencyResult['weekGrid'] | null }) {
   const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
+  const columns = weekGrid ?? Array.from({ length: CONSISTENCY_WEEK_COUNT }, () => null);
 
   return (
-    <View style={styles.consistencySkeleton}>
+    <View>
       <View style={styles.consistencyGrid}>
-        {consistencyWeekdayLabels.map((label, dayIndex) => (
-          <View key={`${label}:${dayIndex}`} style={styles.consistencyGridRow}>
-            <ReedText tone="muted" variant="caption" style={styles.consistencyDayLabel}>
-              {label}
-            </ReedText>
-            {Array.from({ length: 12 }, (_, weekIndex) => (
-              <View
-                key={weekIndex}
-                style={[
-                  styles.consistencyCell,
-                  {
-                    backgroundColor: glassControls.shellBackgroundColor,
-                    borderColor: glassControls.shellBorderColor,
-                  },
-                ]}
-              />
-            ))}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function StreakDesignShelf({
-  consistency,
-  expanded,
-  onToggle,
-}: {
-  consistency: ProfileConsistencyResult | undefined;
-  expanded?: boolean;
-  onToggle?: () => void;
-}) {
-  const streakWeeks = consistency?.currentOnTargetWeekRun ?? 0;
-  const isLoading = consistency === undefined;
-
-  return (
-    <View style={styles.streakDesignShelf}>
-      <StreakRailDesign expanded={expanded} isLoading={isLoading} onToggle={onToggle} streakWeeks={streakWeeks} />
-    </View>
-  );
-}
-
-function StreakRailDesign({
-  expanded,
-  isLoading,
-  onToggle,
-  streakWeeks,
-}: {
-  expanded?: boolean;
-  isLoading: boolean;
-  onToggle?: () => void;
-  streakWeeks: number;
-}) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-  const filled = Math.min(streakWeeks, 8);
-
-  return (
-    <View style={styles.streakRailDesign}>
-      <View style={styles.streakRailHeader}>
-        <ReedText variant="bodyStrong">Consistency level</ReedText>
-        <View style={styles.streakRailHeaderActions}>
-          <ReedText tone="muted" variant="label" style={styles.streakRailStatus}>
-            {isLoading ? '-' : `${filled}/8 weeks`}
-          </ReedText>
-          {onToggle ? (
-            <Pressable
-              accessibilityLabel={expanded ? 'Collapse consistency heat map' : 'Expand consistency heat map'}
-              onPress={onToggle}
-              style={({ pressed }) => [styles.dashboardChevron, getTapScaleStyle(pressed)]}
-            >
-              <Ionicons color={String(theme.colors.textPrimary)} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.streakRail}>
-        {Array.from({ length: 8 }, (_, index) => (
-          <View
-            key={index}
-            style={[
-              styles.streakRailSegment,
-              {
-                backgroundColor: getConsistencyGaugeSegmentFill({
-                  accentColor: String(theme.colors.accentPrimary),
-                  filled,
-                  index,
-                  isLoading,
-                  shellColor: String(glassControls.shellBackgroundColor),
-                }),
-                borderColor: !isLoading && index === filled - 1 ? theme.colors.accentPrimary : glassControls.shellBorderColor,
-                opacity: !isLoading && index < filled ? getConsistencyGaugeSegmentOpacity(index) : 1,
-                transform: [{ scaleY: !isLoading && index === filled - 1 ? 1.15 : 1 }],
-              },
-            ]}
-          />
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function ConsistencyGrid({ weekGrid }: { weekGrid: ProfileConsistencyResult['weekGrid'] }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
-  return (
-    <View style={styles.consistencyGridWrap}>
-      <View style={styles.consistencyGrid}>
-        {consistencyWeekdayLabels.map((label, dayIndex) => (
-          <View key={`${label}:${dayIndex}`} style={styles.consistencyGridRow}>
-            <ReedText tone="muted" variant="caption" style={styles.consistencyDayLabel}>
-              {label}
-            </ReedText>
-            {weekGrid.map(week => {
-              const day = week.days[dayIndex];
-              return (
-                <View
-                  key={`${week.weekStartAt}:${dayIndex}`}
-                  accessibilityLabel={`${day.date}: ${day.activityCount} logged ${day.activityCount === 1 ? 'activity' : 'activities'}`}
-                  style={[
-                    styles.consistencyCell,
-                    {
-                      backgroundColor: getConsistencyCellFill({
-                        active: day.active,
-                        isFuture: day.isFuture,
-                        activeFill: String(theme.colors.successText),
-                        shellColor: String(glassControls.shellBackgroundColor),
-                      }),
-                      borderColor: day.active ? 'transparent' : glassControls.shellBorderColor,
-                      opacity: getConsistencyCellOpacity({
-                        active: day.active,
-                        activityCount: day.activityCount,
-                        isFuture: day.isFuture,
-                      }),
-                    },
-                  ]}
-                />
-              );
-            })}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-
-function BodyWeightSurface({
-  expanded = true,
-  latestWeight,
-  onLogWeight,
-  onToggle,
-  series,
-}: {
-  expanded?: boolean;
-  latestWeight: { observedAt: number; unit?: string; value: number } | null;
-  onLogWeight: () => void;
-  onToggle?: () => void;
-  series: BodyWeightPoint[] | undefined;
-}) {
-  const { theme } = useReedTheme();
-  const trend = useMemo(() => summarizeBodyWeightTrend(series ?? []), [series]);
-  const hasSeries = (series?.length ?? 0) >= 2;
-
-  return (
-    <GlassSurface contentStyle={styles.bodyWeightContent} style={styles.bodyWeightSurface}>
-      <View style={styles.bodyWeightHeader}>
-        <View style={styles.bodyWeightHeaderCopy}>
-          <ReedText variant="section">Bodyweight</ReedText>
-          <ReedText tone="muted" variant="caption">Trend signal, not a daily verdict.</ReedText>
-        </View>
-        <View style={styles.bodyWeightActions}>
-          <Pressable
-            accessibilityLabel="Log bodyweight"
-            onPress={onLogWeight}
-            style={({ pressed }) => [
-              styles.weightLogButton,
-              { backgroundColor: theme.colors.accentPrimary },
-              getTapScaleStyle(pressed),
-            ]}
-          >
-            <Ionicons color={String(theme.colors.accentPrimaryText)} name="add" size={18} />
-            <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="caption">Log</ReedText>
-          </Pressable>
-          {onToggle ? (
-            <Pressable
-              accessibilityLabel={expanded ? 'Collapse bodyweight trend' : 'Expand bodyweight trend'}
-              onPress={onToggle}
-              style={({ pressed }) => [styles.dashboardChevron, getTapScaleStyle(pressed)]}
-            >
-              <Ionicons color={String(theme.colors.textPrimary)} name={expanded ? 'chevron-up' : 'chevron-down'} size={18} />
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-
-      <View style={styles.bodyWeightReadoutRow}>
-        <View style={styles.bodyWeightReadout}>
-          <ReedText style={styles.bodyWeightValue} variant="display">
-            {latestWeight ? formatMetric(latestWeight.value) : '—'}
-          </ReedText>
-          <ReedText tone="muted" variant="label">kg now</ReedText>
-        </View>
-        <View style={styles.bodyWeightTrendCopy}>
-          <ReedText variant="bodyStrong">{trend.summary}</ReedText>
-          <ReedText tone="muted" variant="caption">{latestWeight ? `Last logged ${formatDate(latestWeight.observedAt)}` : 'One quick log starts the trend.'}</ReedText>
-        </View>
-      </View>
-
-      {expanded ? (
-        series === undefined ? (
-          <ProgressSkeleton />
-        ) : hasSeries ? (
-          <BodyWeightChart points={series} />
-        ) : (
-          <View style={[styles.bodyWeightEmptyChart, { borderColor: theme.colors.controlBorder }]}>
-            <ReedText variant="bodyStrong">No trend yet</ReedText>
-            <ReedText tone="muted" variant="caption">Log a few mornings. Reed will smooth the noise into a useful line.</ReedText>
-          </View>
-        )
-      ) : null}
-    </GlassSurface>
-  );
-}
-
-function BodyWeightChart({ points }: { points: BodyWeightPoint[] }) {
-  const { theme } = useReedTheme();
-  const width = 320;
-  const height = 136;
-  const paddingX = 10;
-  const paddingY = 22;
-  const values = points.map(point => point.value);
-  const minValue = Math.min(...values);
-  const maxValue = Math.max(...values);
-  const valueSpan = Math.max(1, maxValue - minValue);
-  const startAt = points[0]?.observedAt ?? Date.now();
-  const endAt = points[points.length - 1]?.observedAt ?? startAt;
-  const timeSpan = Math.max(1, endAt - startAt);
-  const coords = points.map(point => {
-    const x = paddingX + ((point.observedAt - startAt) / timeSpan) * (width - paddingX * 2);
-    const y = paddingY + (1 - ((point.value - minValue) / valueSpan)) * (height - paddingY * 2);
-    return { ...point, x, y };
-  });
-  const path = coords.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(' ');
-  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const averageY = paddingY + (1 - ((average - minValue) / valueSpan)) * (height - paddingY * 2);
-  const first = coords[0];
-  const latest = coords[coords.length - 1];
-  const peak = coords.reduce((best, point) => point.value > best.value ? point : best, coords[0]);
-  const valueLabels = dedupeChartLabels([
-    { label: `${formatMetric(peak.value)}kg`, x: peak.x, y: peak.y - 10 },
-    { label: `${formatMetric(first.value)}kg`, x: first.x, y: height - 6 },
-    { label: `${formatMetric(latest.value)}kg`, x: latest.x, y: height - 6, anchor: 'end' as const },
-  ]);
-  const averageLabel = { value: `${formatMetric(average)}kg`, label: 'avg', x: width - paddingX, y: Math.max(17, averageY - 7), anchor: 'end' as const };
-
-  return (
-    <View style={styles.bodyWeightChartWrap}>
-      <Svg height={height} preserveAspectRatio="none" width="100%" viewBox={`0 0 ${width} ${height}`}>
-        <Line
-          stroke={String(theme.colors.controlBorder)}
-          strokeDasharray="5 7"
-          strokeWidth={1}
-          x1={paddingX}
-          x2={width - paddingX}
-          y1={averageY}
-          y2={averageY}
-        />
-        <Path d={path} fill="none" stroke={String(theme.colors.accentPrimary)} strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} />
-        {coords.map((point, index) => (
-          <Circle
-            cx={point.x}
-            cy={point.y}
-            fill={String(index === coords.length - 1 ? theme.colors.accentPrimary : theme.colors.canvasSecondary)}
-            key={point._id}
-            r={index === coords.length - 1 ? 4.5 : 3}
-            stroke={String(theme.colors.accentPrimary)}
-            strokeWidth={1.5}
-          />
-        ))}
-        <SvgText
-          fill={String(theme.colors.textPrimary)}
-          fontFamily="Outfit_800ExtraBold"
-          fontSize={10}
-          textAnchor={averageLabel.anchor}
-          x={Math.min(width - paddingX, Math.max(paddingX, averageLabel.x))}
-          y={Math.min(height - 12, Math.max(10, averageLabel.y))}
-        >
-          {averageLabel.value}
-        </SvgText>
-        <SvgText
-          fill={String(theme.colors.textMuted)}
-          fontFamily="Outfit_600SemiBold"
-          fontSize={8}
-          textAnchor={averageLabel.anchor}
-          x={Math.min(width - paddingX, Math.max(paddingX, averageLabel.x))}
-          y={Math.min(height - 3, Math.max(18, averageLabel.y + 9))}
-        >
-          {averageLabel.label}
-        </SvgText>
-        {valueLabels.map(item => (
-          <SvgText
-            fill={String(theme.colors.textMuted)}
-            fontFamily="Outfit_600SemiBold"
-            fontSize={9}
-            key={`${item.label}-${item.x.toFixed(1)}-${item.y.toFixed(1)}`}
-            textAnchor={item.anchor ?? 'start'}
-            x={Math.min(width - paddingX, Math.max(paddingX, item.x))}
-            y={Math.min(height - 4, Math.max(10, item.y))}
-          >
-            {item.label}
-          </SvgText>
-        ))}
-      </Svg>
-      <View style={styles.bodyWeightChartLabels}>
-        <ReedText tone="muted" variant="caption">{formatDate(startAt)}</ReedText>
-        <ReedText tone="muted" variant="caption">{formatDate(endAt)}</ReedText>
-      </View>
-    </View>
-  );
-}
-
-function dedupeChartLabels(labels: Array<{ anchor?: 'start' | 'end'; label: string; x: number; y: number }>) {
-  const kept: Array<{ anchor?: 'start' | 'end'; label: string; x: number; y: number }> = [];
-  for (const label of labels) {
-    const overlaps = kept.some(existing => Math.abs(existing.x - label.x) < 34 && Math.abs(existing.y - label.y) < 12);
-    if (!overlaps) kept.push(label);
-  }
-  return kept;
-}
-
-function BodyWeightLogSheet({
-  latestWeight,
-  onClose,
-  onSave,
-  visible,
-}: {
-  latestWeight: { observedAt: number; value: number } | null;
-  onClose: () => void;
-  onSave: (valueKg: number) => Promise<void>;
-  visible: boolean;
-}) {
-  const { theme } = useReedTheme();
-  const { height } = useWindowDimensions();
-  const [isMounted, setIsMounted] = useState(visible);
-  const sheetProgress = useRef(new Animated.Value(0)).current;
-  const [weightInput, setWeightInput] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const parsedWeight = parseOptionalNumber(weightInput);
-  const canSave = parsedWeight !== null && parsedWeight >= 25 && parsedWeight <= 300 && !isSaving;
-  const translateY = sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [height, 0] });
-  const overlayOpacity = sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-
-  useEffect(() => {
-    if (visible) {
-      setIsMounted(true);
-      setWeightInput(latestWeight ? formatMetric(latestWeight.value) : '');
-      setErrorMessage(null);
-      sheetProgress.setValue(0);
-      createTiming(sheetProgress, 1, reedMotion.durations.mode + 80).start();
-      return;
-    }
-
-    if (!isMounted) return;
-    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(({ finished }) => {
-      if (finished) setIsMounted(false);
-    });
-  }, [isMounted, latestWeight, sheetProgress, visible]);
-
-  async function handleSave() {
-    if (!canSave || parsedWeight === null) return;
-    setIsSaving(true);
-    setErrorMessage(null);
-    try {
-      await onSave(parsedWeight);
-      onClose();
-    } catch (error) {
-      setErrorMessage(getErrorMessage(error));
-    } finally {
-      setIsSaving(false);
-    }
-  }
-
-  function requestClose() {
-    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(() => {
-      setIsMounted(false);
-      onClose();
-    });
-  }
-
-  if (!isMounted) return null;
-
-  return (
-    <Modal animationType="none" onRequestClose={requestClose} transparent visible={isMounted}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.sheetKeyboardView}>
-        <Animated.View style={[styles.sheetOverlay, { backgroundColor: theme.colors.overlayScrim, opacity: overlayOpacity }]}>
-          <Pressable accessibilityLabel="Close bodyweight logger" onPress={requestClose} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-        <Animated.View style={[styles.sheetDock, { transform: [{ translateY }] }]}>
-          <GlassSurface contentStyle={styles.weightSheetContent} style={styles.weightSheetSurface}>
-            <View style={[styles.weightSheetHandle, { backgroundColor: theme.colors.handleFill }]} />
-            <View style={styles.weightSheetHeader}>
-              <View style={styles.weightSheetTitleBlock}>
-                <ReedText variant="title">Log weight</ReedText>
-                <ReedText tone="muted" variant="caption">Today’s value replaces today’s manual log.</ReedText>
-              </View>
-              <Pressable accessibilityLabel="Close" onPress={requestClose} style={({ pressed }) => [styles.weightSheetClose, getTapScaleStyle(pressed)]}>
-                <Ionicons color={String(theme.colors.textMuted)} name="close" size={20} />
-              </Pressable>
+        {columns.map((week, weekIndex) => {
+          const isCurrentWeek = weekIndex === columns.length - 1;
+          return (
+            <View key={week?.weekStartAt ?? weekIndex} style={styles.consistencyColumn}>
+              {Array.from({ length: 7 }, (_, dayIndex) => {
+                const day = week?.days[dayIndex];
+                return (
+                  <View
+                    key={dayIndex}
+                    accessibilityLabel={day ? formatConsistencyDayLabel(day) : undefined}
+                    style={[
+                      styles.consistencyCell,
+                      {
+                        backgroundColor: getConsistencyCellFill({
+                          active: Boolean(day?.active),
+                          activeFill: String(isCurrentWeek ? theme.colors.accentInk : theme.colors.accent),
+                          isFuture: day?.isFuture ?? true,
+                          shellColor: String(theme.colors.surfaceHigh),
+                        }),
+                        opacity: day
+                          ? getConsistencyCellOpacity({
+                            active: day.active,
+                            activityCount: day.activityCount,
+                            isFuture: day.isFuture,
+                          })
+                          : 0.42,
+                      },
+                    ]}
+                  />
+                );
+              })}
             </View>
-            <View style={styles.weightInputRow}>
-              <ReedInput
-                autoFocus
-                keyboardType="decimal-pad"
-                label="Weight"
-                onChangeText={setWeightInput}
-                placeholder="83.4"
-                returnKeyType="done"
-                style={styles.weightInput}
-                value={weightInput}
-              />
-              <ReedText style={styles.weightUnitLabel} variant="section">kg</ReedText>
-            </View>
-            {latestWeight ? (
-              <ReedText tone="muted" variant="caption">Last: {formatMetric(latestWeight.value)} kg · {formatDate(latestWeight.observedAt)}</ReedText>
-            ) : null}
-            {errorMessage ? <ReedText tone="danger" variant="caption">{errorMessage}</ReedText> : null}
-            <ReedButton disabled={!canSave} label={isSaving ? 'Saving…' : 'Save'} onPress={handleSave} variant="primary" />
-          </GlassSurface>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+          );
+        })}
+      </View>
+      <View style={styles.consistencyAxis}>
+        <ReedText tone="muted" variant="micro">{CONSISTENCY_WEEK_COUNT} weeks ago</ReedText>
+        <ReedText tone="muted" variant="micro">This week</ReedText>
+      </View>
+    </View>
   );
 }
 
-export function TrainingProgressExpansion() {
+function TrainingProgressExpansion() {
   const [period, setPeriod] = useState<ProfilePeriod>('week');
   const [progressMetric, setProgressMetric] = useState<ProgressMetric>('sets');
-  const periodRange = useMemo(() => getProfilePeriodRange(period), [period]);
+  const periodRange = useProgressPeriod(period);
   const progressSummary = useQuery(api.trainingKnowledge.summarizeWindow, {
     windowEndAt: periodRange.current.endAt,
     windowStartAt: periodRange.current.startAt,
@@ -1162,15 +223,16 @@ export function TrainingProgressExpansion() {
   });
 
   return (
-    <TrainingProgressPanel
-      metric={progressMetric}
-      onChangeMetric={setProgressMetric}
-      onChangePeriod={setPeriod}
-      period={period}
-      previousSummary={previousProgressSummary}
-      range={periodRange.current}
-      summary={progressSummary}
-    />
+    <ProgressSection meta={formatPeriodRangeLabel(period, periodRange.current)} title="Training">
+      <TrainingProgressPanel
+        metric={progressMetric}
+        onChangeMetric={setProgressMetric}
+        onChangePeriod={setPeriod}
+        period={period}
+        previousSummary={previousProgressSummary}
+        summary={progressSummary}
+      />
+    </ProgressSection>
   );
 }
 
@@ -1180,7 +242,6 @@ function TrainingProgressPanel({
   onChangePeriod,
   period,
   previousSummary,
-  range,
   summary,
 }: {
   metric: ProgressMetric;
@@ -1188,7 +249,6 @@ function TrainingProgressPanel({
   onChangePeriod: (period: ProfilePeriod) => void;
   period: ProfilePeriod;
   previousSummary: TrainingWindowSummary | undefined;
-  range: { endAt: number; startAt: number };
   summary: TrainingWindowSummary | undefined;
 }) {
   const { theme } = useReedTheme();
@@ -1205,20 +265,15 @@ function TrainingProgressPanel({
     () => getNormalizedShareByGroup(groups, metric),
     [groups, metric],
   );
-  const chartSegments = groups.map(group => ({
-    color: getCoarseMuscleGroupColor(group.groupId),
+  const splitColors = [String(theme.colors.accent), String(theme.colors.dataWarm)];
+  const chartSegments = groups.map((group, index) => ({
+    color: splitColors[index] ?? String(theme.colors.inkMuted),
     id: group.groupId,
     percent: shareByGroup.get(group.groupId) ?? 0,
   }));
   return (
     <>
-      <View style={styles.progressHeader}>
-        <View style={styles.progressHeaderCopy}>
-          <ReedText variant="section">Training</ReedText>
-          <ReedText tone="muted" variant="caption">{formatPeriodRangeLabel(period, range)}</ReedText>
-        </View>
-        <PeriodControl onChange={onChangePeriod} value={period} />
-      </View>
+      <PeriodControl onChange={onChangePeriod} value={period} />
 
       {summary === undefined ? (
         <ProgressSkeleton />
@@ -1245,7 +300,7 @@ function TrainingProgressPanel({
             ]}
             style={styles.periodControl}
             value={metric}
-            variant="pill"
+            variant="card"
           />
 
           <View style={[styles.trainingVisualRow, isCompact && styles.trainingVisualRowCompact]}>
@@ -1253,35 +308,35 @@ function TrainingProgressPanel({
               centerPrimary={formatMetricSummaryValue(metric, totalMetric)}
               centerPrimaryStyle={styles.progressDonutValue}
               centerSecondary={metric === 'load' ? 'load' : metric}
-              centerSecondaryStyle={styles.progressDonutSubtitle}
               containerStyle={styles.progressDonutContainer}
+              emptyColor={String(theme.colors.surfaceHigh)}
               segments={chartSegments}
-              size={132}
-              strokeWidth={16}
+              size={104}
+              strokeWidth={12}
               wrapStyle={styles.progressDonutWrap}
             />
 
             <View style={styles.muscleLegend}>
-              {groups.slice(0, 5).map(group => (
+              {groups.slice(0, 5).map((group, index) => (
                 <View key={group.groupId} style={styles.muscleLegendRow}>
-                  <View style={[styles.legendDot, { backgroundColor: getCoarseMuscleGroupColor(group.groupId) }]} />
-                  <ReedText style={styles.legendLabel} variant="caption">{group.label}</ReedText>
+                  <View style={[styles.legendDot, { backgroundColor: splitColors[index] ?? theme.colors.inkMuted }]} />
+                  <ReedText style={styles.legendLabel} variant="body">{group.label}</ReedText>
                   <ReedText tone="muted" variant="caption">{formatMetricLegendValue(metric, getProgressMetricValue(group, metric))}</ReedText>
                 </View>
               ))}
             </View>
           </View>
 
-          <View style={[styles.periodNote, { borderTopColor: theme.colors.controlBorder }]}>
+          <View style={[styles.periodNote, { borderTopColor: theme.colors.line }]}>
             <ReedText tone="muted" variant="caption">{formatPeriodComparison(work, previousWork, metric)}</ReedText>
           </View>
 
           {summary.byExercise.length > 0 ? (
-            <View style={styles.topExerciseStack}>
-              <ReedText tone="muted" variant="label">Top exercises</ReedText>
+            <View style={[styles.topExerciseStack, { borderTopColor: theme.colors.line }]}>
+              <ReedText tone="muted" variant="caption">Top exercises</ReedText>
               {summary.byExercise.slice(0, 3).map(exercise => (
                 <View key={exercise.exerciseCatalogId} style={styles.topExerciseRow}>
-                  <ReedText variant="caption" style={styles.topExerciseName} numberOfLines={1}>{exercise.exerciseName}</ReedText>
+                  <ReedText variant="body" style={styles.topExerciseName} numberOfLines={1}>{exercise.exerciseName}</ReedText>
                   <ReedText tone="muted" variant="caption">{exercise.setCount} sets</ReedText>
                 </View>
               ))}
@@ -1297,7 +352,12 @@ function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) 
   return (
     <SegmentedControl<ProfilePeriod>
       compact
-      onChange={onChange}
+      onChange={period => {
+        if (period !== value) {
+          haptics.selection();
+        }
+        onChange(period);
+      }}
       options={[
         { label: 'Week', value: 'week' },
         { label: '30D', value: '30d' },
@@ -1305,24 +365,8 @@ function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) 
       ]}
       style={styles.periodControl}
       value={value}
-      variant="pill"
+      variant="card"
     />
-  );
-}
-
-function ProgressSkeleton() {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
-  return (
-    <View style={styles.progressSkeleton}>
-      <View style={[styles.skeletonLine, { backgroundColor: glassControls.shellBackgroundColor }]} />
-      <View style={styles.progressMetricRow}>
-        {[0, 1, 2].map(index => (
-          <View key={index} style={[styles.skeletonMetric, { backgroundColor: glassControls.shellBackgroundColor }]} />
-        ))}
-      </View>
-    </View>
   );
 }
 
@@ -1333,7 +377,7 @@ function ProgressMetricTile({ label, value }: { label: string; value: string }) 
         adjustsFontSizeToFit
         minimumFontScale={0.76}
         numberOfLines={1}
-        variant="bodyStrong"
+        variant="title"
         style={styles.progressMetricText}
       >
         {value}
@@ -1343,7 +387,7 @@ function ProgressMetricTile({ label, value }: { label: string; value: string }) 
         minimumFontScale={0.82}
         numberOfLines={1}
         tone="muted"
-        variant="label"
+        variant="caption"
         style={styles.progressMetricText}
       >
         {label}
@@ -1352,410 +396,21 @@ function ProgressMetricTile({ label, value }: { label: string; value: string }) 
   );
 }
 
-function ProfileDetailSurface({
-  detail,
-  embedded = false,
-  onBack,
-  onEdit,
-  profileData,
-}: {
-  detail: ProfileDetailKind;
-  embedded?: boolean;
-  onBack: () => void;
-  onEdit: (step: OnboardingBaseStep) => void;
-  profileData: StoredTrainingProfile | null | undefined;
-}) {
-  const { theme } = useReedTheme();
-
-  if (!profileData) {
-    return (
-      <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        {embedded ? null : <DetailHeader onBack={onBack} title="Profile" />}
-        <ReedText tone="muted">Finish your profile to see this.</ReedText>
-      </GlassSurface>
-    );
-  }
-
-  if (detail === 'body') {
-    const bodyMetrics = new Map(profileData.latestBodyMetrics.map(metric => [metric.metricKey, metric]));
-    const baseline = profileData.trainingProfile.baseline;
-    const missing = ['body_fat_percent', 'skeletal_muscle_mass', 'resting_heart_rate']
-      .filter(key => !bodyMetrics.has(key))
-      .map(key => bodyMetricLabels[key]);
-
-    return (
-      <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        {embedded ? null : <DetailHeader onBack={onBack} title="Body" />}
-        <View style={styles.detailLead}>
-          <ReedText variant="section">{formatBodyStatusLead(bodyMetrics)}</ReedText>
-          <ReedText tone="muted" variant="caption">
-            Weight changes bodyweight exercises and load estimates.
-          </ReedText>
-        </View>
-        <View style={styles.factGrid}>
-          <FactTile label="Height" value={`${formatMetric(baseline.heightCm)} cm`} />
-          <FactTile label="Recovery" value={recoveryLabels[baseline.recoveryQuality] ?? baseline.recoveryQuality} />
-          <FactTile label="Body fat" value={formatBodyMetric(bodyMetrics.get('body_fat_percent'))} />
-          <FactTile label="Muscle" value={formatBodyMetric(bodyMetrics.get('skeletal_muscle_mass'))} />
-          <FactTile label="Resting HR" value={formatBodyMetric(bodyMetrics.get('resting_heart_rate'))} />
-          <FactTile label="Age basis" value={formatBirthYear(baseline.birthYear)} />
-        </View>
-        <PlainHint
-          icon="pulse-outline"
-          title={missing.length > 0 ? 'Useful to add' : 'Body data added'}
-          body={missing.length > 0 ? missing.join(' · ') : 'Weight, composition, and recovery are recorded.'}
-        />
-        <ReedButton label="Log body data" onPress={() => onEdit('baseline')} variant="secondary" />
-      </GlassSurface>
-    );
-  }
-
-  if (detail === 'goal') {
-    const goals = profileData.trainingProfile.rankedGoals;
-    const primary = goals[0];
-    const primaryDetail = primary ? profileData.trainingProfile.goalDetails[primary] : null;
-
-    return (
-      <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-        {embedded ? null : <DetailHeader onBack={onBack} title="Goals" />}
-        <View style={styles.detailLead}>
-          <ReedText variant="section">{formatRankedGoalLine(goals)}</ReedText>
-          <ReedText tone="muted" variant="caption">
-            The first goal wins when training has to be simplified.
-          </ReedText>
-        </View>
-        <View style={styles.rankStack}>
-          {goals.length === 0 ? (
-            <ReedText tone="muted">Set one to three goals so Reed has a direction.</ReedText>
-          ) : goals.map((goal, index) => (
-            <View key={goal} style={[styles.rankRow, { borderTopColor: index === 0 ? 'transparent' : theme.colors.controlBorder }]}>
-              <ReedText tone="muted" variant="label">{String(index + 1).padStart(2, '0')}</ReedText>
-              <View style={styles.rankCopy}>
-                <ReedText variant="bodyStrong">{goalLabels[goal] ?? goal}</ReedText>
-                <ReedText tone="muted" variant="caption">{formatGoalDetail(profileData.trainingProfile.goalDetails[goal])}</ReedText>
-              </View>
-            </View>
-          ))}
-        </View>
-        <PlainHint
-          icon="flag-outline"
-          title={primaryDetail?.focusAreas?.length ? 'Direction' : 'Add direction'}
-          body={primaryDetail?.focusAreas?.length ? primaryDetail.focusAreas.map(formatGoalToken).join(' · ') : 'Pick long-term lifts, skills, or conditioning work.'}
-        />
-        <ReedButton
-          label="Open goals"
-          onPress={() => router.push('/(app)/goals')}
-          variant="secondary"
-        />
-        {profileData.trainingProfile.userNotes ? (
-          <View style={[styles.notesBlock, { borderColor: theme.colors.controlBorder }]}>
-            <ReedText tone="muted" variant="label">Notes</ReedText>
-            <ReedText variant="caption">{profileData.trainingProfile.userNotes}</ReedText>
-          </View>
-        ) : null}
-        <ReedButton label="Change goals" onPress={() => onEdit('priorities')} variant="secondary" />
-      </GlassSurface>
-    );
-  }
-
-  const reality = profileData.trainingProfile.trainingReality;
-  const constraints = profileData.trainingProfile.constraints;
-
-  return (
-    <GlassSurface contentStyle={styles.detailContent} style={styles.detailSurface}>
-      {embedded ? null : <DetailHeader onBack={onBack} title="Training setup" />}
-      <View style={styles.detailLead}>
-        <ReedText variant="section">{formatTrainingReality(profileData.trainingProfile)}</ReedText>
-        <ReedText tone="muted" variant="caption">
-          Schedule, equipment, and limits shape what workouts should look like.
-        </ReedText>
-      </View>
-      <View style={styles.factGrid}>
-        <FactTile label="Experience" value={trainingAgeLabels[reality.trainingAge] ?? reality.trainingAge} />
-        <FactTile label="Session length" value={durationLabels[reality.sessionDuration] ?? reality.sessionDuration} />
-        <FactTile label="Effort" value={effortLabels[reality.effort] ?? reality.effort} />
-        <FactTile label="Styles" value={formatList(reality.trainingStyles.map(formatTrainingStyle), 2)} />
-      </View>
-      <View style={styles.detailList}>
-        <DetailLine label="Equipment" value={formatList(reality.equipmentAccess.map(formatEquipment), 4)} />
-        <DetailLine label="Constraints" value={formatConstraintDetails(constraints)} />
-        <DetailLine label="Strength anchors" value={formatStrengthAnchors(profileData.latestStrengthBenchmarks)} />
-        <DetailLine label="Cardio anchors" value={formatCardioAnchors(profileData.latestCardioBenchmarks)} />
-      </View>
-      <PlainHint
-        icon="finger-print-outline"
-        title="Keep this current"
-        body="Update this when your schedule, equipment, or constraints change."
-      />
-      <View style={styles.actionRow}>
-        <View style={styles.actionButton}>
-          <ReedButton label="Change setup" onPress={() => onEdit('training-reality')} variant="secondary" />
-        </View>
-        <View style={styles.actionButton}>
-          <ReedButton label="Change tests" onPress={() => onEdit('performance-anchors')} variant="ghost" />
-        </View>
-      </View>
-    </GlassSurface>
-  );
+export function formatCurrentWeekRange() {
+  const week = getCurrentWeekBounds(Date.now(), Intl.DateTimeFormat().resolvedOptions().timeZone);
+  return formatWeekRange(week.startAt, week.endAt);
 }
 
-function DetailHeader({ onBack, title }: { onBack: () => void; title: string }) {
-  return (
-    <ScreenHeader
-      backAccessibilityLabel="Back to profile"
-      onBack={onBack}
-      title={title}
-      variant="detail"
-    />
-  );
+function formatConsistencyDayLabel(day: ProfileConsistencyResult['weekGrid'][number]['days'][number]) {
+  const count = day.activityCountIsCapped
+    ? 'at least 128 activities'
+    : `${day.activityCount} logged ${day.activityCount === 1 ? 'activity' : 'activities'}`;
+  return `${day.date}: ${count}`;
 }
 
-function FactTile({ label, value }: { label: string; value: string }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
-  return (
-    <View
-      style={[
-        styles.factTile,
-        {
-          backgroundColor: glassControls.shellBackgroundColor,
-          borderColor: theme.colors.controlBorder,
-        },
-      ]}
-    >
-      <ReedText tone="muted" variant="label">{label}</ReedText>
-      <ReedText variant="bodyStrong" numberOfLines={1}>{value}</ReedText>
-    </View>
-  );
-}
-
-function DetailLine({ label, value }: { label: string; value: string }) {
-  const { theme } = useReedTheme();
-
-  return (
-    <View style={[styles.detailLine, { borderTopColor: theme.colors.controlBorder }]}>
-      <ReedText tone="muted" variant="label">{label}</ReedText>
-      <ReedText variant="caption" style={styles.detailLineValue}>{value}</ReedText>
-    </View>
-  );
-}
-
-function PlainHint({ body, icon, title }: { body: string; icon: keyof typeof Ionicons.glyphMap; title: string }) {
-  const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
-
-  return (
-    <View
-      style={[
-        styles.insightStrip,
-        {
-          backgroundColor: glassControls.shellBackgroundColor,
-          borderColor: glassControls.shellBorderColor,
-        },
-      ]}
-    >
-      <Ionicons color={String(theme.colors.textMuted)} name={icon} size={18} />
-      <View style={styles.insightCopy}>
-        <ReedText variant="caption">{title}</ReedText>
-        <ReedText tone="muted" variant="caption">{body}</ReedText>
-      </View>
-    </View>
-  );
-}
-
-function LivingFact({
-  icon,
-  isOpen,
-  label,
-  onPress,
-  primary,
-  secondary,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  isOpen?: boolean;
-  label: string;
-  onPress: () => void;
-  primary: string;
-  secondary: string;
-}) {
-  const { theme } = useReedTheme();
-
-  return (
-    <Pressable
-      accessibilityLabel={`Open ${label.toLowerCase()} details`}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.livingFact,
-        { borderBottomColor: theme.colors.controlBorder },
-        getTapScaleStyle(pressed),
-      ]}
-    >
-      <View style={styles.rowIconWrap}>
-        <Ionicons color={String(theme.colors.textMuted)} name={icon} size={18} />
-      </View>
-      <View style={styles.rowCopy}>
-        <ReedText tone="muted" variant="label">{label}</ReedText>
-        <ReedText variant="bodyStrong">{primary}</ReedText>
-        <ReedText tone="muted" variant="caption">{secondary}</ReedText>
-      </View>
-      <View style={styles.updateHint}>
-        <Ionicons
-          color={String(theme.colors.textMuted)}
-          name="chevron-forward"
-          size={14}
-          style={isOpen ? styles.updateHintOpen : null}
-        />
-      </View>
-    </Pressable>
-  );
-}
-
-function getCurrentWeekBounds() {
-  const now = new Date();
-  const weekStart = new Date(now);
-  const day = weekStart.getDay();
-  const daysSinceMonday = (day + 6) % 7;
-  weekStart.setDate(weekStart.getDate() - daysSinceMonday);
-  weekStart.setHours(0, 0, 0, 0);
-
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 7);
-
-  return {
-    endAt: weekEnd.getTime(),
-    startAt: weekStart.getTime(),
-  };
-}
-
-function getLocalDayBounds(timestamp: number) {
-  const start = new Date(timestamp);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 1);
-  return { endAt: end.getTime(), startAt: start.getTime() };
-}
-
-function summarizeBodyWeightTrend(points: BodyWeightPoint[]) {
-  const sorted = [...points].sort((left, right) => left.observedAt - right.observedAt);
-  if (sorted.length < 2) {
-    return { deltaKg: null, summary: 'Needs a few logs' };
-  }
-
-  const first = sorted[0];
-  const last = sorted[sorted.length - 1];
-  const medianGapDays = getMedianBodyLogGapDays(sorted);
-  const latestAgeDays = Math.floor((Date.now() - last.observedAt) / (24 * 60 * 60 * 1000));
-
-  if (latestAgeDays >= 21) {
-    return { deltaKg: null, summary: `Last logged ${formatDate(last.observedAt)}` };
-  }
-
-  if (sorted.length >= 6 && medianGapDays <= 3) {
-    return summarizeBodyAverageShift(sorted, 3);
-  }
-
-  if (sorted.length >= 4 && medianGapDays <= 8) {
-    return summarizeBodyAverageShift(sorted, 2);
-  }
-
-  const deltaKg = roundDisplay(last.value - first.value);
-  if (sorted.length === 2) {
-    return { deltaKg, summary: `${formatBodyDelta(deltaKg)} since ${formatDate(first.observedAt)}` };
-  }
-
-  return { deltaKg, summary: `${formatBodyDelta(deltaKg)} since ${formatDate(first.observedAt)}` };
-}
-
-function summarizeBodyAverageShift(points: BodyWeightPoint[], windowSize: number) {
-  const recent = points.slice(-windowSize);
-  const prior = points.slice(-windowSize * 2, -windowSize);
-  const deltaKg = roundDisplay(averageBodyWeight(recent) - averageBodyWeight(prior));
-  if (Math.abs(deltaKg) < 0.2) {
-    return { deltaKg, summary: 'Holding steady' };
-  }
-  return { deltaKg, summary: `${formatBodyDelta(deltaKg)} recently` };
-}
-
-function getMedianBodyLogGapDays(points: BodyWeightPoint[]) {
-  const gaps = points
-    .slice(1)
-    .map((point, index) => (point.observedAt - points[index].observedAt) / (24 * 60 * 60 * 1000))
-    .sort((left, right) => left - right);
-  return gaps[Math.floor(gaps.length / 2)] ?? Number.POSITIVE_INFINITY;
-}
-
-function averageBodyWeight(points: BodyWeightPoint[]) {
-  return points.reduce((sum, point) => sum + point.value, 0) / Math.max(1, points.length);
-}
-
-function formatBodyDelta(deltaKg: number) {
-  if (Math.abs(deltaKg) < 0.2) return 'stable';
-  return `${deltaKg > 0 ? '+' : ''}${formatMetric(deltaKg)} kg`;
-}
-
-function formatBodyTrendWindow(startAt: number, endAt: number) {
-  const daySpan = Math.max(0, Math.round((endAt - startAt) / (24 * 60 * 60 * 1000)));
-  if (daySpan === 0) {
-    return 'today';
-  }
-  if (daySpan === 1) {
-    return 'since yesterday';
-  }
-  if (daySpan < 14) {
-    return `over ${daySpan} days`;
-  }
-  const weekSpan = Math.round(daySpan / 7);
-  if (weekSpan < 8) {
-    return `over ${weekSpan} weeks`;
-  }
-  return `over ${daySpan} days`;
-}
-
-function roundDisplay(value: number) {
-  return Math.round(value * 10) / 10;
-}
-
-function parseOptionalNumber(value: string) {
-  const trimmed = value.trim().replace(',', '.');
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-  return 'Could not save. Try again.';
-}
-
-function getProfilePeriodRange(period: ProfilePeriod) {
-  const now = Date.now();
-  if (period === 'week') {
-    const current = getCurrentWeekBounds();
-    const duration = current.endAt - current.startAt;
-    return {
-      current,
-      previous: {
-        endAt: current.startAt,
-        startAt: current.startAt - duration,
-      },
-    };
-  }
-
-  const days = period === '30d' ? 30 : 90;
-  const duration = days * 24 * 60 * 60 * 1000;
-  return {
-    current: {
-      endAt: now,
-      startAt: now - duration,
-    },
-    previous: {
-      endAt: now - duration,
-      startAt: now - duration * 2,
-    },
-  };
+function formatOnTargetRun(run: number) {
+  if (run === 0) return 'Not on a run of on-target weeks yet';
+  return `${run} ${run === 1 ? 'week' : 'weeks'} on target in a row`;
 }
 
 function formatWeekRange(weekStartAt: number, weekEndAt: number) {
@@ -1765,7 +420,7 @@ function formatWeekRange(weekStartAt: number, weekEndAt: number) {
   });
   const weekStart = new Date(weekStartAt);
   const weekEndDisplay = new Date(weekEndAt - 1);
-  return `${formatter.format(weekStart)} - ${formatter.format(weekEndDisplay)}`;
+  return `${formatter.format(weekStart)} – ${formatter.format(weekEndDisplay)}`;
 }
 
 function formatPeriodRangeLabel(period: ProfilePeriod, range: { endAt: number; startAt: number }) {
@@ -1774,47 +429,6 @@ function formatPeriodRangeLabel(period: ProfilePeriod, range: { endAt: number; s
   }
 
   return period === '30d' ? 'Last 30 days' : 'Last 90 days';
-}
-
-function formatRankedGoalLine(goals: string[]) {
-  if (goals.length === 0) {
-    return 'Set goals';
-  }
-
-  return goals.slice(0, 3).map((goal, index) => `${index + 1}. ${goalLabels[goal] ?? goal}`).join(' · ');
-}
-
-function formatGoalStack(goals: string[]) {
-  if (goals.length === 0) {
-    return 'Set goals';
-  }
-
-  const [primary, ...secondary] = goals;
-  const primaryLabel = primary ? goalLabels[primary] ?? primary : 'Training';
-  if (secondary.length === 0) {
-    return `${primaryLabel} first`;
-  }
-
-  return `${primaryLabel} first · ${secondary.slice(0, 2).map(goal => goalLabels[goal] ?? goal).join(' · ')}`;
-}
-
-function formatGoalFocusLine(trainingProfile: { goalDetails: Record<string, { customDetail?: string | null; detail?: string | null; focusAreas?: string[] }>; rankedGoals: string[] } | null) {
-  if (!trainingProfile || trainingProfile.rankedGoals.length === 0) {
-    return 'Pick what matters most.';
-  }
-
-  const details = trainingProfile.rankedGoals
-    .flatMap(goal => {
-      const detail = trainingProfile.goalDetails[goal];
-      if (!detail) return [];
-      const raw = [
-        detail.detail === 'other' ? detail.customDetail : detail.detail,
-        ...(detail.focusAreas ?? []),
-      ].filter(Boolean);
-      return raw.map(value => formatGoalToken(String(value)));
-    });
-  const unique = Array.from(new Set(details));
-  return unique.length ? unique.slice(0, 4).join(' · ') : 'Add target lifts, skills, or conditioning work.';
 }
 
 function formatCoachNote(
@@ -1835,14 +449,15 @@ function formatCoachNote(
     return base;
   }
 
-  const primaryGoal = trainingProfile.rankedGoals[0];
-  const primaryGoalLabel = primaryGoal ? goalLabels[primaryGoal] ?? primaryGoal : 'Training';
-  const weekly = weeklySessionLabels[trainingProfile.trainingReality.weeklySessions] ?? 'your current rhythm';
+  const answers = trainingProfile.onboarding;
+  const primaryGoalLabel = answers?.values[0] ? VALUE_LABELS[answers.values[0]] : answers ? rankedPractices(answers)[0]?.label ?? 'Training' : 'Training';
+  const target = answers ? startingWeeklyTarget(answers) : null;
+  const weekly = target === null ? 'no days scheduled yet' : weeklyActiveDaysProse(target);
 
   if (summary === undefined) {
     const base = {
       lead: `${primaryGoalLabel} is the priority.`,
-      body: `I am checking this week's training against your ${weekly.toLowerCase()} setup before calling the next move.`,
+      body: `I am checking this week's training against your goal of ${weekly} before calling the next move.`,
     };
     if (consistency) {
       return withConsistencyNote(base, consistency);
@@ -1871,7 +486,7 @@ function formatCoachNote(
   if (bodyWeight) {
     const base = {
       lead: `${formatBodyMetric(bodyWeight)} bodyweight is logged.`,
-      body: `Now anchor it with training data. One clean session is enough for Reed to start comparing work against your ${weekly.toLowerCase()} target.`,
+      body: `Now anchor it with training data. One clean session is enough for Reed to start comparing work against your goal of ${weekly}.`,
     };
     if (consistency) {
       return withConsistencyNote(base, consistency);
@@ -2020,660 +635,3 @@ function formatWholeNumber(value: number) {
 function formatVolume(value: number) {
   return `${Math.round(value).toLocaleString('en')} kg`;
 }
-
-function formatMetric(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
-
-function formatBodyMetric(metric: { unit?: string; value: number } | undefined) {
-  if (!metric) {
-    return 'Not set';
-  }
-
-  const unit = metric.unit === 'percent' ? '%' : metric.unit ?? '';
-  return `${formatMetric(metric.value)}${unit === '%' ? unit : unit ? ` ${unit}` : ''}`;
-}
-
-function formatBodyStatusLead(metrics: Map<string, { unit?: string; value: number }>) {
-  const weight = metrics.get('body_weight');
-  if (!weight) {
-    return 'No bodyweight yet';
-  }
-
-  return `${formatBodyMetric(weight)} bodyweight`;
-}
-
-function formatDate(timestamp: number) {
-  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short' }).format(new Date(timestamp));
-}
-
-function formatBirthYear(year: number) {
-  return `Born ${year}`;
-}
-
-function formatGoalDetail(detail: { customDetail?: string | null; detail?: string | null; focusAreas?: string[] } | null | undefined) {
-  if (!detail) {
-    return 'No specific detail yet.';
-  }
-
-  const parts = [
-    detail.detail === 'other' ? detail.customDetail : detail.detail ? formatGoalToken(detail.detail) : null,
-    ...(detail.focusAreas ?? []).slice(0, 3).map(formatGoalToken),
-  ].filter(Boolean);
-
-  const uniqueParts = Array.from(new Set(parts));
-  return uniqueParts.length ? uniqueParts.join(' · ') : 'No specific detail yet.';
-}
-
-function formatGoalToken(value: string) {
-  return goalDetailLabels[value] ?? value.replaceAll('_', ' ');
-}
-
-function formatTrainingStyle(value: string) {
-  return trainingStyleLabels[value] ?? value.replaceAll('_', ' ');
-}
-
-function formatEquipment(value: string) {
-  return equipmentLabels[value] ?? value.replaceAll('_', ' ');
-}
-
-function formatList(values: string[], limit: number) {
-  if (values.length === 0) {
-    return 'Not set';
-  }
-
-  const visible = values.slice(0, limit);
-  const suffix = values.length > limit ? ` +${values.length - limit}` : '';
-  return `${visible.join(' · ')}${suffix}`;
-}
-
-function formatConstraintDetails(constraints: {
-  areas: string[];
-  details: Record<string, { customDetail?: string | null; severity?: string | null; timing?: string | null }>;
-}) {
-  if (constraints.areas.length === 0) {
-    return 'No constraints recorded';
-  }
-
-  return constraints.areas.slice(0, 3).map(area => {
-    const detail = constraints.details[area];
-    const severity = detail?.severity ? `/${detail.severity}` : '';
-    return `${constraintLabels[area] ?? area}${severity}`;
-  }).join(' · ');
-}
-
-function formatStrengthAnchors(anchors: Array<{ anchorKey: string; loadKg?: number | null; reps: number }>) {
-  if (anchors.length === 0) {
-    return 'No anchors recorded';
-  }
-
-  return anchors.slice(0, 3).map(anchor => {
-    const label = anchorLabels[anchor.anchorKey] ?? anchor.anchorKey;
-    return anchor.loadKg == null ? `${label} ${anchor.reps}` : `${label} ${formatMetric(anchor.loadKg)} kg x ${anchor.reps}`;
-  }).join(' · ');
-}
-
-function formatCardioAnchors(anchors: Array<{ anchorKey: string; distanceMeters?: number | null; durationSeconds?: number | null; floors?: number | null }>) {
-  if (anchors.length === 0) {
-    return 'No anchors recorded';
-  }
-
-  return anchors.slice(0, 3).map(anchor => {
-    const label = anchorLabels[anchor.anchorKey] ?? anchor.anchorKey;
-    if (anchor.floors != null) {
-      return `${label} ${anchor.floors} floors`;
-    }
-    if (anchor.durationSeconds != null) {
-      return `${label} ${formatDuration(anchor.durationSeconds)}`;
-    }
-    return label;
-  }).join(' · ');
-}
-
-function formatDuration(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  return `${minutes}:${String(remainder).padStart(2, '0')}`;
-}
-
-function formatTrainingReality(trainingProfile: { trainingReality: { equipmentAccess: string[]; weeklySessions: string } } | null) {
-  if (!trainingProfile) {
-    return 'Not set yet';
-  }
-
-  const weekly = weeklySessionLabels[trainingProfile.trainingReality.weeklySessions] ?? 'Training rhythm set';
-  const equipment = trainingProfile.trainingReality.equipmentAccess
-    .slice(0, 2)
-    .map(item => equipmentLabels[item] ?? item)
-    .join(' + ');
-  return equipment ? `${weekly} · ${equipment}` : weekly;
-}
-
-function formatConstraints(areas: string[]) {
-  if (areas.length === 0) {
-    return 'No constraints recorded.';
-  }
-
-  return areas.slice(0, 3).map(area => constraintLabels[area] ?? area).join(' · ');
-}
-
-function getCoarseMuscleGroupColor(groupId: string) {
-  if (groupId === 'arms') {
-    return workoutSemanticPalette.muscleGroups.arms;
-  }
-
-  if (groupId === 'back') {
-    return workoutSemanticPalette.muscleGroups.back;
-  }
-
-  if (groupId === 'cardio') {
-    return workoutSemanticPalette.muscleGroups.cardio;
-  }
-
-  if (groupId === 'chest') {
-    return workoutSemanticPalette.muscleGroups.chest;
-  }
-
-  if (groupId === 'core') {
-    return workoutSemanticPalette.muscleGroups.core;
-  }
-
-  if (groupId === 'legs') {
-    return workoutSemanticPalette.muscleGroups.legs;
-  }
-
-  if (groupId === 'shoulders') {
-    return workoutSemanticPalette.muscleGroups.shoulders;
-  }
-
-  return workoutSemanticPalette.muscleGroups.other;
-}
-
-const styles = StyleSheet.create({
-  content: {
-    gap: 28,
-  },
-  fullscreenPanel: {
-    flex: 1,
-  },
-  actionButton: {
-    flex: 1,
-  },
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  bodyWeightChartLabels: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 2,
-  },
-  bodyWeightChartWrap: {
-    gap: 4,
-  },
-  bodyWeightContent: {
-    gap: 16,
-    padding: 20,
-  },
-  bodyWeightEmptyChart: {
-    borderRadius: reedRadii.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    gap: 4,
-    minHeight: 120,
-    justifyContent: 'center',
-    padding: 14,
-  },
-  bodyWeightHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  bodyWeightHeaderCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  bodyWeightActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  bodyWeightReadout: {
-    minWidth: 112,
-  },
-  bodyWeightReadoutRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: 18,
-  },
-  bodyWeightSurface: {
-  },
-  bodyWeightTrendCopy: {
-    flex: 1,
-    gap: 3,
-    paddingBottom: 7,
-  },
-  bodyWeightValue: {
-    letterSpacing: -1.4,
-  },
-  coachNoteBody: {
-    flexShrink: 1,
-  },
-  coachNoteContent: {
-    gap: 12,
-    padding: 18,
-  },
-  coachNoteFrame: {
-    position: 'relative',
-  },
-  coachNotePulseRim: {
-    ...StyleSheet.absoluteFill,
-    borderRadius: reedRadii.xl,
-    borderWidth: 1,
-  },
-  coachNoteSignoff: {
-    alignSelf: 'flex-end',
-  },
-  coachNoteSurface: {
-    marginBottom: 0,
-  },
-  coachNoteTitleRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    minWidth: 0,
-  },
-  coachNoteUnreadDot: {
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  coachNoteUnreadSurface: {
-    borderWidth: 1,
-    shadowOffset: { height: 0, width: 0 },
-    shadowOpacity: 0.22,
-    shadowRadius: 13,
-  },
-  consistencyCell: {
-    aspectRatio: 1,
-    borderRadius: 5,
-    borderWidth: StyleSheet.hairlineWidth,
-    flex: 1,
-  },
-  consistencyContent: {
-    gap: 16,
-    padding: 20,
-  },
-  consistencyDayLabel: {
-    height: 16,
-    width: 16,
-    lineHeight: 16,
-    textAlign: 'right',
-  },
-  consistencyGrid: {
-    flex: 1,
-    gap: 5,
-  },
-  consistencyGridHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    minHeight: 28,
-  },
-  consistencyGridWrap: {
-    flexDirection: 'row',
-    width: '100%',
-  },
-  consistencyHelper: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-  },
-  consistencySkeleton: {
-    gap: 14,
-  },
-  consistencySurface: {
-  },
-  dashboardCardHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  dashboardChevron: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  consistencyGridRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 5,
-  },
-  detailContent: {
-    gap: 16,
-  },
-  detailLead: {
-    gap: 6,
-  },
-  detailLine: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    gap: 6,
-    paddingVertical: 12,
-  },
-  detailLineValue: {
-    flexShrink: 1,
-  },
-  detailList: {
-    gap: 0,
-  },
-  detailSurface: {
-    marginTop: 12,
-  },
-  factGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  factTile: {
-    borderRadius: reedRadii.lg,
-    borderWidth: 1,
-    flexBasis: '47%',
-    flexGrow: 1,
-    gap: 4,
-    minHeight: 72,
-    padding: 12,
-  },
-  loadingRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    minHeight: 80,
-  },
-  loadingRowInline: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 10,
-    minHeight: 42,
-  },
-  identityStatement: {
-    gap: 8,
-    marginBottom: 8,
-    paddingTop: 6,
-  },
-  infoButton: {
-    alignItems: 'center',
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
-  },
-  emptyProgress: {
-    gap: 5,
-    minHeight: 96,
-    justifyContent: 'center',
-  },
-  insightCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  insightStrip: {
-    alignItems: 'flex-start',
-    borderRadius: reedRadii.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 10,
-    padding: 12,
-  },
-  livingFact: {
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 14,
-    minHeight: 88,
-    paddingVertical: 16,
-  },
-  notesBlock: {
-    borderRadius: reedRadii.lg,
-    borderWidth: 1,
-    gap: 6,
-    padding: 12,
-  },
-  profileAccordion: {
-    marginTop: 10,
-  },
-  legendDot: {
-    borderRadius: reedRadii.pill,
-    height: 8,
-    width: 8,
-  },
-  legendLabel: {
-    flex: 1,
-  },
-  muscleLegend: {
-    flex: 1,
-    gap: 8,
-    minWidth: 0,
-  },
-  muscleLegendRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  periodNote: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 12,
-  },
-  periodControl: {
-    minWidth: 0,
-    width: '100%',
-  },
-  progressDonutContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDonutSubtitle: {
-    textTransform: 'uppercase',
-  },
-  progressDonutValue: {
-    textAlign: 'center',
-  },
-  progressDonutWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'column',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  progressHeaderCopy: {
-    alignSelf: 'stretch',
-    gap: 2,
-    minWidth: 0,
-  },
-  progressMetricRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  progressMetricTile: {
-    alignItems: 'center',
-    flex: 1,
-    gap: 3,
-  },
-  progressMetricText: {
-    textAlign: 'center',
-  },
-  progressSkeleton: {
-    gap: 14,
-  },
-  rankCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  rankRow: {
-    alignItems: 'flex-start',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    flexDirection: 'row',
-    gap: 12,
-    paddingVertical: 12,
-  },
-  rankStack: {
-    gap: 0,
-  },
-  skeletonLine: {
-    borderRadius: reedRadii.pill,
-    height: 42,
-  },
-  skeletonMetric: {
-    borderRadius: reedRadii.lg,
-    flex: 1,
-    height: 58,
-  },
-  streakDesignShelf: {
-    flex: 1,
-    width: '100%',
-  },
-  streakRail: {
-    flexDirection: 'row',
-    gap: 5,
-    height: 18,
-    width: '100%',
-  },
-  streakRailDesign: {
-    gap: 10,
-    width: '100%',
-  },
-  streakRailHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-    minHeight: 36,
-  },
-  streakRailHeaderActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-  },
-  streakRailStatus: {
-    lineHeight: 20,
-  },
-  streakRailSegment: {
-    borderRadius: reedRadii.pill,
-    borderWidth: 1,
-    flex: 1,
-  },
-  root: {
-    flex: 1,
-  },
-  rowCopy: {
-    flex: 1,
-    gap: 3,
-    minWidth: 0,
-  },
-  rowIconWrap: {
-    alignItems: 'center',
-    height: 44,
-    justifyContent: 'center',
-    width: 30,
-  },
-  sheetDock: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-  },
-  sheetKeyboardView: {
-    flex: 1,
-    justifyContent: 'flex-end',
-  },
-  sheetOverlay: {
-    ...StyleSheet.absoluteFill,
-  },
-  sectionStack: {
-    gap: 8,
-  },
-  topExerciseName: {
-    flex: 1,
-  },
-  topExerciseRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  topExerciseStack: {
-    gap: 8,
-  },
-  trainingVisualRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 18,
-  },
-  weightInput: {
-    fontSize: 34,
-    fontWeight: '800',
-    minHeight: 74,
-  },
-  weightInputRow: {
-    alignItems: 'flex-end',
-    flexDirection: 'row',
-    gap: 12,
-  },
-  weightLogButton: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    flexDirection: 'row',
-    gap: 4,
-    minHeight: 38,
-    paddingHorizontal: 12,
-  },
-  weightSheetClose: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  weightSheetContent: {
-    gap: 16,
-    paddingBottom: 28,
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  weightSheetHandle: {
-    alignSelf: 'center',
-    borderRadius: reedRadii.pill,
-    height: 4,
-    width: 42,
-  },
-  weightSheetHeader: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-  },
-  weightSheetSurface: {
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  weightSheetTitleBlock: {
-    flex: 1,
-    gap: 4,
-  },
-  weightUnitLabel: {
-    paddingBottom: 17,
-  },
-  updateHint: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    width: 20,
-  },
-  updateHintOpen: {
-    transform: [{ rotate: '90deg' }],
-  },
-  trainingVisualRowCompact: {
-    flexDirection: 'column',
-  },
-});

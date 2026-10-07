@@ -6,11 +6,10 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from 'react-native-reanimated';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { ReedText } from '@/components/ui/reed-text';
 import { reedSprings } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii } from '@/design/system';
+import { reedFonts, reedRadii } from '@/design/system';
 import { usePressAnimation } from '@/design/use-press-animation';
 
 type SegmentedOption<T extends string> = {
@@ -24,10 +23,11 @@ type SegmentedControlProps<T extends string> = {
   compact?: boolean;
   iconOnly?: boolean;
   onChange: (value: T) => void;
-  options: SegmentedOption<T>[];
+  options: readonly SegmentedOption<T>[];
   style?: StyleProp<ViewStyle>;
   value: T;
-  variant?: 'default' | 'ghost' | 'pill';
+  // `card` is the control that sits inside a card: a canvas track, 32px segments.
+  variant?: 'card' | 'default' | 'ghost' | 'pill';
 };
 
 const SHELL_PADDING = 4;
@@ -46,20 +46,20 @@ export function SegmentedControl<T extends string>({
   variant = 'default',
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
-  const control = getGlassControlTokens(theme);
   const [itemLayouts, setItemLayouts] = useState<Record<string, ItemLayout>>({});
   const indicatorX = useSharedValue(0);
   const indicatorWidth = useSharedValue(0);
   const hasPositionedIndicator = useRef(false);
   const shouldStackItems = !iconOnly && options.length > 0 && options.every(option => Boolean(option.icon && option.label));
   const optionSignature = useMemo(() => options.map(option => option.value).join('|'), [options]);
+  const [previousOptionSignature, setPreviousOptionSignature] = useState(optionSignature);
+  if (previousOptionSignature !== optionSignature) { setPreviousOptionSignature(optionSignature); setItemLayouts({}); }
   const activeLayout = itemLayouts[value];
 
   useEffect(() => {
     hasPositionedIndicator.current = false;
     indicatorX.value = 0;
     indicatorWidth.value = 0;
-    setItemLayouts({});
   }, [indicatorWidth, indicatorX, optionSignature]);
 
   useEffect(() => {
@@ -87,12 +87,13 @@ export function SegmentedControl<T extends string>({
     <View
       accessibilityRole="tablist"
       style={[
-        variant === 'pill' ? styles.pillShell : styles.shell,
+        variant === 'pill' ? styles.pillShell : variant === 'card' ? styles.cardShell : styles.shell,
         variant === 'ghost'
           ? styles.ghostShell
           : {
-              backgroundColor: control.shellBackgroundColor,
-              borderColor: control.shellBorderColor,
+              // The track is canvas, sunk into the card it sits on.
+              backgroundColor: theme.colors.canvas,
+              borderColor: variant === 'card' ? 'transparent' : theme.colors.line,
             },
         style,
       ]}
@@ -104,11 +105,13 @@ export function SegmentedControl<T extends string>({
               ? styles.pillIndicator
               : variant === 'ghost'
                 ? styles.ghostIndicator
-                : styles.indicator,
+                : variant === 'card'
+                  ? styles.cardIndicator
+                  : styles.indicator,
             { pointerEvents: 'none' },
             {
-              backgroundColor: control.activeBackgroundColor,
-              borderColor: variant === 'default' ? control.activeBorderColor : 'transparent',
+              backgroundColor: theme.colors.surfaceHigh,
+              borderColor: variant === 'default' ? theme.colors.line : 'transparent',
             },
             indicatorStyle,
           ]}
@@ -171,7 +174,7 @@ function SegmentedItem({
   onChange: () => void;
   onLayout: (layout: ItemLayout) => void;
   shouldStackItems: boolean;
-  variant: 'default' | 'ghost' | 'pill';
+  variant: 'card' | 'default' | 'ghost' | 'pill';
 }) {
   const { theme } = useReedTheme();
   const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
@@ -192,9 +195,10 @@ function SegmentedItem({
       onPressOut={onPressOut}
       style={[
         styles.item,
-        variant !== 'default' ? styles.pillItem : null,
+        variant !== 'default' && variant !== 'card' ? styles.pillItem : null,
         compact ? styles.itemCompact : null,
         shouldStackItems ? styles.itemStacked : null,
+        variant === 'card' ? styles.cardItem : null,
       ]}
     >
       <Animated.View style={[styles.itemContent, animatedStyle]}>
@@ -208,13 +212,14 @@ function SegmentedItem({
             style={[
               styles.label,
               shouldStackItems && hasIconAndLabel ? styles.stackedLabel : null,
+              variant === 'card' && isActive ? { fontFamily: reedFonts.semibold } : null,
               {
                 color:
-                  variant === 'default' && isActive
-                    ? theme.colors.pillActiveText
+                  (variant === 'default' || variant === 'card') && isActive
+                    ? theme.colors.ink
                     : isActive
-                      ? theme.colors.textPrimary
-                      : theme.colors.textMuted,
+                      ? theme.colors.ink
+                      : theme.colors.inkMuted,
               },
             ]}
             variant={compact || shouldStackItems ? 'caption' : 'bodyStrong'}
@@ -234,6 +239,26 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     padding: SHELL_PADDING,
     position: 'relative',
+  },
+  cardShell: {
+    borderRadius: 18,
+    borderWidth: 0,
+    flexDirection: 'row',
+    padding: SHELL_PADDING,
+    position: 'relative',
+  },
+  cardIndicator: {
+    borderRadius: 14,
+    borderWidth: 0,
+    bottom: SHELL_PADDING,
+    left: 0,
+    position: 'absolute',
+    top: SHELL_PADDING,
+  },
+  cardItem: {
+    borderRadius: 14,
+    minHeight: 32,
+    paddingHorizontal: 8,
   },
   pillShell: {
     borderRadius: reedRadii.pill,

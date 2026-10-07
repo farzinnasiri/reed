@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values';
-import { mutation, query } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 import type { MutationCtx } from './_generated/server';
 
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
@@ -23,13 +23,6 @@ const promptVersionValidator = v.object({
   updatedAt: v.number(),
   version: v.number(),
 });
-
-function assertAdmin(adminSecret: string) {
-  const expectedSecret = process.env.REED_CONTROL_PANEL_SECRET;
-  if (!expectedSecret || adminSecret !== expectedSecret) {
-    throw new ConvexError('Prompt admin access is not enabled for this deployment.');
-  }
-}
 
 function normalizePromptKey(key: string | undefined) {
   const normalized = (key ?? DEFAULT_PROMPT_KEY).trim();
@@ -68,11 +61,10 @@ async function upsertPromptVersion(ctx: MutationCtx, args: { key: string; conten
   });
 }
 
-export const listPromptKeys = query({
-  args: { adminSecret: v.string() },
+export const listPromptKeys = internalQuery({
+  args: {},
   returns: v.array(v.string()),
-  handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
+  handler: async (ctx) => {
     const rows = await ctx.db.query('reedPromptVersions').take(200);
     const keys = new Set(rows.map(row => row.key));
     for (const key of KNOWN_PROMPT_KEYS) keys.add(key);
@@ -80,10 +72,9 @@ export const listPromptKeys = query({
   },
 });
 
-export const listReedProfiles = query({
-  args: { adminSecret: v.string() },
-  handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
+export const listReedProfiles = internalQuery({
+  args: {},
+  handler: async (ctx) => {
     const profiles = await ctx.db.query('profiles').take(200);
     return profiles
       .map(profile => ({
@@ -96,10 +87,9 @@ export const listReedProfiles = query({
   },
 });
 
-export const getReedDebugContext = query({
-  args: { adminSecret: v.string(), profileId: v.id('profiles') },
+export const getReedDebugContext = internalQuery({
+  args: { profileId: v.id('profiles') },
   handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
     const profile = await ctx.db.get(args.profileId);
     if (!profile) throw new ConvexError('Profile not found.');
 
@@ -215,11 +205,10 @@ export const getReedDebugContext = query({
   },
 });
 
-export const getActivePrompt = query({
-  args: { adminSecret: v.string(), key: v.optional(v.string()) },
+export const getActivePrompt = internalQuery({
+  args: { key: v.optional(v.string()) },
   returns: v.union(promptVersionValidator, v.null()),
   handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
     const key = normalizePromptKey(args.key);
     return await ctx.db
       .query('reedPromptVersions')
@@ -229,11 +218,10 @@ export const getActivePrompt = query({
   },
 });
 
-export const listPromptVersions = query({
-  args: { adminSecret: v.string(), key: v.optional(v.string()) },
+export const listPromptVersions = internalQuery({
+  args: { key: v.optional(v.string()) },
   returns: v.array(promptVersionValidator),
   handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
     const key = normalizePromptKey(args.key);
     return await ctx.db
       .query('reedPromptVersions')
@@ -243,11 +231,10 @@ export const listPromptVersions = query({
   },
 });
 
-export const saveActivePrompt = mutation({
-  args: { adminSecret: v.string(), content: v.string(), key: v.optional(v.string()) },
+export const saveActivePrompt = internalMutation({
+  args: { content: v.string(), key: v.optional(v.string()) },
   returns: v.id('reedPromptVersions'),
   handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
     const key = normalizePromptKey(args.key);
     const content = args.content.trim();
     if (content.length < 100) throw new ConvexError('Prompt content is too short.');
@@ -255,11 +242,10 @@ export const saveActivePrompt = mutation({
   },
 });
 
-export const rollbackPrompt = mutation({
-  args: { adminSecret: v.string(), key: v.optional(v.string()), version: v.number() },
+export const rollbackPrompt = internalMutation({
+  args: { key: v.optional(v.string()), version: v.number() },
   returns: v.id('reedPromptVersions'),
   handler: async (ctx, args) => {
-    assertAdmin(args.adminSecret);
     const key = normalizePromptKey(args.key);
     const target = await ctx.db
       .query('reedPromptVersions')

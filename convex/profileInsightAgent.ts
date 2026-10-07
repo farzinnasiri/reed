@@ -6,7 +6,7 @@ import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import { createChatModel, hasApiKeyForModel, supportedModelSettings } from './aiModelProvider';
 import type { Id } from './_generated/dataModel';
-import { traceText, withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
+import { withLangfuseGeneration, withLangfuseTrace } from './langfuseTracing';
 
 const MODEL_NAME = process.env.REED_PROFILE_INSIGHT_MODEL ?? 'gemini-2.5-flash-lite';
 
@@ -46,7 +46,7 @@ export const generate = internalAction({
           sourceChangedAt: snapshot.sourceChangedAt,
           sourceFingerprint: snapshot.fingerprint,
         });
-        return { content };
+        return { generated: true, characterCount: content.length };
       });
     } catch (error) {
       console.error('[PROFILE_INSIGHT_ERROR]', error instanceof Error ? { message: error.message, stack: error.stack } : error);
@@ -79,7 +79,9 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
   });
   const result = await withLangfuseGeneration({
     input: {
-      snapshot: traceText(JSON.stringify(snapshot), 4_000),
+      sourceFingerprint: snapshot.fingerprint,
+      practiceCount: snapshot.trainingProfile?.onboarding?.practices.length ?? 0,
+      hasCoachNotes: !!snapshot.trainingProfile?.onboarding?.notes,
     },
     model: MODEL_NAME,
     modelParameters: modelSettings,
@@ -95,6 +97,7 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
       'Use 20/80 judgment: scan all provided signals and surface the most decision-relevant pattern, not merely the first or most numeric fact.',
       'You may combine two related signals when that creates a clearer insight, but do not list everything.',
       'No hype. No medical claims. No body-composition claims from weight alone.',
+      'Onboarding motivations and practice levels are starting context, not concrete goals or evidence of logged training. Respect ordered motivations and optional coach notes. Do not invent equipment, seasons or dates.',
       'If data is thin, say the single next action that would create signal.',
       'Do not mention internal data structures.',
     ].join('\n')),
@@ -105,9 +108,9 @@ async function writeInsight(snapshot: InsightSnapshot, fallback: string) {
 }
 
 function deterministicInsight(snapshot: InsightSnapshot) {
-  if (!snapshot.trainingProfile) return 'I need your goals, body data, and training setup before this can become specific. Fill in the profile first; that gives me enough context to separate useful signal from generic coaching.';
-  if (snapshot.week.sets > 0) return `I see ${snapshot.week.activeDays} active ${snapshot.week.activeDays === 1 ? 'day' : 'days'} this week, with ${snapshot.week.topGroups[0] ?? 'training'} carrying the clearest signal. Keep the next session aligned with ${snapshot.primaryGoal ?? 'your main goal'} rather than adding work just to fill space.`;
-  return `I can see ${snapshot.primaryGoal ?? 'your goal'} is set, but this week has no logged training yet. One clean completed session gives me enough signal to compare your work against your target.`;
+  if (!snapshot.trainingProfile) return 'Complete your profile so I can build around your practices and your week.';
+  if (snapshot.week.sets > 0) return `I see ${snapshot.week.activeDays} active ${snapshot.week.activeDays === 1 ? 'day' : 'days'} this week, with ${snapshot.week.topGroups[0] ?? 'training'} carrying the clearest signal. Keep the next session aligned with ${snapshot.topMotivation?.toLowerCase() ?? 'your priorities'} rather than adding work just to fill space.`;
+  return `This week has no logged training yet. One completed session will help me build around ${snapshot.topMotivation?.toLowerCase() ?? 'what matters to you'} and your available time.`;
 }
 
 function textFromContent(content: unknown): string {

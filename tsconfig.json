@@ -15,8 +15,7 @@
   "exclude": [
     "control-panel",
     "legacy",
-    "convex",
-    "web"
+    "convex"
   ],
   "include": [
     "**/*.ts",

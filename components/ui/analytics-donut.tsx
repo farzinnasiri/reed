@@ -81,7 +81,7 @@ export function AnalyticsDonut({
           </G>
         </Svg>
         <View style={defaultStyles.center}>
-          <ReedText style={centerPrimaryStyle} variant="section">
+          <ReedText style={centerPrimaryStyle} variant="headline">
             {centerPrimary}
           </ReedText>
           <ReedText style={centerSecondaryStyle} tone="muted" variant="caption">

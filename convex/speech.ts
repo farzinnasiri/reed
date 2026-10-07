@@ -1,6 +1,6 @@
 import { ChatOpenAI } from '@langchain/openai';
 
-export type SpeechActor = 'chat' | 'session_notes';
+export type SpeechActor = 'chat' | 'session_notes' | 'onboarding_notes';
 
 type SpeechTranscriptionInput = {
   actor: SpeechActor;

@@ -1,24 +1,26 @@
-import { Pressable, View } from 'react-native';
-import { getSolidGlassCardTokens } from '@/components/ui/glass-material';
+import { Pressable, View , AppState } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import type { RecipeFieldDefinition } from '@/domains/workout/recipes';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { styles } from './workout-surface.styles';
+import { styles } from './workout-live-cardio-card.styles';
 import type { CaptureCard, LiveCardioCard, LiveCardioFinishSummary } from './workout-surface.types';
 import { formatClock } from './workout-surface.utils';
+import { getLiveCardioElapsedSeconds } from '@/domains/workout/liveCardio';
+import { useRunningTicker } from './use-running-ticker';
 
 type WorkoutLiveCardioCardProps = {
   captureCard: CaptureCard | null;
   errorMessage: string | null;
   isEditingSet: boolean;
   isWorking: boolean;
-  liveElapsedSeconds: number;
   liveCardioCard: LiveCardioCard | null;
   liveCardioFinishSummary: LiveCardioFinishSummary | null;
   onAdjustLiveCardioMetric: (key: string, delta: number) => void;
   onBackToTimeline: () => void;
-  onFinishLiveCardio: () => void;
+  onFinishLiveCardio: (elapsedSeconds: number) => void;
   onOpenNextExerciseAfterLiveCardio: () => void;
   onStartLiveCardio: (sessionExerciseId: CaptureCard['sessionExerciseId']) => void;
   onToggleLiveCardioRunning: () => void;
@@ -30,7 +32,6 @@ export function WorkoutLiveCardioCard({
   errorMessage,
   isEditingSet,
   isWorking,
-  liveElapsedSeconds,
   liveCardioCard,
   liveCardioFinishSummary,
   onAdjustLiveCardioMetric,
@@ -42,7 +43,8 @@ export function WorkoutLiveCardioCard({
   ringSize,
 }: WorkoutLiveCardioCardProps) {
   const { theme } = useReedTheme();
-  const solidGlass = getSolidGlassCardTokens(theme);
+  const cardSurface = { backgroundColor: theme.colors.surface } as const;
+  const liveElapsedSeconds = useLiveCardioElapsed(liveCardioCard);
   const showLiveCardioCaptureStart = captureCard?.processKind === 'live_cardio' && !isEditingSet;
 
   if (liveCardioFinishSummary) {
@@ -50,7 +52,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          solidGlass,
+          cardSurface,
         ]}
       >
         <View style={styles.liveSummaryBody}>
@@ -68,34 +70,17 @@ export function WorkoutLiveCardioCard({
         </View>
 
         <View style={styles.liveSummaryActions}>
-          <Pressable
-            disabled={isWorking}
-            onPress={onBackToTimeline}
-            style={({ pressed }) => [
-              styles.livePrimaryButton,
-              {
-                backgroundColor: theme.colors.accentPrimary,
-                ...getTapScaleStyle(pressed, false),
-              },
-            ]}
-          >
-            <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-              Back to workout
-            </ReedText>
-          </Pressable>
-          <Pressable
-            disabled={isWorking || !liveCardioFinishSummary.nextExerciseId}
-            onPress={onOpenNextExerciseAfterLiveCardio}
-            style={({ pressed }) => [
-              styles.liveFinishButton,
-              {
-                borderColor: theme.colors.controlActiveBorder,
-                ...getTapScaleStyle(pressed, !liveCardioFinishSummary.nextExerciseId),
-              },
-            ]}
-          >
-            <ReedText variant="bodyStrong">Next exercise</ReedText>
-          </Pressable>
+          <View style={styles.liveAction}>
+            <ReedButton disabled={isWorking} label="Back to workout" onPress={onBackToTimeline} />
+          </View>
+          <View style={styles.liveAction}>
+            <ReedButton
+              disabled={isWorking || !liveCardioFinishSummary.nextExerciseId}
+              label="Next exercise"
+              onPress={onOpenNextExerciseAfterLiveCardio}
+              variant="secondary"
+            />
+          </View>
         </View>
       </View>
     );
@@ -106,7 +91,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          solidGlass,
+          cardSurface,
         ]}
       >
         <View style={styles.liveCardBody}>
@@ -132,40 +117,16 @@ export function WorkoutLiveCardioCard({
             </Pressable>
 
             <View style={styles.livePrimaryActions}>
-              <Pressable
-                disabled={isWorking}
-                onPress={onToggleLiveCardioRunning}
-                style={({ pressed }) => [
-                  styles.livePrimaryButton,
-                  {
-                    backgroundColor: theme.colors.accentPrimary,
-                    ...getTapScaleStyle(pressed, false),
-                  },
-                ]}
-              >
-                <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-                  {liveCardioCard.isRunning
-                    ? 'Pause'
-                    : liveElapsedSeconds > 0
-                      ? 'Resume'
-                      : 'Start'}
-                </ReedText>
-              </Pressable>
-              <Pressable
-                disabled={isWorking}
-                onPress={onFinishLiveCardio}
-                style={({ pressed }) => [
-                  styles.liveFinishButton,
-                  {
-                    borderColor: theme.colors.controlActiveBorder,
-                    ...getTapScaleStyle(pressed, false),
-                  },
-                ]}
-              >
-                <ReedText tone="danger" variant="bodyStrong">
-                  Finish
-                </ReedText>
-              </Pressable>
+              <View style={styles.liveAction}>
+                <ReedButton
+                  disabled={isWorking}
+                  label={liveCardioCard.isRunning ? 'Pause' : liveElapsedSeconds > 0 ? 'Resume' : 'Start'}
+                  onPress={onToggleLiveCardioRunning}
+                />
+              </View>
+              <View style={styles.liveAction}>
+                <ReedButton disabled={isWorking} label="Finish" onPress={() => onFinishLiveCardio(liveElapsedSeconds)} variant="secondary" />
+              </View>
             </View>
           </View>
 
@@ -185,16 +146,19 @@ export function WorkoutLiveCardioCard({
                   </View>
                   <View style={styles.liveMetricActions}>
                     <StepButton
+                      accessibilityLabel={field.label}
                       disabled={isWorking}
                       label={`-${formatDelta(step)}`}
                       onPress={() => onAdjustLiveCardioMetric(field.key, -step)}
                     />
                     <StepButton
+                      accessibilityLabel={field.label}
                       disabled={isWorking}
                       label={`+${formatDelta(step)}`}
                       onPress={() => onAdjustLiveCardioMetric(field.key, step)}
                     />
                     <StepButton
+                      accessibilityLabel={field.label}
                       disabled={isWorking}
                       label={`+${formatDelta(presetStep)}`}
                       onPress={() => onAdjustLiveCardioMetric(field.key, presetStep)}
@@ -220,7 +184,7 @@ export function WorkoutLiveCardioCard({
       <View
         style={[
           styles.liveCardShell,
-          solidGlass,
+          cardSurface,
         ]}
       >
         <View style={styles.liveCardStartState}>
@@ -229,21 +193,11 @@ export function WorkoutLiveCardioCard({
               Last {captureCard.previousSetSummary}
             </ReedText>
           ) : null}
-          <Pressable
+          <ReedButton
             disabled={isWorking}
+            label={isWorking ? 'Starting…' : 'Start tracking'}
             onPress={() => onStartLiveCardio(captureCard.sessionExerciseId)}
-            style={({ pressed }) => [
-              styles.livePrimaryButton,
-              {
-                backgroundColor: theme.colors.accentPrimary,
-                ...getTapScaleStyle(pressed, false),
-              },
-            ]}
-          >
-            <ReedText style={{ color: theme.colors.accentPrimaryText }} variant="bodyStrong">
-              {isWorking ? 'Starting…' : 'Start tracking'}
-            </ReedText>
-          </Pressable>
+          />
         </View>
 
         {errorMessage ? (
@@ -258,11 +212,30 @@ export function WorkoutLiveCardioCard({
   return null;
 }
 
+function useLiveCardioElapsed(card: LiveCardioCard | null) {
+  const [now, setNow] = useState(Date.now);
+
+  const synchronize = useCallback(() => {
+    setNow(Date.now());
+  }, []);
+  useRunningTicker({ isRunning: Boolean(card?.isRunning), onTick: synchronize });
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => {
+      if (state === 'active') synchronize();
+    });
+    return () => subscription.remove();
+  }, [synchronize]);
+
+  return card ? getLiveCardioElapsedSeconds(card, now) : 0;
+}
+
 function StepButton({
+  accessibilityLabel,
   disabled,
   label,
   onPress,
 }: {
+  accessibilityLabel: string;
   disabled: boolean;
   label: string;
   onPress: () => void;
@@ -273,16 +246,11 @@ function StepButton({
     <Pressable
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.liveStepButton,
-        {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
-          ...getTapScaleStyle(pressed, false),
-        },
-      ]}
+      accessibilityLabel={`${label} ${accessibilityLabel}`}
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.liveStepButton, { backgroundColor: theme.colors.surfaceRaised, ...getTapScaleStyle(pressed, false) }]}
     >
-      <ReedText variant="caption">{label}</ReedText>
+      <ReedText tone="secondary" variant="bodyStrong">{label}</ReedText>
     </Pressable>
   );
 }
@@ -306,7 +274,7 @@ function LiveCardioElapsedTimer({
         style={[
           styles.liveElapsedTimerRing,
           {
-            borderColor: theme.colors.controlBorder,
+            borderColor: theme.colors.line,
             height: size,
             width: size,
           },
@@ -315,7 +283,7 @@ function LiveCardioElapsedTimer({
         <View style={styles.liveElapsedCopy}>
           <ReedText
             style={{
-              color: theme.colors.textPrimary,
+              color: theme.colors.ink,
               fontSize: Math.round(size * 0.3),
               letterSpacing: -2,
               lineHeight: Math.round(size * 0.28),
@@ -324,7 +292,7 @@ function LiveCardioElapsedTimer({
           >
             {formatClock(elapsedSeconds)}
           </ReedText>
-          <ReedText numberOfLines={2} style={[styles.liveElapsedLabel, { color: theme.colors.textMuted }]} variant="section">
+          <ReedText numberOfLines={2} style={[styles.liveElapsedLabel, { color: theme.colors.inkMuted }]} variant="headline">
             {label ?? (isRunning ? 'Tap to pause' : elapsedSeconds > 0 ? 'Tap to resume' : 'Tap to start')}
           </ReedText>
         </View>

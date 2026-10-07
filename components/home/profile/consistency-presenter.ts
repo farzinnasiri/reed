@@ -1,27 +1,3 @@
-export function getConsistencyGaugeSegmentFill({
-  accentColor,
-  filled,
-  index,
-  isLoading,
-  shellColor,
-}: {
-  accentColor: string;
-  filled: number;
-  index: number;
-  isLoading: boolean;
-  shellColor: string;
-}) {
-  if (isLoading || index >= filled) {
-    return shellColor;
-  }
-
-  return accentColor;
-}
-
-export function getConsistencyGaugeSegmentOpacity(index: number) {
-  return Math.min(1, 0.38 + index * 0.08);
-}
-
 export function getConsistencyCellFill({
   active,
   activeFill,

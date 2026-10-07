@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { startClientWideEvent } from './client-observability';
 import {
   clearBackgroundAlertAsync,
   scheduleBackgroundAlertAsync,
@@ -10,7 +11,7 @@ type UseScheduledAlertParams<Payload> = {
   alertKey: string | null;
   definition: ScheduledAlertDefinition<Payload>;
   enabled: boolean;
-  fireInSeconds: number;
+  fireAt: number | null;
   onPermissionDenied: () => void;
   payload: Payload | null;
 };
@@ -19,60 +20,69 @@ export function useScheduledAlert<Payload>({
   alertKey,
   definition,
   enabled,
-  fireInSeconds,
+  fireAt,
   onPermissionDenied,
   payload,
 }: UseScheduledAlertParams<Payload>) {
-  const activeAlertKeyRef = useRef<string | null>(null);
+  const generationRef = useRef(0);
   const notificationIdRef = useRef<string | null>(null);
+  const queueRef = useRef(Promise.resolve());
 
   useEffect(() => {
-    const nextPayload = payload;
-    const nextAlertKey = enabled && nextPayload && fireInSeconds > 0 ? alertKey : null;
-
-    if (!nextAlertKey || !nextPayload) {
-      if (activeAlertKeyRef.current !== null || notificationIdRef.current !== null) {
-        void clearBackgroundAlertAsync(notificationIdRef.current);
-        activeAlertKeyRef.current = null;
-        notificationIdRef.current = null;
+    const generation = ++generationRef.current;
+    const event = startClientWideEvent('alert.schedule');
+    const synchronize = async () => {
+      // Serialize native writes, including late schedules and failed cancellation retries.
+      if (generation !== generationRef.current) {
+        event.end({ 'alert.status': 'superseded' });
+        return;
       }
-      return;
-    }
-
-    if (nextAlertKey === activeAlertKeyRef.current) {
-      return;
-    }
-
-    const previousNotificationId = notificationIdRef.current;
-    activeAlertKeyRef.current = nextAlertKey;
-    notificationIdRef.current = null;
-
-    void clearBackgroundAlertAsync(previousNotificationId).then(() =>
-      scheduleBackgroundAlertAsync({
-        definition,
-        fireInSeconds,
-        payload: nextPayload,
-      }).then(result => {
-        if (activeAlertKeyRef.current !== nextAlertKey) {
-          void clearBackgroundAlertAsync(result.notificationId);
-          return;
-        }
-
-        notificationIdRef.current = result.notificationId;
-        if (result.status === 'permission_denied') {
-          onPermissionDenied();
-        }
-      }),
-    );
-  }, [alertKey, definition, enabled, fireInSeconds, onPermissionDenied, payload]);
-
-  useEffect(() => {
-    return () => {
-      void clearBackgroundAlertAsync(notificationIdRef.current);
-      activeAlertKeyRef.current = null;
+      await clearBackgroundAlertAsync(notificationIdRef.current);
       notificationIdRef.current = null;
+      if (generation !== generationRef.current) {
+        event.end({ 'alert.status': 'superseded' });
+        return;
+      }
+      if (!enabled || !alertKey || !payload || fireAt === null || fireAt <= Date.now()) {
+        event.end({ 'alert.status': 'cleared' });
+        return;
+      }
+      const result = await scheduleBackgroundAlertAsync({
+        definition,
+        fireAt,
+        payload,
+      });
+      notificationIdRef.current = result.notificationId;
+      if (generation !== generationRef.current) {
+        await clearBackgroundAlertAsync(notificationIdRef.current);
+        notificationIdRef.current = null;
+      } else if (result.status === 'permission_denied') {
+        onPermissionDenied();
+      }
+      event.end({ 'alert.status': result.status });
     };
-  }, []);
+    queueRef.current = queueRef.current.then(synchronize).catch((error) => {
+      event.fail(error, 'alert_schedule_failed');
+    });
+    return () => {
+      generationRef.current += 1;
+    };
+  }, [alertKey, definition, enabled, fireAt, onPermissionDenied, payload]);
+
+  useEffect(
+    () => () => {
+      generationRef.current += 1;
+      const event = startClientWideEvent('alert.clear');
+      queueRef.current = queueRef.current
+        .then(async () => {
+          await clearBackgroundAlertAsync(notificationIdRef.current);
+          notificationIdRef.current = null;
+          event.end();
+        })
+        .catch((error) => event.fail(error, 'alert_clear_failed'));
+    },
+    [],
+  );
 }
 
 export type { ScheduledAlertPermissionStatus };

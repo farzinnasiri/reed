@@ -1,0 +1,20 @@
+{
+  "male": {
+    "validatorVersion": "2.0.0-dev.3.10",
+    "errors": 0,
+    "warnings": 0,
+    "infos": 0,
+    "messages": [],
+    "sha256": "b07768ffca7111e7181587d5c06c8aaeb8fc2b79299b1c16cbc0d7437e03d567",
+    "assetVersion": "3.0.0"
+  },
+  "female": {
+    "validatorVersion": "2.0.0-dev.3.10",
+    "errors": 0,
+    "warnings": 0,
+    "infos": 0,
+    "messages": [],
+    "sha256": "2b8d55503f422ef554fca5efa9371ddad8720188f3153647e1d70a1d7499f3e9",
+    "assetVersion": "3.0.0"
+  }
+}

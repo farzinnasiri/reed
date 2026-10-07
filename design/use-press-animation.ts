@@ -4,7 +4,9 @@ import {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
+import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
 import { reedMotion, reedSprings } from '@/design/motion';
 
 type UsePressAnimationOptions = {
@@ -13,6 +15,7 @@ type UsePressAnimationOptions = {
    * Default: false — opt-in to avoid haptic fatigue on every button.
    */
   haptic?: boolean;
+  pressMs?: number;
   /** Override the resting scale (default: 1). */
   restScale?: number;
   /** Override the pressed scale (default: reedMotion.scale.tap = 0.97). */
@@ -40,11 +43,13 @@ type UsePressAnimationOptions = {
 export function usePressAnimation(options: UsePressAnimationOptions = {}) {
   const {
     haptic = false,
+    pressMs,
     restScale = 1,
     pressedScale = reedMotion.scale.tap,
   } = options;
 
   const scale = useSharedValue(restScale);
+  const reduced = useReedReducedMotion();
 
   // Lazy-load expo-haptics to avoid import cost on Android / web
   // where haptics may not be available.
@@ -52,7 +57,7 @@ export function usePressAnimation(options: UsePressAnimationOptions = {}) {
 
   const onPressIn = useCallback(() => {
     'worklet';
-    scale.value = withSpring(pressedScale, reedSprings.snappy);
+    scale.value = reduced ? restScale : pressMs ? withTiming(pressedScale, { duration: pressMs }) : withSpring(pressedScale, reedSprings.snappy);
 
     if (haptic && Platform.OS === 'ios') {
       // Haptics must run on JS thread — use runOnJS if called from worklet,
@@ -68,12 +73,12 @@ export function usePressAnimation(options: UsePressAnimationOptions = {}) {
         }
       })();
     }
-  }, [haptic, pressedScale, scale]);
+  }, [haptic, pressMs, pressedScale, reduced, restScale, scale]);
 
   const onPressOut = useCallback(() => {
     'worklet';
-    scale.value = withSpring(restScale, reedSprings.snappy);
-  }, [restScale, scale]);
+    scale.value = reduced ? restScale : withSpring(restScale, reedSprings.snappy);
+  }, [reduced, restScale, scale]);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],

@@ -1,22 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Animated,
-  Modal,
-  PanResponder,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-  useWindowDimensions,
-} from 'react-native';
+import { ActivityIndicator, Pressable, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { blurActiveElementOnWeb } from '@/components/ui/focus';
-import { getGlassScrimTokens } from '@/components/ui/glass-material';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import { createTiming, getTapScaleStyle, reedEasing, reedMotion } from '@/design/motion';
+import { getTapScaleStyle } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
 import { workoutSemanticPalette } from '@/design/system';
@@ -24,17 +16,19 @@ import { styles } from './workout-session-insights.styles';
 import type { LiveSessionFullInsights, LiveSessionSummary } from './workout-surface.types';
 import {
   formatClock,
-  formatCompactDistance,
-  formatCompactLoad,
   formatCompactMinutes,
   formatCompactNumber,
 } from './workout-surface.utils';
 
 type WorkoutSessionInsightsSheetProps = {
-  fullInsights: LiveSessionFullInsights;
+  errorMessage: string | null;
+  /** Null until the insights have loaded. */
+  insights: { fullInsights: LiveSessionFullInsights; summary: LiveSessionSummary } | null;
+  isLoading: boolean;
   isOpen: boolean;
   onClose: () => void;
-  summary: LiveSessionSummary;
+  /** Offered with the error; leave out when trying again would not help. */
+  onRetry?: () => void;
 };
 
 type SessionMaturity = 'early' | 'mature' | 'mid';
@@ -66,128 +60,123 @@ type PrHighlightRow = {
   typeLabel: string;
 };
 
+// Resting heights: a summary, and nearly the whole screen. Drag between them or use the button.
 const SUMMARY_SHEET_RATIO = 0.58;
 const FULL_SHEET_RATIO = 0.92;
-const DRAG_START_THRESHOLD_Y = 8;
-const COLLAPSED_DRAG_MIN_Y = -140;
-const COLLAPSED_DRAG_MAX_Y = 220;
-const EXPANDED_DRAG_MIN_Y = -160;
-const EXPANDED_DRAG_MAX_Y = 180;
-const EXPAND_DRAG_THRESHOLD_Y = -48;
-const DISMISS_DRAG_THRESHOLD_Y = 72;
 
+/**
+ * Session insights, from the three dots on the session strip: the shared bottom sheet (so it moves
+ * like every other sheet) with a summary height and an expanded one. The same sheet shows the
+ * loading and error states, so it never swaps for another while it is open.
+ */
 export function WorkoutSessionInsightsSheet({
-  fullInsights,
+  errorMessage,
+  insights,
+  isLoading,
   isOpen,
   onClose,
-  summary,
+  onRetry,
 }: WorkoutSessionInsightsSheetProps) {
   const { theme } = useReedTheme();
-  const scrim = getGlassScrimTokens(theme);
-  const { height } = useWindowDimensions();
+  const sheetRef = useRef<BottomSheetModal>(null);
+  const [snapIndex, setSnapIndex] = useState(0);
+  const isExpanded = snapIndex === 1;
+  const { height: viewportHeight } = useWindowDimensions();
+  const topInset = useSafeAreaInsets().top;
+  // The content is laid out at the tallest height, so at the summary height this much of it is
+  // below the screen. The scroll area is padded by it, or the last rows could never be reached.
+  const hiddenBelow = isExpanded ? 0 : (FULL_SHEET_RATIO - SUMMARY_SHEET_RATIO) * (viewportHeight - topInset);
+
+  useEffect(() => {
+    if (isOpen) blurActiveElementOnWeb();
+  }, [isOpen]);
+
+  return (
+    <ReedSheet
+      heightFraction={[SUMMARY_SHEET_RATIO, FULL_SHEET_RATIO]}
+      open={isOpen}
+      onDismiss={() => {
+        setSnapIndex(0);
+        onClose();
+      }}
+      onSnapIndexChange={setSnapIndex}
+      ref={sheetRef}
+      snapIndex={snapIndex}
+    >
+      <View style={styles.sessionInsightsContent}>
+        <View style={styles.sessionInsightsHeader}>
+          <View style={styles.sessionInsightsHeaderCopy}>
+            <ReedText variant="headline">Session insights</ReedText>
+          </View>
+
+          <View style={styles.sessionInsightsHeaderActions}>
+            <Pressable
+              accessibilityLabel={isExpanded ? 'Collapse insights' : 'Expand insights'}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => setSnapIndex(isExpanded ? 0 : 1)}
+              style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
+            >
+              <Ionicons
+                color={String(theme.colors.inkMuted)}
+                name={isExpanded ? 'contract-outline' : 'expand-outline'}
+                size={18}
+              />
+            </Pressable>
+            <Pressable
+              accessibilityLabel="Close insights"
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              onPress={() => sheetRef.current?.dismiss()}
+              style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
+            >
+              <Ionicons color={String(theme.colors.inkMuted)} name="close" size={18} />
+            </Pressable>
+          </View>
+        </View>
+
+        {insights ? (
+          <InsightsBody expanded={isExpanded} fullInsights={insights.fullInsights} hiddenBelow={hiddenBelow} summary={insights.summary} />
+        ) : (
+          <View style={styles.sessionInsightsLoadingBody}>
+            {isLoading ? <ActivityIndicator color={String(theme.colors.accent)} /> : null}
+            {errorMessage ? (
+              <>
+                <ReedText tone="muted" variant="body">{errorMessage}</ReedText>
+                {onRetry ? (
+                  <Pressable onPress={onRetry} style={({ pressed }) => [styles.sessionInsightsRetry, getTapScaleStyle(pressed)]}>
+                    <ReedText tone="accent" variant="bodyStrong">Retry</ReedText>
+                  </Pressable>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+        )}
+      </View>
+    </ReedSheet>
+  );
+}
+
+// Mounted only while the sheet is open, so none of this is worked out for a closed sheet.
+function InsightsBody({ expanded: isExpanded, fullInsights, hiddenBelow, summary }: { expanded: boolean; fullInsights: LiveSessionFullInsights; hiddenBelow: number; summary: LiveSessionSummary }) {
+  const { theme } = useReedTheme();
   const { isCompact } = useBreakpoint();
-  const openProgress = useRef(new Animated.Value(isOpen ? 1 : 0)).current;
-  const expandProgress = useRef(new Animated.Value(0)).current;
-  const dragOffset = useRef(new Animated.Value(0)).current;
-  const [isMounted, setIsMounted] = useState(isOpen);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const insets = useSafeAreaInsets();
   const [muscleMetricMode, setMuscleMetricMode] = useState<MuscleBreakdownMetric>('sets');
 
   const maturity = useMemo<SessionMaturity>(() => getSessionMaturity(summary.output.completedSets), [summary.output.completedSets]);
   const isEarly = maturity === 'early';
-
-  useEffect(() => {
-    if (isOpen) {
-      blurActiveElementOnWeb();
-      setIsMounted(true);
-      requestAnimationFrame(() => {
-        createTiming(openProgress, 1, reedMotion.durations.mode, reedEasing.easeOut, false).start();
-      });
-      return;
-    }
-
-    createTiming(openProgress, 0, reedMotion.durations.mode, reedEasing.easeInOut, false).start(({ finished }) => {
-      if (!finished) {
-        return;
-      }
-      setIsMounted(false);
-      setIsExpanded(false);
-      expandProgress.setValue(0);
-      dragOffset.setValue(0);
-    });
-  }, [dragOffset, expandProgress, isOpen, openProgress]);
-
-  useEffect(() => {
-    createTiming(expandProgress, isExpanded ? 1 : 0, reedMotion.durations.mode, reedEasing.easeOut, false).start();
-  }, [expandProgress, isExpanded]);
-
-  const sheetHeight = expandProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [height * SUMMARY_SHEET_RATIO, height * FULL_SHEET_RATIO],
-  });
-  const openTranslateY = openProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [height, 0],
-  });
-  const overlayOpacity = openProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const panelStyle = useMemo(
-    () => ({
-      height: sheetHeight,
-      transform: [{ translateY: Animated.add(openTranslateY, dragOffset) }],
-    }),
-    [dragOffset, openTranslateY, sheetHeight],
-  );
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) => Math.abs(gestureState.dy) > DRAG_START_THRESHOLD_Y,
-        onPanResponderMove: (_, gestureState) => {
-          const nextOffset = isExpanded
-            ? Math.max(EXPANDED_DRAG_MIN_Y, Math.min(EXPANDED_DRAG_MAX_Y, gestureState.dy))
-            : Math.max(COLLAPSED_DRAG_MIN_Y, Math.min(COLLAPSED_DRAG_MAX_Y, gestureState.dy));
-          dragOffset.setValue(nextOffset);
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          // Expanding should require less travel than dismissal, because closing
-          // from a half-open sheet is the more destructive gesture.
-          const draggedUp = gestureState.dy < EXPAND_DRAG_THRESHOLD_Y;
-          const draggedDown = gestureState.dy > DISMISS_DRAG_THRESHOLD_Y;
-
-          if (draggedUp) {
-            setIsExpanded(true);
-          } else if (draggedDown && isExpanded) {
-            setIsExpanded(false);
-          } else if (draggedDown) {
-            onClose();
-          }
-
-          createTiming(dragOffset, 0, reedMotion.durations.standard, reedEasing.easeOut).start();
-        },
-        onPanResponderTerminate: () => {
-          createTiming(dragOffset, 0, reedMotion.durations.standard, reedEasing.easeOut).start();
-        },
-      }),
-    [dragOffset, isExpanded, onClose],
-  );
-
   const snapshotTiles = getSnapshotTiles(summary);
   const modalityBreakdownRows = getModalityBreakdownRows(fullInsights.modalityBreakdown.buckets);
   const coarseMuscleShapeRows = getCoarseMuscleShapeRows(summary);
   const muscleBreakdownRows = useMemo(
-    () =>
-      [...summary.distribution.byGranularMuscleGroup]
-        .filter(group => getMuscleMetricValue(group, muscleMetricMode) > 0)
-        .sort((left, right) => {
-          const diff = getMuscleMetricValue(right, muscleMetricMode) - getMuscleMetricValue(left, muscleMetricMode);
-          if (diff !== 0) {
-            return diff;
-          }
-          return left.label.localeCompare(right.label);
-        }),
+    () => [...summary.distribution.byGranularMuscleGroup]
+      .filter(group => getMuscleMetricValue(group, muscleMetricMode) > 0)
+      .sort((left, right) => {
+        const diff = getMuscleMetricValue(right, muscleMetricMode) - getMuscleMetricValue(left, muscleMetricMode);
+        if (diff !== 0) {
+          return diff;
+        }
+        return left.label.localeCompare(right.label);
+      }),
     [muscleMetricMode, summary.distribution.byGranularMuscleGroup],
   );
   const muscleBreakdownShare = useMemo(
@@ -211,414 +200,354 @@ export function WorkoutSessionInsightsSheet({
   );
   const prHighlights = getPrHighlights(fullInsights);
   const mostDemandingExercise = summary.highlights.mostDemandingExercise;
-  if (!isMounted) {
-    return null;
-  }
 
   return (
-    <Modal animationType="none" onRequestClose={onClose} transparent visible={isMounted}>
-      <View style={styles.sessionInsightsOverlay}>
-        <Animated.View
+    <BottomSheetScrollView
+      contentContainerStyle={[styles.sessionInsightsScrollContent, { paddingBottom: insets.bottom + 18 + hiddenBelow }]}
+      showsVerticalScrollIndicator={false}
+      style={styles.sessionInsightsScroll}
+    >
+      <View style={styles.sessionInsightsSnapshotBlock}>
+        <ReedText variant="bodyStrong">Snapshot</ReedText>
+        <View style={[styles.sessionInsightsSnapshotGrid, isCompact && styles.sessionInsightsSnapshotGridCompact]}>
+          {snapshotTiles.map(tile => (
+            <SnapshotTile
+              compact={isCompact}
+              icon={tile.icon}
+              key={tile.key}
+              label={tile.label}
+              subLabel={tile.subLabel}
+              value={tile.value}
+            />
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.sessionInsightsSectionBlock}>
+        <ReedText variant="bodyStrong">Session shape</ReedText>
+        <ReedText tone="muted" variant="caption">
+          Modality mix
+        </ReedText>
+        <View
           style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: scrim.backgroundColor,
-              opacity: overlayOpacity,
-              pointerEvents: 'none',
-            },
+            styles.sessionInsightsShapeStack,
+            { backgroundColor: theme.colors.line },
           ]}
-        />
-        <Pressable onPress={onClose} style={StyleSheet.absoluteFill} />
-
-        <Animated.View style={[styles.sessionInsightsFrame, panelStyle]}>
-          <GlassSurface
-            contentStyle={styles.sessionInsightsContent}
-            style={styles.sessionInsightsPanel}
-          >
-            <View {...panResponder.panHandlers} style={styles.sessionInsightsHandleArea}>
-              <View style={[styles.sessionInsightsHandle, { backgroundColor: theme.colors.handleFill }]} />
-            </View>
-
-            <View style={styles.sessionInsightsHeader}>
-              <View style={styles.sessionInsightsHeaderCopy}>
-                <ReedText variant="section">Session insights</ReedText>
-              </View>
-
-              <View style={styles.sessionInsightsHeaderActions}>
-                <Pressable
-                  accessibilityLabel={isExpanded ? 'Collapse insights' : 'Expand insights'}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={() => setIsExpanded(current => !current)}
-                  style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
-                >
-                  <Ionicons
-                    color={String(theme.colors.textMuted)}
-                    name={isExpanded ? 'contract-outline' : 'expand-outline'}
-                    size={18}
-                  />
-                </Pressable>
-                <Pressable
-                  accessibilityLabel="Close insights"
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  onPress={onClose}
-                  style={({ pressed }) => [styles.sheetClose, getTapScaleStyle(pressed)]}
-                >
-                  <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
-                </Pressable>
-              </View>
-            </View>
-
-            <ScrollView
-              contentContainerStyle={styles.sessionInsightsScrollContent}
-              showsVerticalScrollIndicator={false}
-              style={styles.sessionInsightsScroll}
-            >
-              <View style={styles.sessionInsightsSnapshotBlock}>
-                <ReedText variant="bodyStrong">Snapshot</ReedText>
-                <View style={[styles.sessionInsightsSnapshotGrid, isCompact && styles.sessionInsightsSnapshotGridCompact]}>
-                  {snapshotTiles.map(tile => (
-                    <SnapshotTile
-                      compact={isCompact}
-                      icon={tile.icon}
-                      key={tile.key}
-                      label={tile.label}
-                      subLabel={tile.subLabel}
-                      value={tile.value}
-                    />
-                  ))}
-                </View>
-              </View>
-
-              <View style={styles.sessionInsightsSectionBlock}>
-                <ReedText variant="bodyStrong">Session shape</ReedText>
-                <ReedText tone="muted" variant="caption">
-                  Modality mix
-                </ReedText>
+        >
+          {modalityBreakdownRows.length > 0
+            ? modalityBreakdownRows.map(row => (
                 <View
+                  key={row.key}
                   style={[
-                    styles.sessionInsightsShapeStack,
-                    { backgroundColor: theme.colors.controlBorder },
-                  ]}
-                >
-                  {modalityBreakdownRows.length > 0
-                    ? modalityBreakdownRows.map(row => (
-                        <View
-                          key={row.key}
-                          style={[
-                            styles.sessionInsightsShapeStackSegment,
-                            {
-                              backgroundColor: row.color,
-                              flex: Math.max(row.ratio, 0.0001),
-                            },
-                          ]}
-                        >
-                          {row.ratio >= 10 ? (
-                            <ReedText style={styles.sessionInsightsShapeStackText} variant="caption">
-                              {row.ratio}%
-                            </ReedText>
-                          ) : null}
-                        </View>
-                      ))
-                    : (
-                        <View style={styles.sessionInsightsShapeStackSegmentEmpty}>
-                          <ReedText tone="muted" variant="caption">
-                            No data
-                          </ReedText>
-                        </View>
-                      )}
-                </View>
-                <View style={styles.sessionInsightsShapeLegend}>
-                  {modalityBreakdownRows.map(row => (
-                    <View key={`legend-${row.key}`} style={styles.sessionInsightsShapeLegendItem}>
-                      <View style={[styles.sessionInsightsShapeLegendDot, { backgroundColor: row.color }]} />
-                      <ReedText style={styles.sessionInsightsShapeLegendText} tone="muted" variant="caption">
-                        {row.label} {row.ratio}%
-                      </ReedText>
-                    </View>
-                  ))}
-                </View>
-
-                {coarseMuscleShapeRows.length > 0 ? (
-                  <>
-                    <ReedText tone="muted" variant="caption">
-                      Muscle umbrella
-                    </ReedText>
-                    <View
-                      style={[
-                        styles.sessionInsightsShapeStack,
-                        { backgroundColor: theme.colors.controlBorder },
-                      ]}
-                    >
-                      {coarseMuscleShapeRows.map(row => (
-                        <View
-                          key={`coarse-shape-${row.key}`}
-                          style={[
-                            styles.sessionInsightsShapeStackSegment,
-                            {
-                              backgroundColor: row.color,
-                              flex: Math.max(row.ratio, 0.0001),
-                            },
-                          ]}
-                        >
-                          {row.ratio >= 12 ? (
-                            <ReedText style={styles.sessionInsightsShapeStackText} variant="caption">
-                              {row.ratio}%
-                            </ReedText>
-                          ) : null}
-                        </View>
-                      ))}
-                    </View>
-                    <View style={styles.sessionInsightsShapeLegend}>
-                      {coarseMuscleShapeRows.map(row => (
-                        <View key={`coarse-legend-${row.key}`} style={styles.sessionInsightsShapeLegendItem}>
-                          <View style={[styles.sessionInsightsShapeLegendDot, { backgroundColor: row.color }]} />
-                          <ReedText style={styles.sessionInsightsShapeLegendText} tone="muted" variant="caption">
-                            {row.label} {row.ratio}%
-                          </ReedText>
-                        </View>
-                      ))}
-                    </View>
-                  </>
-                ) : null}
-
-                {isEarly ? (
-                  <ReedText tone="muted" variant="caption">
-                    Shape will stabilize after a few more logged sets.
-                  </ReedText>
-                ) : null}
-              </View>
-
-              <View style={styles.sessionInsightsSectionBlock}>
-                <ReedText variant="bodyStrong">Muscle groups</ReedText>
-                <View style={styles.sessionInsightsBreakdownControlsRow}>
-                  <SegmentedControl<MuscleBreakdownMetric>
-                    compact
-                    onChange={setMuscleMetricMode}
-                    options={[
-                      { label: 'Sets', value: 'sets' },
-                      { label: 'Reps', value: 'reps' },
-                      { label: 'Volume', value: 'volume' },
-                    ]}
-                    style={styles.sessionInsightsBreakdownControl}
-                    value={muscleMetricMode}
-                    variant="pill"
-                  />
-                </View>
-
-                {muscleBreakdownSegments.length > 0 ? (
-                  <View style={[styles.sessionInsightsBreakdownRow, isCompact && styles.sessionInsightsBreakdownRowCompact]}>
-                    <SessionMuscleDonut
-                      segments={muscleBreakdownSegments.map(segment => ({
-                        color: segment.color,
-                        id: segment.groupId,
-                        percent: segment.percent,
-                      }))}
-                      subtitle={muscleMetricMode === 'sets' ? 'sets' : muscleMetricMode === 'reps' ? 'reps' : 'volume'}
-                      value={formatMuscleMetricSummaryValue(muscleMetricMode, muscleBreakdownTotal)}
-                    />
-                    <View style={styles.sessionInsightsBreakdownLegend}>
-                      {muscleBreakdownSegments.slice(0, 6).map(segment => (
-                        <View key={`muscle-legend-${segment.groupId}`} style={styles.sessionInsightsBreakdownLegendRow}>
-                          <View style={[styles.sessionInsightsBreakdownLegendDot, { backgroundColor: segment.color }]} />
-                          <ReedText style={styles.sessionInsightsBreakdownLegendLabel} variant="caption">
-                            {segment.label}
-                          </ReedText>
-                          <ReedText style={styles.sessionInsightsBreakdownLegendValue} tone="muted" variant="caption">
-                            {segment.percent}% ({formatMuscleMetricLegendValue(muscleMetricMode, segment.value)})
-                          </ReedText>
-                        </View>
-                      ))}
-                    </View>
-                  </View>
-                ) : (
-                  <View
-                    style={[
-                      styles.sessionInsightsBreakdownEmpty,
-                      { borderColor: theme.colors.controlBorder },
-                    ]}
-                  >
-                    <ReedText tone="muted" variant="caption">
-                      No muscle group data yet
-                    </ReedText>
-                  </View>
-                )}
-              </View>
-
-              {!isEarly ? (
-                <View style={styles.sessionInsightsSectionBlock}>
-                  <ReedText variant="bodyStrong">Intensity & recovery</ReedText>
-                  <View style={styles.sessionInsightsMetricGrid}>
-                    <MetricTile label="Avg RPE" value={summary.intensity.averageRpe === null ? '—' : summary.intensity.averageRpe.toFixed(1)} />
-                    <MetricTile label="Max RPE" value={summary.intensity.highestRpe === null ? '—' : summary.intensity.highestRpe.toFixed(1)} />
-                    <MetricTile label="Avg rest" value={summary.recovery.averageRestSeconds === null ? '—' : formatClock(summary.recovery.averageRestSeconds)} />
-                    <MetricTile label="Total rest" value={summary.recovery.totalRestSeconds > 0 ? formatCompactMinutes(summary.recovery.totalRestSeconds) : '—'} />
-                  </View>
-                </View>
-              ) : null}
-
-              <View style={styles.sessionInsightsSectionBlock}>
-                <ReedText variant="bodyStrong">Highlights</ReedText>
-                <View
-                  style={[
-                    styles.sessionInsightsHighlightsSummaryShell,
-                    isCompact && styles.sessionInsightsHighlightsSummaryShellCompact,
+                    styles.sessionInsightsShapeStackSegment,
                     {
-                      backgroundColor: theme.colors.controlFill,
-                      borderColor: theme.colors.controlBorder,
+                      backgroundColor: row.color,
+                      flex: Math.max(row.ratio, 0.0001),
                     },
                   ]}
                 >
-                  <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
-                    <Ionicons color="#d97706" name="trophy-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
-                      <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
-                        PRs
-                      </ReedText>
-                      <ReedText style={styles.sessionInsightsHighlightsSummaryValue} variant="section">
-                        {summary.highlights.prCount}
-                      </ReedText>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.sessionInsightsHighlightsSummaryDivider,
-                      isCompact && styles.sessionInsightsHighlightsSummaryDividerCompact,
-                      { backgroundColor: theme.colors.controlBorder },
-                    ]}
-                  />
-
-                  <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
-                    <Ionicons color="#f59e0b" name="star-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
-                      <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
-                        Near PRs
-                      </ReedText>
-                      <ReedText style={styles.sessionInsightsHighlightsSummaryValue} variant="section">
-                        {summary.highlights.nearPrCount}
-                      </ReedText>
-                    </View>
-                  </View>
-
-                  <View
-                    style={[
-                      styles.sessionInsightsHighlightsSummaryDivider,
-                      isCompact && styles.sessionInsightsHighlightsSummaryDividerCompact,
-                      { backgroundColor: theme.colors.controlBorder },
-                    ]}
-                  />
-
-                  <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
-                    <Ionicons color="#ea580c" name="flame-outline" size={15} />
-                    <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
-                      <ReedText
-                        style={styles.sessionInsightsHighlightsSummaryLabel}
-                        tone="muted"
-                        variant="caption"
-                      >
-                        Most demanding
-                      </ReedText>
-                      <ReedText
-                        numberOfLines={2}
-                        style={styles.sessionInsightsHighlightsSummaryMostDemanding}
-                        variant="bodyStrong"
-                      >
-                        {mostDemandingExercise?.exerciseName ?? '—'}
-                      </ReedText>
-                      {mostDemandingExercise ? (
-                        <ReedText
-                          numberOfLines={1}
-                          style={styles.sessionInsightsHighlightsSummaryMostDemandingMeta}
-                          tone="muted"
-                          variant="caption"
-                        >
-                          ({mostDemandingExercise.averageRpe.toFixed(1)} RPE)
-                        </ReedText>
-                      ) : null}
-                    </View>
-                  </View>
-                </View>
-
-                {isExpanded ? (
-                  prHighlights.length > 0 ? (
-                    <View style={styles.sessionInsightsList}>
-                      {prHighlights.map(entry => (
-                        <View
-                          key={`pr-${entry.label}-${entry.typeLabel}`}
-                          style={styles.sessionInsightsHighlightRow}
-                        >
-                          <View style={styles.sessionInsightsListCopy}>
-                            <ReedText variant="bodyStrong">{entry.label}</ReedText>
-                            <ReedText tone="muted" variant="caption">
-                              {entry.meta}
-                            </ReedText>
-                          </View>
-                          <ReedText
-                            style={[
-                              styles.sessionInsightsHighlightTypeText,
-                              {
-                                color: getPrTypeColor(entry.type),
-                              },
-                            ]}
-                            variant="caption"
-                          >
-                            {entry.typeLabel}
-                          </ReedText>
-                        </View>
-                      ))}
-                    </View>
-                  ) : (
-                    <ReedText tone="muted" variant="caption">
-                      PR highlights will appear as this session hits prior records.
+                  {row.ratio >= 10 ? (
+                    <ReedText style={styles.sessionInsightsShapeStackText} variant="caption">
+                      {row.ratio}%
                     </ReedText>
-                  )
-                ) : null}
-              </View>
+                  ) : null}
+                </View>
+              ))
+            : (
+                <View style={styles.sessionInsightsShapeStackSegmentEmpty}>
+                  <ReedText tone="muted" variant="caption">
+                    No data
+                  </ReedText>
+                </View>
+              )}
+        </View>
+        <View style={styles.sessionInsightsShapeLegend}>
+          {modalityBreakdownRows.map(row => (
+            <View key={`legend-${row.key}`} style={styles.sessionInsightsShapeLegendItem}>
+              <View style={[styles.sessionInsightsShapeLegendDot, { backgroundColor: row.color }]} />
+              <ReedText style={styles.sessionInsightsShapeLegendText} tone="muted" variant="caption">
+                {row.label} {row.ratio}%
+              </ReedText>
+            </View>
+          ))}
+        </View>
 
-              {isExpanded ? (
-                <>
-                  <View style={styles.sessionInsightsSectionBlock}>
-                    <ReedText variant="bodyStrong">Intensity analysis</ReedText>
-                    <View style={styles.sessionInsightsStatList}>
-                      <MetricRow
-                        label="Average RPE"
-                        value={fullInsights.intensityAnalysis.averageRpe === null ? '—' : fullInsights.intensityAnalysis.averageRpe.toFixed(1)}
-                      />
-                      <MetricRow
-                        label="Highest RPE"
-                        value={fullInsights.intensityAnalysis.highestRpe === null ? '—' : fullInsights.intensityAnalysis.highestRpe.toFixed(1)}
-                      />
-                      <MetricRow
-                        label="Density"
-                        value={fullInsights.exerciseMap.setsPerHour === null ? '—' : `${formatCompactNumber(fullInsights.exerciseMap.setsPerHour)} sets/h`}
-                      />
-                    </View>
-                  </View>
+        {coarseMuscleShapeRows.length > 0 ? (
+          <>
+            <ReedText tone="muted" variant="caption">
+              Muscle umbrella
+            </ReedText>
+            <View
+              style={[
+                styles.sessionInsightsShapeStack,
+                { backgroundColor: theme.colors.line },
+              ]}
+            >
+              {coarseMuscleShapeRows.map(row => (
+                <View
+                  key={`coarse-shape-${row.key}`}
+                  style={[
+                    styles.sessionInsightsShapeStackSegment,
+                    {
+                      backgroundColor: row.color,
+                      flex: Math.max(row.ratio, 0.0001),
+                    },
+                  ]}
+                >
+                  {row.ratio >= 12 ? (
+                    <ReedText style={styles.sessionInsightsShapeStackText} variant="caption">
+                      {row.ratio}%
+                    </ReedText>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+            <View style={styles.sessionInsightsShapeLegend}>
+              {coarseMuscleShapeRows.map(row => (
+                <View key={`coarse-legend-${row.key}`} style={styles.sessionInsightsShapeLegendItem}>
+                  <View style={[styles.sessionInsightsShapeLegendDot, { backgroundColor: row.color }]} />
+                  <ReedText style={styles.sessionInsightsShapeLegendText} tone="muted" variant="caption">
+                    {row.label} {row.ratio}%
+                  </ReedText>
+                </View>
+              ))}
+            </View>
+          </>
+        ) : null}
 
-                  <View style={styles.sessionInsightsSectionBlock}>
-                    <ReedText variant="bodyStrong">Recovery analysis</ReedText>
-                    <View style={styles.sessionInsightsStatList}>
-                      <MetricRow
-                        label="Longest rest"
-                        value={fullInsights.recoveryAnalysis.longestRestSeconds ? formatClock(fullInsights.recoveryAnalysis.longestRestSeconds) : '—'}
-                      />
-                      <MetricRow
-                        label="Shortest rest"
-                        value={fullInsights.recoveryAnalysis.shortestRestSeconds ? formatClock(fullInsights.recoveryAnalysis.shortestRestSeconds) : '—'}
-                      />
-                      <MetricRow
-                        label="Average rest"
-                        value={fullInsights.recoveryAnalysis.averageRestSeconds ? formatClock(fullInsights.recoveryAnalysis.averageRestSeconds) : '—'}
-                      />
-                    </View>
-                  </View>
-                </>
-              ) : null}
-            </ScrollView>
-          </GlassSurface>
-        </Animated.View>
+        {isEarly ? (
+          <ReedText tone="muted" variant="caption">
+            Shape will stabilize after a few more logged sets.
+          </ReedText>
+        ) : null}
       </View>
-    </Modal>
+
+      <View style={styles.sessionInsightsSectionBlock}>
+        <ReedText variant="bodyStrong">Muscle groups</ReedText>
+        <View style={styles.sessionInsightsBreakdownControlsRow}>
+          <SegmentedControl<MuscleBreakdownMetric>
+            compact
+            onChange={setMuscleMetricMode}
+            options={[
+              { label: 'Sets', value: 'sets' },
+              { label: 'Reps', value: 'reps' },
+              { label: 'Volume', value: 'volume' },
+            ]}
+            style={styles.sessionInsightsBreakdownControl}
+            value={muscleMetricMode}
+            variant="pill"
+          />
+        </View>
+
+        {muscleBreakdownSegments.length > 0 ? (
+          <View style={[styles.sessionInsightsBreakdownRow, isCompact && styles.sessionInsightsBreakdownRowCompact]}>
+            <SessionMuscleDonut
+              segments={muscleBreakdownSegments.map(segment => ({
+                color: segment.color,
+                id: segment.groupId,
+                percent: segment.percent,
+              }))}
+              subtitle={muscleMetricMode === 'sets' ? 'sets' : muscleMetricMode === 'reps' ? 'reps' : 'volume'}
+              value={formatMuscleMetricSummaryValue(muscleMetricMode, muscleBreakdownTotal)}
+            />
+            <View style={styles.sessionInsightsBreakdownLegend}>
+              {muscleBreakdownSegments.slice(0, 6).map(segment => (
+                <View key={`muscle-legend-${segment.groupId}`} style={styles.sessionInsightsBreakdownLegendRow}>
+                  <View style={[styles.sessionInsightsBreakdownLegendDot, { backgroundColor: segment.color }]} />
+                  <ReedText style={styles.sessionInsightsBreakdownLegendLabel} variant="caption">
+                    {segment.label}
+                  </ReedText>
+                  <ReedText style={styles.sessionInsightsBreakdownLegendValue} tone="muted" variant="caption">
+                    {segment.percent}% ({formatMuscleMetricLegendValue(muscleMetricMode, segment.value)})
+                  </ReedText>
+                </View>
+              ))}
+            </View>
+          </View>
+        ) : (
+          <View
+            style={[
+              styles.sessionInsightsBreakdownEmpty,
+              { backgroundColor: theme.colors.surfaceRaised },
+            ]}
+          >
+            <ReedText tone="muted" variant="caption">
+              No muscle group data yet
+            </ReedText>
+          </View>
+        )}
+      </View>
+
+      {!isEarly ? (
+        <View style={styles.sessionInsightsSectionBlock}>
+          <ReedText variant="bodyStrong">Intensity & recovery</ReedText>
+          <View style={styles.sessionInsightsMetricGrid}>
+            <MetricTile label="Avg RPE" value={summary.intensity.averageRpe === null ? '—' : summary.intensity.averageRpe.toFixed(1)} />
+            <MetricTile label="Max RPE" value={summary.intensity.highestRpe === null ? '—' : summary.intensity.highestRpe.toFixed(1)} />
+            <MetricTile label="Avg rest" value={summary.recovery.averageRestSeconds === null ? '—' : formatClock(summary.recovery.averageRestSeconds)} />
+            <MetricTile label="Total rest" value={summary.recovery.totalRestSeconds > 0 ? formatCompactMinutes(summary.recovery.totalRestSeconds) : '—'} />
+          </View>
+        </View>
+      ) : null}
+
+      <View style={styles.sessionInsightsSectionBlock}>
+        <ReedText variant="bodyStrong">Highlights</ReedText>
+        <View
+          style={[
+            styles.sessionInsightsHighlightsSummaryShell,
+            isCompact && styles.sessionInsightsHighlightsSummaryShellCompact,
+            {
+              backgroundColor: theme.colors.surfaceRaised,
+            },
+          ]}
+        >
+          <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
+            <Ionicons color="#d97706" name="trophy-outline" size={15} />
+            <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
+              <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
+                PRs
+              </ReedText>
+              <ReedText style={styles.sessionInsightsHighlightsSummaryValue} variant="headline">
+                {summary.highlights.prCount}
+              </ReedText>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.sessionInsightsHighlightsSummaryDivider,
+              isCompact && styles.sessionInsightsHighlightsSummaryDividerCompact,
+              { backgroundColor: theme.colors.line },
+            ]}
+          />
+
+          <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
+            <Ionicons color="#f59e0b" name="star-outline" size={15} />
+            <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
+              <ReedText style={styles.sessionInsightsHighlightsSummaryLabel} tone="muted" variant="caption">
+                Near PRs
+              </ReedText>
+              <ReedText style={styles.sessionInsightsHighlightsSummaryValue} variant="headline">
+                {summary.highlights.nearPrCount}
+              </ReedText>
+            </View>
+          </View>
+
+          <View
+            style={[
+              styles.sessionInsightsHighlightsSummaryDivider,
+              isCompact && styles.sessionInsightsHighlightsSummaryDividerCompact,
+              { backgroundColor: theme.colors.line },
+            ]}
+          />
+
+          <View style={[styles.sessionInsightsHighlightsSummaryCell, isCompact && styles.sessionInsightsHighlightsSummaryCellCompact]}>
+            <Ionicons color="#ea580c" name="flame-outline" size={15} />
+            <View style={isCompact ? styles.sessionInsightsHighlightsSummaryTextStackCompact : styles.sessionInsightsHighlightsSummaryTextStack}>
+              <ReedText
+                style={styles.sessionInsightsHighlightsSummaryLabel}
+                tone="muted"
+                variant="caption"
+              >
+                Most demanding
+              </ReedText>
+              <ReedText
+                numberOfLines={2}
+                style={styles.sessionInsightsHighlightsSummaryMostDemanding}
+                variant="bodyStrong"
+              >
+                {mostDemandingExercise?.exerciseName ?? '—'}
+              </ReedText>
+              {mostDemandingExercise ? (
+                <ReedText
+                  numberOfLines={1}
+                  style={styles.sessionInsightsHighlightsSummaryMostDemandingMeta}
+                  tone="muted"
+                  variant="caption"
+                >
+                  ({mostDemandingExercise.averageRpe.toFixed(1)} RPE)
+                </ReedText>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        {isExpanded ? (
+          prHighlights.length > 0 ? (
+            <View style={styles.sessionInsightsList}>
+              {prHighlights.map(entry => (
+                <View
+                  key={`pr-${entry.label}-${entry.typeLabel}`}
+                  style={styles.sessionInsightsHighlightRow}
+                >
+                  <View style={styles.sessionInsightsListCopy}>
+                    <ReedText variant="bodyStrong">{entry.label}</ReedText>
+                    <ReedText tone="muted" variant="caption">
+                      {entry.meta}
+                    </ReedText>
+                  </View>
+                  <ReedText
+                    style={[
+                      styles.sessionInsightsHighlightTypeText,
+                      {
+                        color: getPrTypeColor(entry.type),
+                      },
+                    ]}
+                    variant="caption"
+                  >
+                    {entry.typeLabel}
+                  </ReedText>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <ReedText tone="muted" variant="caption">
+              PR highlights will appear as this session hits prior records.
+            </ReedText>
+          )
+        ) : null}
+      </View>
+
+      {isExpanded ? (
+        <>
+          <View style={styles.sessionInsightsSectionBlock}>
+            <ReedText variant="bodyStrong">Intensity analysis</ReedText>
+            <View style={styles.sessionInsightsStatList}>
+              <MetricRow
+                label="Average RPE"
+                value={fullInsights.intensityAnalysis.averageRpe === null ? '—' : fullInsights.intensityAnalysis.averageRpe.toFixed(1)}
+              />
+              <MetricRow
+                label="Highest RPE"
+                value={fullInsights.intensityAnalysis.highestRpe === null ? '—' : fullInsights.intensityAnalysis.highestRpe.toFixed(1)}
+              />
+              <MetricRow
+                label="Density"
+                value={fullInsights.exerciseMap.setsPerHour === null ? '—' : `${formatCompactNumber(fullInsights.exerciseMap.setsPerHour)} sets/h`}
+              />
+            </View>
+          </View>
+
+          <View style={styles.sessionInsightsSectionBlock}>
+            <ReedText variant="bodyStrong">Recovery analysis</ReedText>
+            <View style={styles.sessionInsightsStatList}>
+              <MetricRow
+                label="Longest rest"
+                value={fullInsights.recoveryAnalysis.longestRestSeconds ? formatClock(fullInsights.recoveryAnalysis.longestRestSeconds) : '—'}
+              />
+              <MetricRow
+                label="Shortest rest"
+                value={fullInsights.recoveryAnalysis.shortestRestSeconds ? formatClock(fullInsights.recoveryAnalysis.shortestRestSeconds) : '—'}
+              />
+              <MetricRow
+                label="Average rest"
+                value={fullInsights.recoveryAnalysis.averageRestSeconds ? formatClock(fullInsights.recoveryAnalysis.averageRestSeconds) : '—'}
+              />
+            </View>
+          </View>
+        </>
+      ) : null}
+    </BottomSheetScrollView>
   );
 }
 
@@ -1079,19 +1008,18 @@ function SnapshotTile({
         styles.sessionInsightsSnapshotTile,
         compact ? styles.sessionInsightsSnapshotTileCompact : null,
         {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
+          backgroundColor: theme.colors.surfaceRaised,
         },
       ]}
     >
-      <Ionicons color={String(theme.colors.textMuted)} name={icon} size={16} />
+      <Ionicons color={String(theme.colors.inkMuted)} name={icon} size={16} />
       <View style={{ width: '100%', alignItems: 'center' }}>
         <ReedText
           adjustsFontSizeToFit
           minimumFontScale={0.5}
           numberOfLines={1}
           style={styles.sessionInsightsSnapshotValue}
-          variant="section"
+          variant="headline"
         >
           {value}
         </ReedText>
@@ -1139,15 +1067,14 @@ function MetricTile({
       style={[
         styles.sessionInsightsMetricTile,
         {
-          backgroundColor: theme.colors.controlFill,
-          borderColor: theme.colors.controlBorder,
+          backgroundColor: theme.colors.surfaceRaised,
         },
       ]}
     >
       <ReedText tone="muted" variant="caption">
         {label}
       </ReedText>
-      <ReedText variant="section">{value}</ReedText>
+      <ReedText variant="headline">{value}</ReedText>
     </View>
   );
 }

@@ -1,23 +1,25 @@
+import { parseTranscriptionResponse } from './transcription-response';
 import { appEnv } from '@/lib/env';
 import { sizeBucket, startClientWideEvent } from '@/lib/client-observability';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import type { LocalSpeechRecording } from './audio-recording';
 
-export type SpeechTranscriptionActor = 'chat' | 'session_notes';
+export type SpeechTranscriptionActor = 'chat' | 'session_notes' | 'onboarding_notes';
 
 export type SpeechTranscriptionResponse = {
   text: string;
 };
 
 type SpeechHttpResponse = {
-  json: () => Promise<{ code?: string; error?: string; text?: string }>;
+  json: () => Promise<unknown>;
   ok: boolean;
   status: number;
 };
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAYS_MS = [700, 1600];
+const ERROR_CODES = new Set(['configuration', 'empty_audio', 'empty_transcript', 'provider', 'retryable', 'too_large', 'unauthorized', 'bad_request', 'transcription_failed']);
 
 export class SpeechTranscriptionError extends Error {
   code: string;
@@ -97,15 +99,16 @@ async function transcribeOnce(args: {
     : await transcribeWithNativeBody(args, token, setAttrs);
 
   setAttrs({ 'speech.step': 'response_parse' });
-  const payload = await response.json().catch(() => ({} as { code?: string; error?: string; text?: string }));
+  const payload = parseTranscriptionResponse(await response.json().catch(() => null));
   if (!response.ok) {
     throw new SpeechTranscriptionError(
-      payload.error || 'Transcription failed.',
-      payload.code || 'transcription_failed',
+      payload?.error || 'Transcription failed.',
+      payload?.code && ERROR_CODES.has(payload.code) ? payload.code : 'transcription_failed',
       response.status === 408 || response.status === 429 || response.status >= 500,
     );
   }
 
+  if (!payload) throw new SpeechTranscriptionError('Invalid transcription response.', 'transcription_failed', false);
   const text = payload.text?.trim();
   if (!text) {
     throw new SpeechTranscriptionError('No speech was detected.', 'empty_transcript', false);
@@ -139,7 +142,7 @@ async function transcribeWithWebMultipart(
       Authorization: `Bearer ${token}`,
     },
     method: 'POST',
-  }) as SpeechHttpResponse;
+  });
 }
 
 async function transcribeWithNativeBody(
@@ -173,7 +176,7 @@ async function transcribeWithNativeBody(
   });
 
   return {
-    json: async () => JSON.parse(response.body || '{}') as { code?: string; error?: string; text?: string },
+    json: async () => JSON.parse(response.body || '{}') as unknown,
     ok: response.status >= 200 && response.status < 300,
     status: response.status,
   } satisfies SpeechHttpResponse;

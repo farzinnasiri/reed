@@ -47,7 +47,7 @@ async function reconcileProfile(ctx: ActionCtx, profileId: Id<'profiles'>, now: 
 
   const sourceFingerprint = simpleHash(JSON.stringify({
     messages: context.messages.map((message: { content: string; createdAt: number; role: string }) => [message.createdAt, message.role, message.content]),
-    sessions: context.sessions.map((session: { endedAt: number | null; id: string; startedAt: number }) => [session.id, session.startedAt, session.endedAt]),
+    sessions: context.sessions.map((session: { durationMin: number | null; endedAt: number | null; id: string; startedAt: number }) => [session.id, session.startedAt, session.endedAt, session.durationMin]),
   }));
   if (sourceFingerprint === context.latestSourceFingerprint) return;
   const prompt = await ctx.runQuery(internal.reed.loadPromptByKey, { key: COACHING_MEMORY_PROMPT_KEY });

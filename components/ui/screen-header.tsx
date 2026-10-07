@@ -29,6 +29,7 @@ type ModalHeader = ScreenHeaderBase & {
 
 type DetailHeader = ScreenHeaderBase & {
   variant: 'detail';
+  action?: HeaderAction;
   onBack: () => void;
   backAccessibilityLabel?: string;
   title: string;
@@ -48,10 +49,9 @@ export function ScreenHeader(props: ScreenHeaderProps) {
             accessibilityLabel={props.action.accessibilityLabel}
             onPress={props.action.onPress}
             shape="pill"
-            variant="glass"
           >
             <Ionicons
-              color={String(theme.colors.textPrimary)}
+              color={String(theme.colors.ink)}
               name={props.action.iconName}
               size={props.action.iconSize ?? 18}
             />
@@ -70,9 +70,8 @@ export function ScreenHeader(props: ScreenHeaderProps) {
               accessibilityLabel={props.backAccessibilityLabel ?? 'Go back'}
               onPress={props.onBack}
               shape="pill"
-              variant="glass"
             >
-              <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={18} />
+              <Ionicons color={String(theme.colors.ink)} name="arrow-back" size={18} />
             </ReedIconButton>
           ) : null}
         </View>
@@ -91,11 +90,23 @@ export function ScreenHeader(props: ScreenHeaderProps) {
           accessibilityLabel={props.backAccessibilityLabel ?? 'Go back'}
           onPress={props.onBack}
           shape="pill"
-          variant="glass"
         >
-          <Ionicons color={String(theme.colors.textPrimary)} name="arrow-back" size={16} />
+          <Ionicons color={String(theme.colors.ink)} name="arrow-back" size={16} />
         </ReedIconButton>
-        <ReedText variant="bodyStrong">{props.title}</ReedText>
+        <ReedText style={styles.detailTitle} variant="bodyStrong">{props.title}</ReedText>
+        {props.action ? (
+          <ReedIconButton
+            accessibilityLabel={props.action.accessibilityLabel}
+            onPress={props.action.onPress}
+            shape="pill"
+          >
+            <Ionicons
+              color={String(theme.colors.ink)}
+              name={props.action.iconName}
+              size={props.action.iconSize ?? 18}
+            />
+          </ReedIconButton>
+        ) : null}
       </View>
     );
   }
@@ -126,6 +137,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: 12,
+  },
+  detailTitle: {
+    flex: 1,
   },
   slot: {
     height: 44,

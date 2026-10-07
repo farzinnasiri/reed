@@ -33,73 +33,110 @@ export function useSpeechDraft(
   const recorderState = useAudioRecorderState(recorder, 80);
   const recordingStartedAtRef = useRef(0);
   const cachedRecordingRef = useRef<LocalSpeechRecording | null>(null);
+  const generation = useRef(0);
+  const status = useRef<SpeechDraftStatus | 'resetting'>('idle');
+  const pendingStart = useRef<Promise<number> | null>(null);
   const [state, setState] = useState<Omit<SpeechDraftState, 'voiceLevel'>>({ error: null, status: 'idle' });
 
   useEffect(() => () => {
-    clearLocalSpeechRecording(cachedRecordingRef.current).catch(() => {});
-  }, []);
+    generation.current += 1;
+    const start = pendingStart.current;
+    void (async () => {
+      await start?.catch(() => undefined);
+      if (start || status.current === 'listening' || recordingStartedAtRef.current > 0) await recorder.stop().catch(() => undefined);
+      await clearLocalSpeechRecording(cachedRecordingRef.current);
+    })();
+  }, [recorder]);
 
-  const transcribeRecording = useCallback(async (recording: LocalSpeechRecording) => {
+  const fail = useCallback((error: unknown, operation: number) => {
+    if (generation.current !== operation) return;
+    const message = toSpeechDraftError(error);
+    status.current = onError ? 'idle' : 'failed';
+    onError?.(message);
+    setState({ error: onError ? null : message, status: status.current });
+  }, [onError]);
+
+  const transcribeRecording = useCallback(async (recording: LocalSpeechRecording, operation: number) => {
+    if (generation.current !== operation) return;
+    status.current = 'transcribing';
     setState({ error: null, status: 'transcribing' });
     try {
       const result = await transcribeLocalSpeechRecording({ actor, getToken, recording });
+      if (generation.current !== operation) return;
       onText(result.text);
-      await clearLocalSpeechRecording(recording);
-      if (cachedRecordingRef.current?.uri === recording.uri) {
-        cachedRecordingRef.current = null;
-      }
+      cachedRecordingRef.current = null;
+      status.current = 'idle';
       setState({ error: null, status: 'idle' });
     } catch (error) {
-      const message = toSpeechDraftError(error);
-      onError?.(message);
-      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
+      fail(error, operation);
+    } finally {
+      // Keep failed recordings for retry; cleanup cannot turn delivered text into a retry.
+      if (cachedRecordingRef.current !== recording) await clearLocalSpeechRecording(recording);
     }
-  }, [actor, getToken, onError, onText]);
+  }, [actor, fail, getToken, onText]);
 
   const start = useCallback(async () => {
-    if (state.status === 'listening' || state.status === 'transcribing') return;
+    if (status.current !== 'idle' && status.current !== 'failed') return;
+    const operation = ++generation.current;
+    status.current = 'listening';
     setState({ error: null, status: 'listening' });
+    const previous = cachedRecordingRef.current;
+    cachedRecordingRef.current = null;
+    void clearLocalSpeechRecording(previous);
+    const starting = startLocalSpeechRecording(recorder);
+    pendingStart.current = starting;
     try {
-      recordingStartedAtRef.current = await startLocalSpeechRecording(recorder);
+      const startedAt = await starting;
+      if (generation.current === operation) recordingStartedAtRef.current = startedAt;
     } catch (error) {
-      recordingStartedAtRef.current = 0;
-      const message = toSpeechDraftError(error);
-      onError?.(message);
-      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
+      fail(error, operation);
+    } finally {
+      if (pendingStart.current === starting) pendingStart.current = null;
     }
-  }, [onError, recorder, state.status]);
+  }, [fail, recorder]);
 
   const stop = useCallback(async () => {
-    if (state.status !== 'listening') return;
+    if (status.current !== 'listening') return;
+    const operation = generation.current;
+    status.current = 'transcribing';
+    setState({ error: null, status: 'transcribing' });
     try {
+      await pendingStart.current;
+      if (generation.current !== operation) return;
       const recording = await stopLocalSpeechRecording(recorder, recordingStartedAtRef.current);
+      if (generation.current !== operation) {
+        await clearLocalSpeechRecording(recording);
+        return;
+      }
       cachedRecordingRef.current = recording;
-      await transcribeRecording(recording);
+      await transcribeRecording(recording, operation);
     } catch (error) {
-      const message = toSpeechDraftError(error);
-      onError?.(message);
-      setState({ error: onError ? null : message, status: onError ? 'idle' : 'failed' });
+      fail(error, operation);
     } finally {
-      recordingStartedAtRef.current = 0;
+      if (generation.current === operation) recordingStartedAtRef.current = 0;
     }
-  }, [onError, recorder, state.status, transcribeRecording]);
+  }, [fail, recorder, transcribeRecording]);
 
   const retry = useCallback(async () => {
     const recording = cachedRecordingRef.current;
-    if (!recording || state.status === 'transcribing') return;
-    await transcribeRecording(recording);
-  }, [state.status, transcribeRecording]);
+    if (!recording || (status.current !== 'failed' && status.current !== 'idle')) return;
+    await transcribeRecording(recording, ++generation.current);
+  }, [transcribeRecording]);
 
   const reset = useCallback(async () => {
-    const cachedRecording = cachedRecordingRef.current;
+    const operation = ++generation.current;
+    const hadRecording = status.current === 'listening' || pendingStart.current !== null || recordingStartedAtRef.current > 0;
+    status.current = 'resetting';
+    const cached = cachedRecordingRef.current;
     cachedRecordingRef.current = null;
-    await clearLocalSpeechRecording(cachedRecording);
-    if (state.status === 'listening') {
-      await recorder.stop().catch(() => {});
-      recordingStartedAtRef.current = 0;
-    }
+    await pendingStart.current?.catch(() => undefined);
+    if (hadRecording) await recorder.stop().catch(() => undefined);
+    await clearLocalSpeechRecording(cached);
+    if (generation.current !== operation) return;
+    recordingStartedAtRef.current = 0;
+    status.current = 'idle';
     setState({ error: null, status: 'idle' });
-  }, [recorder, state.status]);
+  }, [recorder]);
 
   return {
     retry,

@@ -1,20 +1,34 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useMemo, useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { useMutation, useQuery } from 'convex/react';
+import { BottomSheetFlatList, BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useMutation, usePaginatedQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { GlassSurface } from '@/components/ui/glass-surface';
 import { ReedButton } from '@/components/ui/reed-button';
+import { ReedIconButton } from '@/components/ui/reed-icon-button';
 import { ReedInput } from '@/components/ui/reed-input';
+import { ReedSheet } from '@/components/ui/reed-sheet';
+import { ReedSheetTextInput } from '@/components/ui/reed-sheet-input';
 import { ReedText } from '@/components/ui/reed-text';
-import { blurActiveElementOnWeb } from '@/components/ui/focus';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
+import { bareInputStyle, blurActiveElementOnWeb } from '@/components/ui/focus';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 import { getTapScaleStyle } from '@/design/motion';
-import { ProgressRow, getProgressSlices, type TrainingTarget } from '../target-progress';
+import { useUserOperation } from '@/lib/use-user-operation';
 
-type MetricKind = 'exerciseMaxLoadKg' | 'exerciseTotalReps' | 'exerciseBestHoldSeconds' | 'exerciseTotalDurationSeconds' | 'cardioDistanceMeters' | 'cardioDurationSeconds' | 'sessionCount';
+// One height for the form and the exercise picker, so choosing an exercise never resizes the sheet.
+const SHEET_FRACTION = 0.9;
+
+type MetricKind =
+  | 'exerciseMaxLoadKg'
+  | 'exerciseTotalReps'
+  | 'exerciseBestHoldSeconds'
+  | 'exerciseTotalDurationSeconds'
+  | 'cardioDistanceMeters'
+  | 'cardioDurationSeconds'
+  | 'trainingDays';
 type Cadence = 'once' | 'daily' | 'weekly' | 'total';
 
 type ExerciseItem = {
@@ -30,167 +44,98 @@ const metricOptions: Array<{ kind: MetricKind; label: string; unit: string; requ
   { kind: 'exerciseTotalDurationSeconds', label: 'Exercise time', unit: 'sec', requiresExercise: true },
   { kind: 'cardioDistanceMeters', label: 'Distance', unit: 'm', requiresExercise: true },
   { kind: 'cardioDurationSeconds', label: 'Cardio time', unit: 'sec', requiresExercise: true },
-  { kind: 'sessionCount', label: 'Training days', unit: 'sessions', requiresExercise: false },
+  { kind: 'trainingDays', label: 'Training days', unit: 'days', requiresExercise: false },
 ];
-
-export function GoalsSurface() {
-  const targets = useQuery(api.trainingTargets.list, { includeArchived: false });
-  const completeManually = useMutation(api.trainingTargets.completeManually);
-  const archive = useMutation(api.trainingTargets.archive);
-  const [isCreating, setIsCreating] = useState(false);
-  const active = targets?.filter(target => target.status === 'active') ?? [];
-  const finished = targets?.filter(target => target.status !== 'active') ?? [];
-
-  function openCreateGoal() {
-    blurActiveElementOnWeb();
-    setIsCreating(true);
-  }
-
-  function closeCreateGoal() {
-    blurActiveElementOnWeb();
-    setIsCreating(false);
-  }
-
-  return (
-    <View style={styles.stack}>
-      <View style={styles.headerRow}>
-        <View>
-          <ReedText variant="bodyStrong">Concrete goals</ReedText>
-          <ReedText tone="muted" variant="caption">Measured from your logs.</ReedText>
-        </View>
-        <ReedButton label="New goal" onPress={openCreateGoal} />
-      </View>
-
-      {targets === undefined ? (
-        <View style={styles.loadingRow}><ActivityIndicator /><ReedText tone="muted">Loading goals.</ReedText></View>
-      ) : targets.length === 0 ? (
-        <EmptyGoals onCreate={openCreateGoal} />
-      ) : (
-        <View style={styles.stack}>
-          {active.map(target => (
-            <GoalRow
-              key={target._id}
-              onArchive={() => archive({ targetId: target._id })}
-              onComplete={() => completeManually({ targetId: target._id })}
-              target={target}
-            />
-          ))}
-          {finished.length > 0 ? <ReedText tone="muted" variant="caption">Completed / missed</ReedText> : null}
-          {finished.slice(0, 4).map(target => (
-            <GoalRow key={target._id} onArchive={() => archive({ targetId: target._id })} target={target} />
-          ))}
-        </View>
-      )}
-
-      <CreateGoalSheet visible={isCreating} onClose={closeCreateGoal} />
-    </View>
-  );
-}
-
-function EmptyGoals({ onCreate }: { onCreate: () => void }) {
-  const { theme } = useReedTheme();
-  return (
-    <View style={[styles.emptyState, { borderColor: theme.colors.controlBorder }]}> 
-      <ReedText variant="bodyStrong">No concrete goals yet</ReedText>
-      <ReedText tone="muted" variant="caption">Create a measurable target with a deadline. Reed will track it from sessions and quick logs.</ReedText>
-      <ReedButton label="Create first goal" onPress={onCreate} />
-    </View>
-  );
-}
-
-function GoalRow({ onArchive, onComplete, target }: { onArchive: () => void; onComplete?: () => void; target: TrainingTarget }) {
-  const { theme } = useReedTheme();
-  const progress = target.progressSummary;
-  const progressSlices = getProgressSlices(target);
-  return (
-    <View style={[styles.goalRow, { borderColor: theme.colors.controlBorder }]}> 
-      <View style={styles.goalTopLine}>
-        <ReedText variant="bodyStrong" style={styles.goalTitle}>{target.title}</ReedText>
-        <StatusPill status={target.status} />
-      </View>
-      <ReedText tone="muted" variant="caption">{target.previewText}</ReedText>
-      <View style={styles.goalProgressStack}>
-        {progressSlices.map(slice => (
-          <ProgressRow compact key={slice.label} slice={slice} />
-        ))}
-      </View>
-      <View style={styles.goalMetaRow}>
-        <ReedText tone="muted" variant="caption">{target.rule.cadence === 'daily' ? 'Daily target' : target.rule.cadence === 'weekly' ? 'Weekly target' : 'Target'}</ReedText>
-        <ReedText tone="muted" variant="caption">Due {formatDate(target.endsAt)}</ReedText>
-      </View>
-      {progress.totalPeriods ? <ReedText tone="muted" variant="caption">{progress.satisfiedPeriods ?? 0}/{progress.totalPeriods} periods complete</ReedText> : null}
-      <View style={styles.goalActions}>
-        {target.status === 'active' && onComplete ? <TextButton label="Mark complete" onPress={onComplete} /> : null}
-        {target.status !== 'archived' ? <TextButton label="Archive" onPress={onArchive} /> : null}
-        {target.completionSource ? <ReedText tone="muted" variant="caption">{target.completionSource === 'verified' ? 'Completed from logs' : 'Marked complete'}</ReedText> : null}
-      </View>
-    </View>
-  );
-}
-
-function StatusPill({ status }: { status: string }) {
-  const { theme } = useReedTheme();
-  return <View style={[styles.statusPill, { borderColor: theme.colors.controlBorder }]}><ReedText tone={status === 'missed' ? 'danger' : 'muted'} variant="caption">{status}</ReedText></View>;
-}
-
-function TextButton({ label, onPress }: { label: string; onPress: () => void }) {
-  const { theme } = useReedTheme();
-  return <Pressable onPress={onPress} style={({ pressed }) => [styles.textButton, getTapScaleStyle(pressed)]}><ReedText style={{ color: theme.colors.accentPrimary }} variant="caption">{label}</ReedText></Pressable>;
-}
 
 export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; visible: boolean }) {
   const { theme } = useReedTheme();
-  const controls = getGlassControlTokens(theme);
   const createTarget = useMutation(api.trainingTargets.create);
+  const insets = useSafeAreaInsets();
+  const submission = useUserOperation('goal.create', 'Could not save your goal. Check your connection and try again.');
   const [isExercisePickerOpen, setIsExercisePickerOpen] = useState(false);
   const [exerciseSearchText, setExerciseSearchText] = useState('');
-  const search = useQuery(api.exerciseCatalog.searchForAddSheet, {
-    equipment: null,
-    muscleGroups: null,
-    query: exerciseSearchText.trim() || undefined,
-  });
-  const exercises = useMemo(() => dedupeExercises([...(search?.favorites ?? []), ...(search?.recents ?? []), ...(search?.results ?? [])] as ExerciseItem[]), [search]);
+  const [committedExerciseSearchText, setCommittedExerciseSearchText] = useState('');
+  const search = usePaginatedQuery(
+    api.exerciseCatalog.searchForPicker,
+    visible && isExercisePickerOpen
+      ? {
+          query: committedExerciseSearchText || undefined,
+        }
+      : 'skip',
+    { initialNumItems: 40 },
+  );
+  const exercises = useMemo(() => dedupeExercises(search.results as ExerciseItem[]), [search.results]);
+  const { loadMore } = search;
+  const lastSettledResultCountRef = useRef(0);
+  useEffect(() => {
+    lastSettledResultCountRef.current = 0;
+  }, [committedExerciseSearchText]);
+  useEffect(() => {
+    if (search.status !== 'CanLoadMore') return;
+    if (search.results.length === lastSettledResultCountRef.current) {
+      loadMore(40);
+      return;
+    }
+    lastSettledResultCountRef.current = search.results.length;
+  }, [loadMore, search.results.length, search.status]);
   const [metricKind, setMetricKind] = useState<MetricKind>('exerciseTotalReps');
   const [cadence, setCadence] = useState<Cadence>('once');
   const [exerciseId, setExerciseId] = useState<Id<'exerciseCatalog'> | null>(null);
+  const [selectedExerciseName, setSelectedExerciseName] = useState<string | null>(null);
   const [threshold, setThreshold] = useState('10');
   const [periodCount, setPeriodCount] = useState('7');
   const [days, setDays] = useState('30');
   const [notes, setNotes] = useState('');
-  const metric = metricOptions.find(option => option.kind === metricKind) ?? metricOptions[1];
-  const selectedExercise = exercises.find(exercise => exercise._id === exerciseId) ?? null;
-  const preview = buildPreview({ cadence, days, exerciseName: selectedExercise?.name, metric, periodCount, threshold });
+  const metric = metricOptions.find((option) => option.kind === metricKind) ?? metricOptions[1];
+  const preview = buildPreview({
+    cadence,
+    days,
+    exerciseName: selectedExerciseName ?? undefined,
+    metric,
+    periodCount,
+    threshold,
+  });
   const isPeriodicGoal = cadence === 'daily' || cadence === 'weekly';
   const canSave =
+    Number.isFinite(Number(threshold)) &&
     Number(threshold) > 0 &&
-    (isPeriodicGoal ? Number(periodCount) > 0 : Number(days) > 0) &&
+    Number.isFinite(Number(isPeriodicGoal ? periodCount : days)) &&
+    (isPeriodicGoal ? Number(periodCount) >= 1 : Number(days) >= 1) &&
     (!metric.requiresExercise || exerciseId);
 
+  useEffect(() => {
+    if (!visible || !isExercisePickerOpen) {
+      return;
+    }
+    const timeout = setTimeout(() => setCommittedExerciseSearchText(exerciseSearchText.trim()), 180);
+    return () => clearTimeout(timeout);
+  }, [exerciseSearchText, isExercisePickerOpen, visible]);
+
   async function save() {
-    if (!canSave) return;
-    const now = Date.now();
-    const durationDays = Math.max(1, Math.round(Number(days)));
-    const periods = Math.max(1, Math.round(Number(periodCount)));
-    const effectiveDurationDays = isPeriodicGoal
-      ? periods * (cadence === 'weekly' ? 7 : 1)
-      : durationDays;
-    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    await createTarget({
-      endsAt: now + effectiveDurationDays * 24 * 60 * 60 * 1000,
-      notes: notes.trim() || undefined,
-      previewText: preview,
-      rule: {
-        cadence,
-        exerciseCatalogId: metric.requiresExercise ? exerciseId : null,
-        metricKind,
-        periodCount: cadence === 'daily' || cadence === 'weekly' ? periods : undefined,
-        threshold: Number(threshold),
-        thresholdUnit: metric.unit,
-      },
-      timeZone,
-      title: preview,
+    if (!canSave || submission.isWorking) return;
+    await submission.run(async () => {
+      const now = Date.now();
+      const durationDays = Math.max(1, Math.round(Number(days)));
+      const periods = Math.max(1, Math.round(Number(periodCount)));
+      const effectiveDurationDays = isPeriodicGoal ? periods * (cadence === 'weekly' ? 7 : 1) : durationDays;
+      const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await createTarget({
+        endsAt: now + effectiveDurationDays * 24 * 60 * 60 * 1000,
+        notes: notes.trim() || undefined,
+        previewText: preview,
+        rule: {
+          cadence,
+          exerciseCatalogId: metric.requiresExercise ? exerciseId : null,
+          metricKind,
+          periodCount: cadence === 'daily' || cadence === 'weekly' ? periods : undefined,
+          threshold: Number(threshold),
+          thresholdUnit: metric.unit,
+        },
+        timeZone,
+        title: preview,
+      });
+      closeSheet();
     });
-    closeSheet();
   }
 
   function closeSheet() {
@@ -211,169 +156,195 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
   function selectExercise(id: Id<'exerciseCatalog'>) {
     blurActiveElementOnWeb();
     setExerciseId(id);
+    setSelectedExerciseName(exercises.find((exercise) => exercise._id === id)?.name ?? null);
     setIsExercisePickerOpen(false);
   }
 
-  return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={closeSheet}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.modalBackdrop}
-      >
-        <GlassSurface elevated={false} style={styles.sheet} contentStyle={styles.sheetContent}>
-          <View style={styles.sheetHandleArea}>
-            <View style={[styles.sheetHandle, { backgroundColor: theme.colors.handleFill }]} />
-          </View>
-          <View style={styles.sheetHeader}>
-            <View><ReedText variant="title">New goal</ReedText><ReedText tone="muted" variant="caption">Structured, measurable, time-bound.</ReedText></View>
-            <Pressable accessibilityLabel="Close goal creator" onPress={closeSheet}><Ionicons color={String(theme.colors.textPrimary)} name="close" size={24} /></Pressable>
-          </View>
-          <ScrollView
-            automaticallyAdjustKeyboardInsets
-            keyboardDismissMode="interactive"
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={styles.creatorScroll}
-            contentContainerStyle={styles.creatorStack}
-          >
-            <ReedText variant="bodyStrong">Measure</ReedText>
-            <View style={styles.optionWrap}>{metricOptions.map(option => <Choice key={option.kind} active={metricKind === option.kind} label={option.label} onPress={() => { setMetricKind(option.kind); if (!option.requiresExercise) setExerciseId(null); }} />)}</View>
-            {metric.requiresExercise ? (
-              <>
-                <ReedText variant="bodyStrong">Exercise</ReedText>
-                <Pressable
-                  onPress={openExercisePicker}
-                  style={({ pressed }) => [
-                    styles.exercisePickerButton,
-                    { backgroundColor: controls.shellBackgroundColor, borderColor: controls.shellBorderColor },
-                    getTapScaleStyle(pressed),
-                  ]}
-                >
-                  <View style={styles.exercisePickerCopy}>
-                    <ReedText variant="bodyStrong">{selectedExercise?.name ?? 'Choose exercise'}</ReedText>
-                    <ReedText tone="muted" variant="caption">Search the full catalogue</ReedText>
-                  </View>
-                  <Ionicons color={String(theme.colors.textMuted)} name="chevron-forward" size={18} />
-                </Pressable>
-              </>
-            ) : null}
-            <ReedInput keyboardType="numeric" label={`Target (${metric.unit})`} onChangeText={setThreshold} value={threshold} />
-            <ReedText variant="bodyStrong">Time rule</ReedText>
-            <View style={styles.optionWrap}>{(['once', 'total', 'daily', 'weekly'] as Cadence[]).map(item => <Choice key={item} active={cadence === item} label={cadenceLabel(item)} onPress={() => setCadence(item)} />)}</View>
-            {(cadence === 'daily' || cadence === 'weekly') ? <ReedInput keyboardType="numeric" label={cadence === 'daily' ? 'Days' : 'Weeks'} onChangeText={setPeriodCount} value={periodCount} /> : null}
-            {!isPeriodicGoal ? <ReedInput keyboardType="numeric" label="Deadline window, days from today" onChangeText={setDays} value={days} /> : null}
-            <ReedInput
-              blurOnSubmit
-              label="Notes (optional)"
-              multiline
-              onChangeText={setNotes}
-              placeholder="Add context, constraints, or why this matters."
-              returnKeyType="done"
-              scrollEnabled={false}
-              style={styles.notesInput}
-              textAlignVertical="top"
-              value={notes}
-            />
-            <View style={[styles.preview, { borderColor: theme.colors.controlBorder }]}><ReedText tone="muted" variant="caption">Preview</ReedText><ReedText variant="bodyStrong">{preview}</ReedText></View>
-          </ScrollView>
-          <View style={[styles.sheetFooter, { borderTopColor: theme.colors.controlBorder }]}>
-            <ReedButton disabled={!canSave} label="Save goal" onPress={save} />
-          </View>
-          <ExercisePickerModal
-            exercises={exercises}
-            onClose={closeExercisePicker}
-            onSearchChange={setExerciseSearchText}
-            onSelect={selectExercise}
-            searchText={exerciseSearchText}
-            selectedExerciseId={exerciseId}
-            visible={isExercisePickerOpen}
-          />
-        </GlassSurface>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
-}
-
-
-function ExercisePickerModal({
-  exercises,
-  onClose,
-  onSearchChange,
-  onSelect,
-  searchText,
-  selectedExerciseId,
-  visible,
-}: {
-  exercises: ExerciseItem[];
-  onClose: () => void;
-  onSearchChange: (value: string) => void;
-  onSelect: (id: Id<'exerciseCatalog'>) => void;
-  searchText: string;
-  selectedExerciseId: Id<'exerciseCatalog'> | null;
-  visible: boolean;
-}) {
-  const { theme } = useReedTheme();
-  const controls = getGlassControlTokens(theme);
+  const gutter = theme.spacing.gutter;
 
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View style={styles.pickerBackdrop}>
-        <GlassSurface elevated={false} style={styles.pickerSheet} contentStyle={styles.pickerContent}>
-          <View style={styles.sheetHeader}>
-            <View>
-              <ReedText variant="section">Choose exercise</ReedText>
-              <ReedText tone="muted" variant="caption">Any supported catalogue exercise.</ReedText>
+    <ReedSheet
+      heightFraction={SHEET_FRACTION}
+      onBack={isExercisePickerOpen ? closeExercisePicker : undefined}
+      onDismiss={() => {
+        setIsExercisePickerOpen(false);
+        onClose();
+      }}
+      open={visible}
+    >
+      <View style={styles.sheet}>
+        {isExercisePickerOpen ? (
+          <>
+            <View style={[styles.sheetHeader, { paddingHorizontal: gutter }]}>
+              <ReedIconButton accessibilityLabel="Back to goal" onPress={closeExercisePicker} variant="ghost">
+                <Ionicons color={String(theme.colors.inkSecondary)} name="chevron-back" size={22} />
+              </ReedIconButton>
+              <View style={styles.headerCopy}>
+                <ReedText variant="headline">Choose exercise</ReedText>
+                <ReedText tone="muted" variant="caption">Any supported catalogue exercise.</ReedText>
+              </View>
             </View>
-            <Pressable accessibilityLabel="Close exercise picker" onPress={onClose}>
-              <Ionicons color={String(theme.colors.textPrimary)} name="close" size={22} />
-            </Pressable>
-          </View>
 
-          <View style={[styles.searchShell, { backgroundColor: controls.shellBackgroundColor, borderColor: controls.shellBorderColor }]}>
-            <Ionicons color={String(theme.colors.textMuted)} name="search" size={16} />
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={onSearchChange}
-              placeholder="Search exercises"
-              placeholderTextColor={String(theme.colors.textMuted)}
-              style={[styles.searchInput, { color: theme.colors.textPrimary, fontFamily: theme.typography.body.fontFamily }]}
-              value={searchText}
+            <View style={{ paddingHorizontal: gutter }}>
+              <View style={[styles.searchShell, { backgroundColor: theme.colors.surfaceRaised }]}>
+                <Ionicons color={String(theme.colors.inkMuted)} name="search" size={16} />
+                <ReedSheetTextInput
+                  accessibilityLabel="Search exercises"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  onChangeText={setExerciseSearchText}
+                  placeholder="Search exercises"
+                  placeholderTextColor={String(theme.colors.inkMuted)}
+                  selectionColor={String(theme.colors.accent)}
+                  style={[styles.searchInput, bareInputStyle, { color: theme.colors.ink, fontFamily: theme.typography.body.fontFamily }]}
+                  value={exerciseSearchText}
+                />
+              </View>
+            </View>
+
+            <BottomSheetFlatList
+              contentContainerStyle={StyleSheet.flatten([styles.pickerContent, { paddingBottom: insets.bottom + theme.spacing.md, paddingHorizontal: gutter }])}
+              data={exercises}
+              initialNumToRender={12}
+              keyboardShouldPersistTaps="handled"
+              keyExtractor={(exercise: ExerciseItem) => exercise._id}
+              ListEmptyComponent={<ReedText tone="muted" variant="caption">No exercises found.</ReedText>}
+              maxToRenderPerBatch={8}
+              onEndReached={search.status === 'CanLoadMore' ? () => loadMore(40) : undefined}
+              onEndReachedThreshold={0.6}
+              renderItem={({ item: exercise }: { item: ExerciseItem }) => {
+                const selected = exercise._id === exerciseId;
+                return (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => selectExercise(exercise._id)}
+                    style={({ pressed }) => [styles.exerciseResultRow, { borderBottomColor: theme.colors.line }, getTapScaleStyle(pressed)]}
+                  >
+                    <ReedText numberOfLines={1} style={styles.exercisePickerCopy} variant="bodyStrong">{exercise.name}</ReedText>
+                    {selected ? <Ionicons color={String(theme.colors.accentInk)} name="checkmark-circle" size={22} /> : null}
+                  </Pressable>
+                );
+              }}
+              showsVerticalScrollIndicator={false}
+              style={styles.scroll}
+              windowSize={7}
             />
-          </View>
-
-          <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} style={styles.pickerResults}>
-            {exercises.length === 0 ? (
-              <ReedText tone="muted" variant="caption">No exercises found.</ReedText>
-            ) : exercises.map(exercise => {
-              const selected = exercise._id === selectedExerciseId;
-              return (
-                <Pressable
-                  key={exercise._id}
-                  onPress={() => onSelect(exercise._id)}
-                  style={({ pressed }) => [
-                    styles.exerciseResultRow,
-                    { borderBottomColor: theme.colors.controlBorder },
-                    getTapScaleStyle(pressed),
-                  ]}
-                >
-                  <View style={styles.exercisePickerCopy}>
-                    <ReedText numberOfLines={1} variant="bodyStrong">{exercise.name}</ReedText>
-                  </View>
-                  {selected ? <Ionicons color={String(theme.colors.accentPrimary)} name="checkmark" size={20} /> : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </GlassSurface>
+          </>
+        ) : (
+          <>
+            <View style={[styles.sheetHeader, { paddingHorizontal: gutter }]}>
+              <View style={styles.headerCopy}>
+                <ReedText variant="title">New goal</ReedText>
+                <ReedText tone="muted" variant="caption">Structured, measurable, time-bound.</ReedText>
+              </View>
+              <ReedIconButton accessibilityLabel="Close goal creator" onPress={closeSheet} variant="ghost">
+                <Ionicons color={String(theme.colors.inkSecondary)} name="close" size={22} />
+              </ReedIconButton>
+            </View>
+            <BottomSheetScrollView
+              contentContainerStyle={StyleSheet.flatten([styles.creatorStack, { paddingHorizontal: gutter }])}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={styles.scroll}
+            >
+              <ReedText variant="bodyStrong">Measure</ReedText>
+              <View style={styles.optionWrap}>
+                {metricOptions.map((option) => (
+                  <Choice
+                    key={option.kind}
+                    active={metricKind === option.kind}
+                    label={option.label}
+                    onPress={() => {
+                      setMetricKind(option.kind);
+                      if (!option.requiresExercise) {
+                        setExerciseId(null);
+                        setSelectedExerciseName(null);
+                      }
+                    }}
+                  />
+                ))}
+              </View>
+              {metric.requiresExercise ? (
+                <>
+                  <ReedText variant="bodyStrong">Exercise</ReedText>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={openExercisePicker}
+                    style={({ pressed }) => [styles.exercisePickerButton, { backgroundColor: theme.colors.surfaceRaised }, getTapScaleStyle(pressed)]}
+                  >
+                    <View style={styles.exercisePickerCopy}>
+                      <ReedText variant="bodyStrong">{selectedExerciseName ?? 'Choose exercise'}</ReedText>
+                      <ReedText tone="muted" variant="caption">Search the full catalogue</ReedText>
+                    </View>
+                    <Ionicons color={String(theme.colors.inkMuted)} name="chevron-forward" size={18} />
+                  </Pressable>
+                </>
+              ) : null}
+              <ReedInput
+                keyboardType="numeric"
+                label={`Target (${metric.unit})`}
+                onChangeText={setThreshold}
+                value={threshold}
+              />
+              <ReedText variant="bodyStrong">Time rule</ReedText>
+              <View style={styles.optionWrap}>
+                {(['once', 'total', 'daily', 'weekly'] as Cadence[]).map((item) => (
+                  <Choice key={item} active={cadence === item} label={cadenceLabel(item)} onPress={() => setCadence(item)} />
+                ))}
+              </View>
+              {cadence === 'daily' || cadence === 'weekly' ? (
+                <ReedInput
+                  keyboardType="numeric"
+                  label={cadence === 'daily' ? 'Days' : 'Weeks'}
+                  onChangeText={setPeriodCount}
+                  value={periodCount}
+                />
+              ) : null}
+              {!isPeriodicGoal ? (
+                <ReedInput
+                  keyboardType="numeric"
+                  label="Deadline window, days from today"
+                  onChangeText={setDays}
+                  value={days}
+                />
+              ) : null}
+              <ReedInput
+                blurOnSubmit
+                label="Notes (optional)"
+                multiline
+                onChangeText={setNotes}
+                placeholder="Add context, constraints, or why this matters."
+                returnKeyType="done"
+                scrollEnabled={false}
+                style={styles.notesInput}
+                textAlignVertical="top"
+                value={notes}
+              />
+              <View style={[styles.preview, { backgroundColor: theme.colors.surfaceRaised }]}>
+                <ReedText tone="muted" variant="caption">Preview</ReedText>
+                <ReedText variant="bodyStrong">{preview}</ReedText>
+              </View>
+            </BottomSheetScrollView>
+            <View style={[styles.sheetFooter, { paddingBottom: insets.bottom + theme.spacing.md, paddingHorizontal: gutter }]}>
+              {submission.errorMessage ? (
+                <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{submission.errorMessage}</ReedText>
+              ) : null}
+              <ReedButton
+                disabled={!canSave || submission.isWorking}
+                label={submission.isWorking ? 'Saving…' : 'Save goal'}
+                onPress={save}
+              />
+            </View>
+          </>
+        )}
       </View>
-    </Modal>
+    </ReedSheet>
   );
 }
 
 function dedupeExercises(exercises: ExerciseItem[]) {
   const seen = new Set<string>();
-  return exercises.filter(exercise => {
+  return exercises.filter((exercise) => {
     if (seen.has(exercise._id)) return false;
     seen.add(exercise._id);
     return true;
@@ -382,11 +353,39 @@ function dedupeExercises(exercises: ExerciseItem[]) {
 
 function Choice({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
   const { theme } = useReedTheme();
-  const controls = getGlassControlTokens(theme);
-  return <Pressable onPress={onPress} style={({ pressed }) => [styles.choice, { backgroundColor: active ? controls.activeBackgroundColor : controls.shellBackgroundColor, borderColor: active ? theme.colors.accentPrimary : controls.shellBorderColor }, getTapScaleStyle(pressed)]}><ReedText ellipsizeMode="tail" numberOfLines={1} style={styles.choiceLabel} variant="caption">{label}</ReedText></Pressable>;
+  return (
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active }}
+      style={({ pressed }) => [
+        styles.choice,
+        { backgroundColor: active ? theme.colors.accentSoft : theme.colors.surfaceRaised },
+        getTapScaleStyle(pressed),
+      ]}
+    >
+      <ReedText ellipsizeMode="tail" numberOfLines={1} style={styles.choiceLabel} tone={active ? 'accent' : 'secondary'} variant="bodyStrong">
+        {label}
+      </ReedText>
+    </Pressable>
+  );
 }
 
-function buildPreview({ cadence, days, exerciseName, metric, periodCount, threshold }: { cadence: Cadence; days: string; exerciseName?: string; metric: { kind: MetricKind; label: string; unit: string; requiresExercise: boolean }; periodCount: string; threshold: string }) {
+function buildPreview({
+  cadence,
+  days,
+  exerciseName,
+  metric,
+  periodCount,
+  threshold,
+}: {
+  cadence: Cadence;
+  days: string;
+  exerciseName?: string;
+  metric: { kind: MetricKind; label: string; unit: string; requiresExercise: boolean };
+  periodCount: string;
+  threshold: string;
+}) {
   const subject = metric.requiresExercise ? (exerciseName ?? 'Selected exercise') : 'Train';
   const amount = `${threshold || '0'} ${metric.unit}`;
   if (cadence === 'daily') return `${subject}: ${amount} every day for ${periodCount || '0'} days.`;
@@ -394,43 +393,57 @@ function buildPreview({ cadence, days, exerciseName, metric, periodCount, thresh
   if (cadence === 'total') return `${subject}: ${amount} total in ${days || '0'} days.`;
   return `${subject}: reach ${amount} by ${days || '0'} days from now.`;
 }
-function cadenceLabel(cadence: Cadence) { return cadence === 'once' ? 'By date' : cadence === 'total' ? 'Total' : cadence === 'daily' ? 'Daily' : 'Weekly'; }
-function formatDate(ts: number) { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(ts)); }
+function cadenceLabel(cadence: Cadence) {
+  return cadence === 'once' ? 'By date' : cadence === 'total' ? 'Total' : cadence === 'daily' ? 'Daily' : 'Weekly';
+}
 
 const styles = StyleSheet.create({
-  choice: { borderRadius: 999, borderWidth: 1, maxWidth: '100%', minWidth: 0, paddingHorizontal: 12, paddingVertical: 8 },
+  sheet: { flex: 1, gap: 12, minHeight: 0 },
+  sheetHeader: { alignItems: 'center', flexDirection: 'row', gap: 8 },
+  headerCopy: { flex: 1, gap: 2, paddingTop: 4 },
+  scroll: { flex: 1, minHeight: 0 },
+  choice: {
+    alignItems: 'center',
+    borderRadius: reedRadii.pill,
+    justifyContent: 'center',
+    maxWidth: '100%',
+    minHeight: 40,
+    minWidth: 0,
+    paddingHorizontal: 16,
+  },
   choiceLabel: { maxWidth: '100%', minWidth: 0, textAlign: 'center' },
-  creatorScroll: { flex: 1, minHeight: 0 },
-  creatorStack: { gap: 14, paddingBottom: 96 },
-  emptyState: { borderRadius: 18, borderWidth: 1, gap: 10, padding: 16 },
-  exercisePickerButton: { alignItems: 'center', borderRadius: 18, borderWidth: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between', padding: 14 },
+  creatorStack: { gap: 14, paddingBottom: 16, paddingTop: 4 },
+  exercisePickerButton: {
+    alignItems: 'center',
+    borderRadius: reedRadii.md,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 56,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
   exercisePickerCopy: { flex: 1, gap: 2 },
-  exerciseResultRow: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: 12, justifyContent: 'space-between', paddingVertical: 13 },
-  goalActions: { alignItems: 'center', flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 4 },
-  goalMetaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  goalProgressStack: { gap: 8 },
-  goalRow: { borderRadius: 18, borderWidth: 1, gap: 8, padding: 14 },
-  goalTitle: { flex: 1 },
-  goalTopLine: { alignItems: 'center', flexDirection: 'row', gap: 10 },
-  headerRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12 },
-  loadingRow: { alignItems: 'center', flexDirection: 'row', gap: 8 },
-  modalBackdrop: { backgroundColor: 'rgba(23, 21, 18, 0.28)', flex: 1, justifyContent: 'flex-end', padding: 12 },
+  exerciseResultRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    minHeight: 52,
+    paddingVertical: 12,
+  },
   optionWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   notesInput: { minHeight: 104, paddingTop: 14 },
-  pickerBackdrop: { backgroundColor: 'rgba(23, 21, 18, 0.38)', flex: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 48 },
-  pickerContent: { gap: 14, padding: 18 },
-  pickerResults: { maxHeight: 420 },
-  pickerSheet: { alignSelf: 'stretch', borderRadius: 26, maxHeight: '78%' },
-  preview: { borderRadius: 18, borderWidth: 1, gap: 4, padding: 14 },
-  sheet: { alignSelf: 'stretch', borderRadius: 28, height: '88%' },
-  sheetContent: { flex: 1, gap: 14, minHeight: 0, paddingBottom: 16, paddingHorizontal: 20, paddingTop: 8 },
-  sheetFooter: { borderTopWidth: 1, paddingTop: 14 },
-  sheetHandle: { borderRadius: 999, height: 4, width: 44 },
-  sheetHandleArea: { alignItems: 'center', justifyContent: 'center', paddingBottom: 4, paddingTop: 2 },
-  searchInput: { flex: 1, fontSize: 16, minHeight: 38, padding: 0 },
-  searchShell: { alignItems: 'center', borderRadius: 18, borderWidth: 1, flexDirection: 'row', gap: 10, paddingHorizontal: 12 },
-  sheetHeader: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
-  stack: { gap: 12 },
-  statusPill: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 3 },
-  textButton: { paddingVertical: 4 },
+  pickerContent: { paddingTop: 4 },
+  preview: { borderRadius: reedRadii.md, gap: 4, padding: 16 },
+  sheetFooter: { gap: 8, paddingTop: 8 },
+  searchInput: { flex: 1, fontSize: 15.5, minHeight: 48, padding: 0 },
+  searchShell: {
+    alignItems: 'center',
+    borderRadius: reedRadii.md,
+    flexDirection: 'row',
+    gap: 10,
+    paddingHorizontal: 14,
+  },
 });

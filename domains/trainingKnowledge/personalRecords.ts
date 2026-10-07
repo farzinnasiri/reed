@@ -64,6 +64,8 @@ type RecordRule = {
 };
 
 const NEAR_RECORD_RATIO = 0.95;
+const DISTANCE_RECORD_OVERSHOOT = 1.05;
+const EXTERNAL_LOAD_KEYS = ['load', 'addedLoad', 'assistLoad', 'leftLoad', 'rightLoad'] as const;
 
 const rules: RecordRule[] = [
   {
@@ -95,11 +97,12 @@ const rules: RecordRule[] = [
     label: 'Rep best',
     priority: 80,
     calculate: activity => {
+      // Loaded and assisted work already has heaviest-load, estimated 1RM, and set-volume records.
+      // Derived bodyweight is not external load, so an unassisted pull-up can still hold a rep record.
+      if (hasExternalLoad(activity)) return null;
       const reps = getReps(activity.metrics);
       if (reps <= 0) return null;
-      const load = getEffectiveLoad(activity);
-      const summary = load > 0 ? `${formatNumber(load)} kg × ${formatInteger(reps)}` : `${formatInteger(reps)} reps`;
-      return buildCandidate(activity, 'rep_best', 'Rep best', reps, 'reps', `${formatInteger(reps)} reps`, summary);
+      return buildCandidate(activity, 'rep_best', 'Rep best', reps, 'reps', `${formatInteger(reps)} reps`, `${formatInteger(reps)} reps`);
     },
   },
   {
@@ -204,7 +207,7 @@ export function detectSessionRecords(input: { historicalActivities: ActivityReco
   for (const record of sessionRecords) {
     const previous = historicalByKey.get(getRecordKey(record.exerciseCatalogId, record.kind));
     const rule = getRule(record.kind);
-    if (!previous || compareRecords(record, previous, rule) > 0) {
+    if (!previous || (record.value !== previous.value && compareRecords(record, previous, rule) > 0)) {
       records.push(record);
       continue;
     }
@@ -236,7 +239,8 @@ function buildCandidate(activity: ActivityRecordInput, kind: RecordKind, label: 
 function calculateFastestDistance(activity: ActivityRecordInput, kind: RecordKind, label: string, distanceKm: number) {
   const distance = finiteOrZero(activity.metrics.distance);
   const duration = getDurationSeconds(activity.metrics);
-  if (distance < distanceKm || duration <= 0) return null;
+  // A much longer effort is not a time trial for the shorter distance.
+  if (distance + 1e-9 < distanceKm || distance > distanceKm * DISTANCE_RECORD_OVERSHOOT + 1e-9 || duration <= 0) return null;
   const value = duration * (distanceKm / distance);
   return buildCandidate(activity, kind, label, round(value, 1), 's', formatDuration(value), summarizeMetrics(activity.recipeKey, activity.metrics));
 }
@@ -265,6 +269,10 @@ function getRecordKey(exerciseCatalogId: string, kind: RecordKind) {
 
 function getRule(kind: RecordKind) {
   return rules.find(rule => rule.kind === kind);
+}
+
+function hasExternalLoad(activity: ActivityRecordInput) {
+  return EXTERNAL_LOAD_KEYS.some(key => finiteOrZero(activity.metrics[key]) > 0);
 }
 
 function getEffectiveLoad(activity: ActivityRecordInput) {

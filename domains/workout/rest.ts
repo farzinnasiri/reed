@@ -33,3 +33,10 @@ export function getRemainingSecondsUntil(endsAt: number, now = Date.now()) {
 export function clampSeconds(value: number, min = 0, max = 240) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
+
+/** Stable deadline shared by countdowns and OS alerts; paused timers have no deadline. */
+export function getRestDeadline(process: RestProcessLike) {
+  return process.isRunning && process.startedAt !== null
+    ? process.startedAt + process.remainingSeconds * 1000
+    : null;
+}

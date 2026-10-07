@@ -1,6 +1,8 @@
+import { sessionDurationSeconds } from '../domains/workout/session-duration';
 import { v } from 'convex/values';
 import { internalQuery } from './_generated/server';
 import type { Doc } from './_generated/dataModel';
+import { loadProfileTimeZone } from './profileTimeZone';
 
 const HISTORY_WINDOW_MS = 28 * 24 * 60 * 60 * 1000;
 const SESSION_LIMIT = 12;
@@ -41,6 +43,7 @@ export const snapshot = internalQuery({
     return {
       journeyContext: journey?.renderedContext ?? null,
       now,
+      timeZone: await loadProfileTimeZone(ctx, args.profileId),
       profile: {
         displayName: profile.displayName ?? null,
         onboardingCompletedAt: profile.onboardingCompletedAt ?? null,
@@ -61,7 +64,7 @@ export const snapshot = internalQuery({
         progressSummary: target.progressSummary,
         title: target.title,
       })),
-      trainingProfile,
+      trainingProfile: trainingProfile ? { onboarding: trainingProfile.onboarding } : null,
       windowDays: Math.round(HISTORY_WINDOW_MS / (24 * 60 * 60 * 1000)),
     };
   },
@@ -69,7 +72,7 @@ export const snapshot = internalQuery({
 
 function sessionSummary(session: Doc<'liveSessions'>) {
   return {
-    durationMinutes: session.endedAt ? Math.max(1, Math.round((session.endedAt - session.startedAt) / 60_000)) : null,
+    durationMinutes: session.endedAt ? Math.max(1, Math.round(sessionDurationSeconds(session, session.endedAt) / 60)) : null,
     endedAt: session.endedAt ?? null,
     startedAt: session.startedAt,
     userNotes: session.userNotes ?? null,

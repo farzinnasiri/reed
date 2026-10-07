@@ -1,7 +1,7 @@
 import type { ActionCtx } from './_generated/server';
 import { SpeechServiceError, transcribeSpeech, type SpeechActor } from './speech';
 
-const ALLOWED_ACTORS = new Set(['chat', 'session_notes']);
+const ALLOWED_ACTORS = new Set(['chat', 'session_notes', 'onboarding_notes']);
 
 export async function transcribeSpeechHttp(ctx: ActionCtx, request: Request) {
   const identity = await ctx.auth.getUserIdentity();

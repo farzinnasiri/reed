@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 04 Chapters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .app .thread { touch-action: none; cursor: grab }
+  .app .thread:active { cursor: grabbing }
+  .app .tscroll { bottom: 0 }
+  .app .earlier { align-self: center; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 15px; font-size: 13px; color: var(--ink-3); background: transparent; box-shadow: inset 0 0 0 1px var(--line-2) }
+  .app .earlier .ic { width: 14px; height: 14px }
+  .app .pull { position: absolute; left: 50%; top: 0; transform: translateX(-50%); display: flex; align-items: center; gap: 9px; height: 30px; padding: 0 13px 0 9px; border-radius: 15px; background: var(--raise); font-size: 13px; color: var(--ink-2); z-index: 6; opacity: 0; pointer-events: none; white-space: nowrap }
+  .app .pull svg { width: 18px; height: 18px; flex: none }
+  .app .pull.ready { color: var(--ink); background: var(--raise-2) }
+  .app .pull.loading svg { animation: spin calc(var(--ks) * .8s) linear infinite }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  .app .latest { margin-left: auto; height: 36px; padding: 0 14px 0 11px; border-radius: 18px; background: var(--raise-2); font-size: 13.5px; font-weight: 600; color: var(--ink); display: inline-flex; align-items: center; gap: 6px; opacity: 0; transform: translateY(6px); pointer-events: none;
+    transition: opacity calc(var(--k) * 200ms), transform calc(var(--k) * 380ms) var(--pop) }
+  .app .latest.on { opacity: 1; transform: none; pointer-events: auto }
+  .app .latest .ic { width: 15px; height: 15px }
+  .app .thread { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(to bottom, transparent 0, #000 28px, #000 calc(100% - 12px), transparent) }
+  .rule { max-width: 860px; margin: 90px auto 0 }
+  .rule h2 { text-align: center; font-size: 24px; font-weight: 600; color: #f2f2f4; margin-bottom: 10px; letter-spacing: -.02em }
+  .rule > p { text-align: center; color: #a0a0a8; font-size: 14.5px; line-height: 1.6; max-width: 700px; margin: 0 auto 8px }
+  .rule .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px }
+  .rule .box { background: #19191c; border-radius: 18px; padding: 16px 18px; box-shadow: inset 0 0 0 1px #232327 }
+  .rule .box h3 { font-size: 15px; color: #f0f0f3; margin-bottom: 8px }
+  .rule .box p, .rule .box li { font-size: 13.5px; line-height: 1.55; color: #b4b4bb }
+  .rule .box ul { padding-left: 16px }
+</style>
+</head>
+<body>
+<script>
+const { icon, ui, chat } = REED;
+
+const current = `
+  <button class="earlier" data-earlier>${icon('chevron-up')}Earlier · Tuesday</button>
+  <div class="chapter">Today · 9:12</div>
+  <div class="voice">Morning. You slept 6 h, so keep today moderate. Upper body, about <strong>45 minutes</strong>.</div>
+  <div class="you">Can we do it at lunch instead?</div>
+  <div class="voice">Sure. I moved it to 12:30 and trimmed it to <strong>35 minutes</strong>.</div>
+  <div class="past"><span class="tag">${icon('barbell', 2)}</span>Upper body · short<span class="meta">Plan</span>${icon('chevron')}</div>
+  <div class="you">Perfect. And my shoulder?</div>
+  <div class="voice">No overhead pressing today. Dumbbell bench and rows are fine. Stop a set if it pinches.</div>
+  <div class="you">Got it</div>
+  <div class="voice">See you at lunch.</div>`;
+const chapters = [
+  {
+    label: 'Tuesday',
+    html: `
+      <div class="chapter">Tuesday 30 Sep · after Lower A</div>
+      <div class="voice">Lower A done: <strong>14 sets</strong>, squats up 2.5 kg. Good session.</div>
+      <div class="past"><span class="tag">${icon('barbell', 2)}</span>Lower A<span class="meta">52 min</span>${icon('chevron')}</div>
+      <div class="you">Squats felt heavy though</div>
+      <div class="voice">Normal after a short night. The bar speed was fine on the last two sets.</div>`,
+  },
+  {
+    label: 'Monday 22 Sep',
+    html: `
+      <div class="chapter">Monday 22 Sep</div>
+      <div class="you">What should this week look like?</div>
+      <div class="voice">Three days: lower, upper, lower. Nothing new, just add a little load.</div>`,
+  },
+];
+
+// ---- the scroll engine: offset from the bottom, rubber band past the top ----
+const TH = 64;          // pull threshold, in on-screen px
+const rubber = (x, d) => (1 - 1 / ((x * 0.55) / d + 1)) * d;
+function springFn(z) { const w = z < 1 ? 6.9 / z : 9.2; return t => { if (z < 1) { const wd = w * Math.sqrt(1 - z * z); return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t)); } return 1 - (1 + w * t) * Math.exp(-w * t); }; }
+let E = null;
+
+function engine(c) {
+  const thread = c.$('.thread'), scroll = c.$('.tscroll'), pull = c.$('.pull'), latest = c.$('.latest');
+  const S = { raw: 0, vis: 0, max: 0, next: 0, crossed: false, busy: false, tw: 0 };
+  const measure = () => { S.max = Math.max(0, scroll.getBoundingClientRect().height - thread.clientHeight + 6); };
+  const ringLen = 2 * Math.PI * 7;
+  const render = () => {
+    scroll.style.transform = `translateY(${S.vis}px)`;
+    const over = Math.max(0, S.vis - S.max);
+    const p = Math.min(1, over / TH);
+    const more = S.next < chapters.length;
+    if (!pull.classList.contains('loading')) {
+      pull.style.opacity = Math.min(1, over / 20);
+      pull.style.top = `${Math.max(4, over / 2 - 15)}px`;
+      pull.querySelector('.arc').style.strokeDashoffset = ringLen * (1 - (more ? p : 0));
+      pull.querySelector('span').textContent = !more ? 'This is where you and Reed started' : p >= 1 ? `Release for ${chapters[S.next].label}` : `Pull for ${chapters[S.next].label}`;
+      pull.classList.toggle('ready', more && p >= 1);
+      if (more && p >= 1 && !S.crossed) { S.crossed = true; c.haptic('selection'); c.face?.mood('watching'); }
+      if (p < 1 && S.crossed) { S.crossed = false; c.face?.mood('idle'); }
+      if (S.dragging) c.face?.gaze(0, -Math.min(1, over / TH));
+    }
+    latest.classList.toggle('on', S.vis > thread.clientHeight * 0.9);
+  };
+  const setRaw = raw => {
+    S.raw = Math.max(0, raw);
+    S.vis = S.raw <= S.max ? S.raw : S.max + rubber(S.raw - S.max, thread.clientHeight);
+    render();
+  };
+  const tweenVis = (to, { dur = REED.springs.smooth.duration, z = .86 } = {}) => new Promise(res => {
+    const id = ++S.tw, from = S.vis, k = REED.k, f = springFn(z), t0 = performance.now();
+    if (!k) { S.vis = S.raw = to; render(); return res(); }
+    const step = now => {
+      if (id !== S.tw) return res();
+      const t = Math.min(1, (now - t0) / (dur * k));
+      S.vis = from + (to - from) * f(t);
+      S.raw = S.vis <= S.max ? S.vis : S.raw;
+      render();
+      if (t < 1) requestAnimationFrame(step); else { S.vis = to; S.raw = to; render(); res(); }
+    };
+    requestAnimationFrame(step);
+  });
+  const loadEarlier = async () => {
+    const ch = chapters[S.next++];
+    pull.classList.add('loading');
+    pull.querySelector('span').textContent = `Loading ${ch.label}`;
+    await tweenVis(S.max + TH, { dur: 300, z: 1 });
+    await c.wait(300);
+    const holder = document.createElement('div');
+    holder.innerHTML = ch.html;
+    const nodes = [...holder.children];
+    nodes.forEach(n => (n.style.opacity = 0));
+    const anchor = scroll.firstElementChild;
+    nodes.forEach(n => scroll.insertBefore(n, anchor));
+    // the old "Earlier" button moves to the top of the new chapter (or disappears at the start)
+    const btn = scroll.querySelector('[data-earlier]');
+    if (btn) btn.remove();
+    if (S.next < chapters.length) {
+      const b = document.createElement('button');
+      b.className = 'earlier'; b.dataset.earlier = '';
+      b.innerHTML = `${icon('chevron-up')}Earlier · ${chapters[S.next].label}`;
+      b.style.opacity = 0;
+      scroll.insertBefore(b, scroll.firstElementChild);
+      nodes.unshift(b);
+      b.onclick = () => tapEarlier();
+    }
+    measure();
+    pull.classList.remove('loading');
+    c.anim(pull, [{ opacity: 1 }, { opacity: 0 }], { dur: 160 }).catch(() => {});
+    c.face?.mood('idle'); c.face?.gaze(0, 0);
+    S.crossed = false;
+    const rev = nodes.slice().reverse();
+    await Promise.all(rev.map((n, i) => c.anim(n, [{ opacity: 0, transform: 'translateY(-12px)' }, { opacity: 1, transform: 'none' }], { dur: REED.springs.smooth.duration, spring: 'smooth', delay: i * 30 })));
+    nodes.forEach(n => { n.style.opacity = ''; n.style.transform = ''; });
+  };
+  const release = async () => {
+    S.dragging = false;
+    const over = S.vis - S.max;
+    if (over <= 0) return;
+    if (over >= TH && S.next < chapters.length) return loadEarlier();
+    S.crossed = false;
+    c.face?.mood('idle'); c.face?.gaze(0, 0);
+    await tweenVis(S.max, { dur: REED.springs.smooth.duration, z: .8 });
+  };
+  const tapEarlier = async () => { if (S.next >= chapters.length) return; c.haptic('selection'); await tweenVis(S.max + TH, { dur: 240, z: 1 }); await loadEarlier(); };
+  scroll.querySelector('[data-earlier]').onclick = () => tapEarlier();
+  latest.onclick = () => tweenVis(0, { dur: 600, z: .95 });
+
+  // pointer + wheel
+  let lastY = 0;
+  thread.addEventListener('pointerdown', e => { if (e.target.closest('button')) return; S.tw++; S.dragging = true; lastY = e.clientY; thread.setPointerCapture(e.pointerId); });
+  thread.addEventListener('pointermove', e => { if (!S.dragging) return; setRaw(S.raw + (e.clientY - lastY)); lastY = e.clientY; });
+  const up = () => { if (S.dragging) release(); };
+  thread.addEventListener('pointerup', up);
+  thread.addEventListener('pointercancel', up);
+  let wt = 0;
+  thread.addEventListener('wheel', e => { e.preventDefault(); S.tw++; S.dragging = true; setRaw(S.raw - e.deltaY); clearTimeout(wt); wt = setTimeout(release, 160); }, { passive: false });
+
+  measure();
+  render();
+  return {
+    S, measure, release, tweenVis, tapEarlier,
+    async dragTo(raw, dur = 700) {
+      S.dragging = true;
+      const from = S.raw, k = REED.k;
+      if (!k) { setRaw(raw); return; }
+      const t0 = performance.now();
+      await new Promise(res => { const step = now => { const t = Math.min(1, (now - t0) / (dur * k)); const e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; setRaw(from + (raw - from) * e); if (t < 1) requestAnimationFrame(step); else res(); }; requestAnimationFrame(step); });
+    },
+  };
+}
+
+REED.page({
+  kicker: 'Reed · Interaction · 04',
+  title: 'Chapters, and pulling for earlier',
+  intro: [
+    'The thread is split into <b>chapters</b>. Home only renders the current one. Older chapters arrive one at a time when you pull past the top, with the same rubber-band feel as the system scroll, or when you tap “Earlier”.',
+    '<b>Try it:</b> drag the thread on the phone (or use a trackpad). Scroll to the top, keep pulling past the line until it says “Release”, let go.',
+  ],
+  hint: 'The phone is live on every step: drag the thread up and down, pull past the top, tap “Earlier” or “Latest”.',
+  build(c) {
+    c.app.innerHTML = `<canvas class="glow"></canvas>${ui.pulse()}
+      <div class="stage">
+        <div class="thread"><div class="pull"><svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="none" stroke="#302c27" stroke-width="2.2"/><circle class="arc" cx="9" cy="9" r="7" fill="none" stroke="#aec2ff" stroke-width="2.2" stroke-linecap="round" stroke-dasharray="${2 * Math.PI * 7}" stroke-dashoffset="${2 * Math.PI * 7}" transform="rotate(-90 9 9)"/></svg><span></span></div>
+          <div class="tscroll">${current}</div></div>
+        <div class="presence"><div class="corner-slot"></div><span class="hint"></span><div class="chips"></div><button class="latest">${icon('arrow-down', 2)}Latest</button></div>
+        ${ui.dock()}
+      </div>
+      ${ui.mascotLayer()}${REED.keyboard}`;
+  },
+  async settle(c) { await c.placeMascot(c.$('.corner-slot')); E = engine(c); },
+  steps: [
+    {
+      t: 'Open on the current chapter', u: 'You open home in chat mode.',
+      async run(c) { await c.wait(900); },
+      when: [
+        ['0', 'Home shows the current chapter only, resting at the bottom. Nothing older is rendered.'],
+        ['—', 'The chapter starts with a quiet header (“Today · 9:12”). Above it, a small “Earlier · Tuesday” button.'],
+      ],
+      spec: [
+        'Fetch: the current chapter’s messages plus the previous chapter’s <i>label</i> only (for the button).',
+        'If the current chapter is long (> 40 messages), load its newest 30 and treat the rest like an earlier page (same pull).',
+      ],
+      haptic: 'none',
+      reduce: 'n/a',
+      build: ['Backend: <code>reed.listChapterMessages({ chapter })</code> + chapter metadata (see rule below and page 09).'],
+    },
+    {
+      t: 'Scroll to the top', u: 'You scroll up through today’s chapter.',
+      async run(c) { await E.dragTo(E.S.max, 900); E.S.dragging = false; await c.wait(400); },
+      when: [
+        ['—', 'Normal scrolling. At the top edge you see the chapter header and the “Earlier” button above it.'],
+        ['> 1 screen', '“Latest” appears in the presence row, right of Reed (<code>pop</code> up 6 px + fade). Never floats over messages.'],
+      ],
+      spec: ['“Latest” replaces both today’s floating ↓ button and the “Today” pill. One control, one place.'],
+      haptic: 'none',
+      reduce: '“Latest” fades.',
+      build: ['<code>presence-row.tsx</code> owns “Latest”; the thread reports “away from bottom” via a shared value.'],
+    },
+    {
+      t: 'Pull past the top', u: 'You keep pulling down.',
+      async run(c) { await E.dragTo(E.S.max + 70, 800); await c.wait(500); },
+      when: [
+        ['finger', 'Content follows with resistance: <code>d = (1 − 1 / (x · 0.55 / H + 1)) · H</code>, H = thread height. (iOS rubber band.)'],
+        ['> 0', 'A small pill fades in, centred in the gap: a ring filling with progress + “Pull for Tuesday”.'],
+        ['finger', 'Reed’s eyes follow upward with the pull.'],
+      ],
+      spec: ['Threshold: 64 px on screen (≈ 130 px of finger travel on an 844 pt phone).', 'Below the threshold, releasing simply springs back.'],
+      haptic: 'none yet',
+      reduce: 'Same gesture; the pill appears without fade.',
+      build: [
+        'One Gesture Handler <code>Pan</code> running simultaneously with the list’s native scroll. It only engages when the list is at its top edge and the finger moves toward older content.',
+        'Rubber band and pill are driven on the UI thread (shared value <code>pull</code>). On iOS the native bounce is turned off at the top edge so there is one rubber band, not two.',
+      ],
+    },
+    {
+      t: 'Cross the threshold', u: 'You pull a bit further.',
+      async run(c) { await E.dragTo(E.S.max + 170, 700); await c.wait(600); },
+      when: [
+        ['64 px', 'Ring is full, pill brightens (<code>surfaceRaised</code>, ink), text becomes “Release for Tuesday”.'],
+        ['64 px', 'Haptic selection, once. Reed goes <code>watching</code>.'],
+        ['back under', 'Reverts silently (no second haptic).'],
+      ],
+      spec: ['The haptic fires on crossing, not on release, so the hand knows before letting go.'],
+      haptic: 'selection, on crossing',
+      reduce: 'Same.',
+      build: ['<code>runOnJS(haptics.selection)</code> from the gesture worklet when <code>pull</code> crosses the threshold upward.'],
+    },
+    {
+      t: 'Release: the chapter unfolds', u: 'You let go.',
+      async run(c) { await E.release(); await c.wait(600); },
+      when: [
+        ['0–300', 'Content settles to exactly the threshold gap (64 px) and holds. The ring turns into a spinner: “Loading Tuesday”.'],
+        ['≤ 300', 'The earlier chapter is inserted <b>above</b>. What you were reading does not move a pixel.'],
+        ['insert', 'The gap you pulled open is now a window into Tuesday’s last messages. Pill fades (160 ms).'],
+        ['insert →', 'New messages fade in and drop 12 px into place, nearest first, 30 ms apart (<code>smooth</code>).'],
+        ['—', 'Keep scrolling up into Tuesday normally. A divider separates the chapters.'],
+      ],
+      spec: [
+        'Prefetch: when the user reaches the top edge, fetch the previous chapter in the background so the release is instant. The spinner is a fallback, shown at most ~300 ms typical.',
+        'Anchoring: native <code>maintainVisibleContentPosition</code>; web uses the existing measured-offset fix.',
+        'Revealed chapters stay rendered until you leave home. Next time, only the current chapter.',
+      ],
+      haptic: 'none (it fired at the threshold)',
+      reduce: 'No drop; messages fade in together.',
+      build: ['Prepend to the list data; animate only the inserted rows with an <code>entering</code> animation.'],
+    },
+    {
+      t: 'Or tap “Earlier”', u: 'The same thing for people who don’t pull.',
+      async run(c) { await E.tweenVis(E.S.max, { dur: 500 }); await c.wait(300); await E.tapEarlier(); await c.wait(500); },
+      when: [
+        ['0', 'Tap the “Earlier · …” button above the chapter header. Haptic selection.'],
+        ['0–240', 'The content opens the same 64 px gap by itself, then the same unfold.'],
+      ],
+      spec: ['The button is the accessible path (screen readers, switch control) and the discoverable one. The pull is the fast path.'],
+      haptic: 'selection',
+      reduce: 'Same, fades only.',
+      build: ['Same <code>loadEarlier()</code> as the gesture.'],
+    },
+    {
+      t: 'Latest', u: 'You tap “Latest” to go back down.',
+      async run(c) { await E.tweenVis(0, { dur: 600, z: .95 }); await c.wait(500); },
+      when: [
+        ['0–600', 'Spring scroll to the bottom (<code>morph</code>-like, no overshoot). If more than 3 screens away, jump to 1 screen away first, then animate the last screen.'],
+        ['bottom', '“Latest” leaves (fade + 6 px).'],
+      ],
+      spec: ['New messages arriving while you are scrolled up do not move you; “Latest” gets a small accent dot.'],
+      haptic: 'none',
+      reduce: 'Jump without animation.',
+      build: ['<code>scrollToEnd</code> with the two-phase jump for long distances.'],
+    },
+    {
+      t: 'The beginning', u: 'Pull past the very first chapter.',
+      async run(c) {
+        while (E.S.next < chapters.length) await E.tapEarlier();
+        await E.tweenVis(E.S.max, { dur: 500 }); await c.wait(200);
+        await E.dragTo(E.S.max + 170, 700); await c.wait(700); await E.release(); await c.wait(300);
+      },
+      when: [
+        ['—', 'Pill reads “This is where you and Reed started”. The ring stays empty, no threshold, no haptic.'],
+        ['release', 'Springs back.'],
+      ],
+      spec: ['The very first chapter has no “Earlier” button.'],
+      haptic: 'none',
+      reduce: 'Same.',
+      build: ['Chapter metadata says whether a previous chapter exists.'],
+    },
+  ],
+  after: `
+  <section class="rule">
+    <h2>The chapter rule (a business rule, server-side)</h2>
+    <p>One definition of “a new conversation”, used by the thread, by today mode and by the “Earlier” label. It lives on the server so it can change without an app release.</p>
+    <div class="grid">
+      <div class="box"><h3>A new chapter starts when</h3><ul>
+        <li>the gap since the previous message is longer than <code>chapterGapMinutes</code> (config, default 60), or</li>
+        <li>a workout session started or ended between the two messages (the chapter label says “after Lower A”).</li></ul>
+        <p style="margin-top:8px">“Dynamic” = the threshold is config, not code. We can later make it per-user (e.g. based on how often someone opens the app) without touching the client.</p></div>
+      <div class="box"><h3>What the client gets</h3><ul>
+        <li>Each message carries <code>chapterId</code>; chapters have <code>startedAt</code>, <code>label</code>, <code>sessionId?</code>.</li>
+        <li><code>getPresence</code> returns <code>currentChapterId</code> and whether the last chapter is closed, so today mode no longer needs <code>COLD_AFTER_MS</code> on the client.</li>
+        <li>Times are stored in UTC; labels are formatted on the device in the profile’s time zone.</li></ul></div>
+    </div>
+  </section>`,
+});
+</script>
+</body>
+</html>

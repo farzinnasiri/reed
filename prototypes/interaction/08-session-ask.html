@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 08 Ask mid-session</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .app .wk { position: absolute; inset: 0; transform-origin: 50% 30%; transition: transform calc(var(--k) * 550ms) var(--morph), opacity calc(var(--k) * 400ms) }
+  .app.sheet-open .wk { transform: scale(.955); opacity: .55 }
+  .app .wk-head { position: absolute; top: 56px; left: 12px; right: 12px; height: 60px; border-radius: 30px; background: var(--raise); display: flex; align-items: center; padding: 0 8px 0 14px; z-index: 20; gap: 6px }
+  .app .wk-head .ic { width: 20px; height: 20px; color: var(--ink) }
+  .app .wk-stats { flex: 1; display: flex; justify-content: center; gap: 8px; font-size: 13.5px; font-weight: 600; white-space: nowrap }
+  .app .wk-stats span { color: var(--ink-3); font-weight: 500 }
+  .app .wk-reed { width: 44px; height: 44px; display: grid; place-items: center }
+  .app .wk-slot { width: 40px; height: 40px }
+  .app .wk-dots { width: 32px; display: grid; place-items: center; color: var(--ink-2) }
+  .app .wk-title { position: absolute; top: 134px; left: 0; right: 0; text-align: center; font-size: 20px; font-weight: 600; letter-spacing: -.01em; height: 26px; overflow: hidden }
+  .app .wk-title span { display: block }
+  .app .wk-card { position: absolute; top: 176px; left: 10px; right: 10px; bottom: 18px; border-radius: 32px; background: var(--raise); padding: 22px; display: flex; flex-direction: column }
+  .app .wk-row { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; color: var(--ink-3) }
+  .app .wk-row .b { height: 32px; padding: 0 13px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line-2); display: inline-flex; align-items: center; color: var(--ink-2); font-size: 13px; margin-left: 6px }
+  .app .metric { margin-top: 58px }
+  .app .metric small { display: block; font-size: 12px; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 6px }
+  .app .metric b { font-size: 64px; font-weight: 600; letter-spacing: -.04em; line-height: 1; display: inline-block }
+  .app .metric b i { font-style: normal; font-size: 18px; color: var(--ink-3); font-weight: 500; letter-spacing: 0; margin-left: 6px }
+  .app .wk-hint { margin-top: auto; text-align: center; font-size: 13px; color: var(--ink-3) }
+
+  .app .mascot-layer { z-index: 46 }
+  .app .sheet { top: 92px; transition: transform calc(var(--k) * 450ms) var(--sheet), bottom calc(var(--k) * 380ms) cubic-bezier(.2, .9, .25, 1) }
+  .app.kb-up .sheet { bottom: 262px; border-radius: 36px }
+  .app .sh-head { display: flex; align-items: center; gap: 12px; padding: 8px 16px 6px 14px; flex: none }
+  .app .sh-slot { width: 56px; height: 56px; flex: none }
+  .app .sh-title b { display: block; font-size: 18px; font-weight: 600; letter-spacing: -.01em }
+  .app .ctx { display: inline-flex; align-items: center; gap: 6px; margin-top: 3px; height: 24px; padding: 0 10px; border-radius: 12px; background: var(--accent-soft); color: var(--accent-ink); font-size: 12.5px; font-weight: 600 }
+  .app .sh-head .hint { margin-left: auto; margin-right: 6px }
+  .app .sh-close { width: 38px; height: 38px; border-radius: 19px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2); flex: none }
+  .app .sh-close .ic { width: 18px; height: 18px }
+  .app .sheet .thread { flex: 1; min-height: 0 }
+  .app .sheet .chips { flex-wrap: nowrap; overflow: hidden; padding: 6px 16px 4px; flex: none }
+  .app .sheet .dock { padding: 6px 14px 30px }
+  .app.kb-up .sheet .dock { padding-bottom: 10px }
+  .app .swap .tgt { font-size: 13.5px; color: var(--ink-3); margin-top: 4px }
+  .app .applied { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 14px; color: var(--ink-2) }
+  .app .applied .ic { width: 18px; height: 18px; color: #7fd4a0 }
+  .app .rec { display: flex; align-items: center; gap: 3px; height: 40px }
+  .app .rec i { width: 3px; border-radius: 2px; background: var(--accent-ink); animation: recb calc(var(--ks) * .8s) ease-in-out infinite }
+  @keyframes recb { 0%, 100% { height: 6px } 50% { height: 22px } }
+  .app .send.rec-on { background: #3d66f2; color: #fff }
+  .app .voice ol { margin: 4px 0 0 18px } .app .voice li { margin: 2px 0 }
+</style>
+</head>
+<body>
+<script>
+const { icon, ui, chat } = REED;
+const sessionChips = ['Machine’s taken', 'Form check', 'What now?'];
+const swapCard = `<div class="card swap"><div class="card-hd"><b>Swap exercise</b><span>From set 4</span></div>
+  <div class="swapline"><s>Bench press</s>${icon('arrow')}<b>Dumbbell bench press</b></div>
+  <div class="tgt">3 × 8 · 20 kg each hand · same rest</div>
+  <div class="row-btns"><button class="soft" data-apply>Apply swap</button><button class="ghost">Keep bench</button></div></div>`;
+
+async function openSheet(c, { context = 'Bench press · set 4' } = {}) {
+  c.$('.ctx span').textContent = context;
+  c.haptic('light');
+  c.app.classList.add('sheet-open');
+  c.state('listening');
+  c.face.mood('listening');
+  await Promise.all([c.wait(REED.springs.sheet.duration), c.placeMascot(c.$('.sh-slot'), { animate: true })]);
+  await chat.chipsIn(c, sessionChips, { into: '.sheet .chips' });
+}
+async function closeSheet(c) {
+  c.app.classList.remove('sheet-open', 'kb-up');
+  c.state('watching');
+  c.face.mood('watching');
+  await Promise.all([c.wait(REED.springs.sheet.duration), c.placeMascot(c.$('.wk-slot'), { animate: true })]);
+}
+
+REED.page({
+  kicker: 'Reed · Interaction · 08',
+  title: 'Asking Reed in the middle of a session',
+  intro: [
+    'Sometimes you need Reed right now: the machine is taken, you’re not sure about form, you don’t know what to do next. Tapping Reed in the workout header opens <b>the Reed sheet</b>: another interface onto the <b>same conversation</b> as home, same backend thread, same logic, framed for the gym.',
+    'It knows where you are (exercise and set) and offers session chips, so most questions are one tap. Answers that change the session come as a card you confirm, and the change happens in the workout itself.',
+  ],
+  build(c) {
+    c.app.innerHTML = `
+      <div class="wk">
+        <div class="wk-head">${icon('back', 2)}<div class="wk-stats">22:10 <span>·</span> 7 sets <span>·</span> 2,900 kg</div><div class="wk-reed"><div class="wk-slot"></div></div><div class="wk-dots">${icon('dots', 2.4)}</div></div>
+        <div class="wk-title"><span>Bench press</span></div>
+        <div class="wk-card"><div class="wk-row"><span>Set 4</span><span><span class="b">Details</span><span class="b">Warm-up</span></span></div>
+          <div class="metric"><small>REPS</small><b class="num">8</b></div>
+          <div class="metric" style="margin-top:44px"><small>WEIGHT</small><b class="num kg">45<i>kg</i></b></div>
+          <div class="wk-hint">Swipe right to log set</div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="grab"></div>
+        <div class="sh-head"><div class="sh-slot"></div><div class="sh-title"><b>Reed</b><span class="ctx">${icon('barbell', 2)}<span></span></span></div><span class="hint"></span><button class="sh-close">${icon('close')}</button></div>
+        <div class="thread"><div class="tscroll">
+          <div class="chapter">Today · during Upper body</div>
+          <div class="voice">Session started. Rows first, then bench. I’ll keep an eye on the shoulder.</div>
+          <div class="voice">Last time <strong>3 × 8 at 40 kg</strong>. You’re moving 42.5 well, keep it.</div>
+        </div></div>
+        <div class="chips"></div>
+        <footer class="dock"><div class="composer"><span class="plus">${icon('plus')}</span><div class="field" data-ph="Ask Reed">Ask Reed</div>
+          <button class="send"><span class="i-mic">${icon('mic')}</span><span class="i-send">${icon('arrow-up', 2.2)}</span></button></div></footer>
+      </div>
+      ${ui.mascotLayer('watching')}${REED.keyboard}`;
+  },
+  async settle(c) { await c.placeMascot(c.$('.wk-slot')); },
+  steps: [
+    {
+      t: 'Open the Reed sheet', u: 'You tap Reed in the workout header (or a whisper).',
+      async run(c) { await openSheet(c); await c.wait(500); },
+      when: [
+        ['0', 'Haptic light. The sheet rises (<code>sheet</code>, 450 ms) to ~88 % height.'],
+        ['0–550', 'The workout recedes behind it (scale .955, opacity .55, <code>morph</code>), the same stage recede as home.'],
+        ['0–550', 'Reed glides out of the header into the sheet header (40 → 56 px, <code>morph</code>). One mascot, never two.'],
+        ['450 →', 'Session chips arrive (<code>pop</code>, 60 ms apart). Reed <code>listening</code>.'],
+      ],
+      spec: [
+        'Header: Reed, plus a context chip “Bench press · set 4” (from the capture card the user is on; from a whisper: that whisper).',
+        'The thread is the <b>current chapter</b> of the one conversation. A session start begins a chapter, so it opens on “during Upper body”. Pull for earlier, as on home.',
+        'The composer is not auto-focused: chips and the mic come first (hands may be busy).',
+      ],
+      haptic: 'light',
+      reduce: 'Sheet fades up; workout dims without scaling; mascot crossfades.',
+      build: [
+        '<code>components/reed/session/reed-session-sheet.tsx</code> on <code>ReedSheet</code> (gorhom) with stage recede.',
+        'It reuses <code>ReedThread</code>, <code>ReedComposer</code>, the widget registry and the presence hook. Different frame, same parts.',
+      ],
+    },
+    {
+      t: 'Tap a session chip', u: 'You tap “Machine’s taken”.',
+      async run(c) {
+        const chip = c.$('.sheet .chips').children[0];
+        c.haptic('selection');
+        const bubble = document.createElement('div');
+        bubble.className = 'you';
+        bubble.textContent = 'Bench is taken';
+        c.$('.tscroll').appendChild(bubble);
+        c.face.act('hop');
+        await Promise.all([
+          chat.makeRoom(c, bubble, () => c.fly(chip, bubble, { spring: 'lift' })),
+          ...[...c.$('.sheet .chips').children].slice(1).map(o => c.anim(o, [{ opacity: 1 }, { opacity: 0 }], { dur: 120 })),
+        ]);
+        c.$('.sheet .chips').innerHTML = '';
+        await chat.thinking(c);
+        await c.wait(900);
+      },
+      when: [
+        ['0', 'Chip → your bubble (<code>lift</code>), other chips fade. Haptic selection.'],
+        ['300', 'Reed <code>thinking</code> in the sheet header; “Thinking” beside it.'],
+      ],
+      spec: [
+        'The message is sent with context: <code>{ sessionId, exerciseId, setIndex }</code>. The bubble shows the chip’s user-voice text (“Bench is taken”).',
+        'Session chips are fixed in v1: “Machine’s taken”, “Form check”, “What now?”. Reed’s own <code>replies</code> replace them after the first answer.',
+      ],
+      haptic: 'selection',
+      reduce: 'Bubble fades in.',
+      build: ['<code>sendReedMessage({ …, context })</code>; backend needs the optional <code>context</code> field (page 09).'],
+    },
+    {
+      t: 'Reed answers with a swap', u: 'The reply comes with a swap card.',
+      async run(c) {
+        await chat.reply(c, 'Dumbbell bench instead: same muscles, easier on the shoulder. <strong>3 × 8 at 20 kg</strong>.', { card: swapCard });
+        c.face.mood('happy');
+        await c.wait(600);
+      },
+      when: [
+        ['0 →', 'Sentences reveal, then the card enters (<code>smooth</code>). Haptic light when it lands.'],
+        ['—', 'Reed <code>happy</code> (56 px: no vertical-eye moods). Card: old exercise struck through → new one, targets, “Apply swap” (soft) and “Keep bench” (quiet).'],
+      ],
+      spec: ['Existing <code>session_change</code> widget and BE-12 rules: swap only, explicit confirmation, 5-minute expiry.'],
+      haptic: 'light (card lands)',
+      reduce: 'Fade.',
+      build: ['<code>widgets/session-change-card.tsx</code> as built in D2.'],
+    },
+    {
+      t: 'Apply: the change happens in the workout', u: 'You tap “Apply swap”.',
+      async run(c) {
+        const btns = c.$('.swap .row-btns');
+        c.haptic('success');
+        btns.outerHTML = `<div class="applied">${icon('check', 2.2)}Changed by Reed, confirmed by you</div>`;
+        await c.anim(c.$('.applied'), [{ opacity: 0, transform: 'translateY(4px)' }, { opacity: 1, transform: 'none' }], { dur: 220 });
+        c.face.mood('happy');
+        await c.wait(700);
+        await closeSheet(c);
+        const t = c.$('.wk-title span');
+        await c.anim(t, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(-14px)', opacity: 0 }], { dur: 180, easing: 'ease-in' });
+        t.textContent = 'Dumbbell bench press';
+        const kg = c.$('.kg');
+        await Promise.all([
+          c.anim(t, [{ transform: 'translateY(14px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { dur: REED.springs.smooth.duration, spring: 'smooth' }),
+          (async () => { await c.anim(kg, [{ transform: 'none', opacity: 1 }, { transform: 'translateY(-18px)', opacity: 0 }], { dur: 160, easing: 'ease-in' }); kg.innerHTML = '20<i>kg</i>'; await c.anim(kg, [{ transform: 'translateY(18px)', opacity: 0 }, { transform: 'none', opacity: 1 }], { dur: REED.springs.smooth.duration, spring: 'smooth' }); })(),
+        ]);
+        c.face.act('nod');
+        await c.wait(700);
+      },
+      when: [
+        ['0', 'Haptic success. Buttons become “Changed by Reed, confirmed by you”. Reed <code>happy</code>.'],
+        ['+700', 'Sheet closes by itself (<code>sheet</code>). Reed glides back into the header. The workout comes forward.'],
+        ['+1150', 'The card title rolls to the new exercise (old up and out 14 px, new up from below, <code>smooth</code>). Targets roll the same way.'],
+        ['end', 'Reed nods in the header. You swipe the next set as normal.'],
+      ],
+      spec: [
+        'The swap itself is the existing <code>confirmSessionAction</code> mutation; the workout card updates from the subscription.',
+        'The roll animation runs when the capture card key changes because of a confirmed Reed action (the D2 capture key already includes <code>exerciseCatalogId</code>).',
+      ],
+      haptic: 'success',
+      reduce: 'Sheet closes, title and numbers crossfade.',
+      build: ['Workout card: an <code>entering</code>/<code>exiting</code> pair on the title and metric values, used only for Reed-applied changes. Logging gestures untouched.'],
+    },
+    {
+      t: 'Ask by voice', u: 'Hands busy: you open Reed and tap the mic.',
+      async run(c) {
+        await openSheet(c, { context: 'Dumbbell bench press · set 4' });
+        const send = c.$('.sheet .send'), field = c.$('.sheet .field');
+        c.haptic('light');
+        send.classList.add('rec-on');
+        field.innerHTML = `<span class="rec">${Array.from({ length: 16 }, (_, i) => `<i style="animation-delay:${-(i * 0.07)}s"></i>`).join('')}</span>`;
+        c.face.mood('listening');
+        c.face.gaze(.4, .7);
+        c.glow?.set({});
+        c.state('listening (voice)');
+        await c.wait(1800);
+        send.classList.remove('rec-on');
+        field.innerHTML = field.dataset.ph;
+        const b = document.createElement('div'); b.className = 'you'; b.textContent = 'how should my elbows be on this one';
+        c.$('.tscroll').appendChild(b);
+        c.haptic('light');
+        await chat.makeRoom(c, b, () => c.anim(b, [{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { dur: 220 }));
+        await chat.thinking(c);
+        await c.wait(900);
+        await chat.reply(c, 'About 45° from your body, not flared. Lower to mid-chest, <strong>2 s down</strong>. Stop if the shoulder pinches.');
+        await c.wait(600);
+      },
+      when: [
+        ['tap mic', 'Haptic light. The field becomes a live waveform; Reed <code>listening</code>, eyes on it.'],
+        ['tap again', 'Stops, transcribes, sends (existing voice flow). Your words appear as a bubble.'],
+        ['reply', 'Short, practical, in Reed’s voice. Reed <code>speaking</code>.'],
+      ],
+      spec: ['Voice is the same component as home. Only the mic starts it (decision 4).'],
+      haptic: 'light on start and on send',
+      reduce: 'Static bars.',
+      build: ['Existing voice composer status drives presence <code>listening</code>.'],
+    },
+    {
+      t: 'Close and carry on', u: 'You swipe the sheet down.',
+      async run(c) { await closeSheet(c); await c.wait(600); },
+      when: [
+        ['finger', 'Sheet follows the finger down; release past 25 % or with velocity closes it (<code>sheet</code>).'],
+        ['0–550', 'The workout comes forward; Reed glides home to the header (<code>watching</code>).'],
+        ['later', 'Everything said here is in the home thread too, in the chapter “during Upper body”.'],
+      ],
+      spec: ['Closing never discards a draft; it’s there next time you open the sheet (same draft as home).'],
+      haptic: 'none',
+      reduce: 'Sheet fades down.',
+      build: ['Same gorhom sheet gestures as the You sheet.'],
+    },
+  ],
+});
+</script>
+</body>
+</html>

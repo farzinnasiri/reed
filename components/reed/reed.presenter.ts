@@ -1,17 +1,3 @@
-import type { ReedMessage } from './reed.types';
-
-export const VOICE_WAVEFORM_BARS = [
-  { low: 0.52, high: 1.2 },
-  { low: 0.84, high: 1.62 },
-  { low: 0.62, high: 1.36 },
-  { low: 1, high: 1.84 },
-  { low: 0.72, high: 1.48 },
-  { low: 0.92, high: 1.72 },
-  { low: 0.56, high: 1.28 },
-  { low: 0.78, high: 1.54 },
-  { low: 0.48, high: 1.12 },
-] as const;
-
 export function buildCoachReply(prompt: string, displayName: string) {
   const normalized = prompt.toLowerCase();
 
@@ -30,36 +16,32 @@ export function buildCoachReply(prompt: string, displayName: string) {
   return 'Good. Keep the question concrete and I’ll keep the answer useful.';
 }
 
-export function summarizeReplyQuote(text: string) {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return '';
-  return normalized.length > 42 ? `${normalized.slice(0, 39).trimEnd()}...` : normalized;
+export function formatMessageTime(createdAt: number) {
+  return new Date(createdAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
-export function formatReedLastSeen(lastSeenAt: number, now: number = Date.now()) {
-  if (lastSeenAt <= 0) return 'Last seen recently';
-
-  const elapsedMinutes = Math.max(0, Math.floor((now - lastSeenAt) / 60_000));
-  if (elapsedMinutes < 1) return 'Last seen just now';
-  if (elapsedMinutes === 1) return 'Last seen 1 minute ago';
-  if (elapsedMinutes < 60) return `Last seen ${elapsedMinutes} minutes ago`;
-
-  const elapsedHours = Math.floor(elapsedMinutes / 60);
-  if (elapsedHours === 1) return 'Last seen 1 hour ago';
-  if (elapsedHours < 24) return `Last seen ${elapsedHours} hours ago`;
-
-  const elapsedDays = Math.floor(elapsedHours / 24);
-  if (elapsedDays === 1) return 'Last seen 1 day ago';
-  if (elapsedDays < 7) return `Last seen ${elapsedDays} days ago`;
-
-  const elapsedWeeks = Math.floor(elapsedDays / 7);
-  if (elapsedWeeks === 1) return 'Last seen 1 week ago';
-  return `Last seen ${elapsedWeeks} weeks ago`;
+/** Calendar separators use the profile timezone, including midnight and DST boundaries. */
+function messageDayKey(at: number, timeZone?: string) {
+  const parts = new Intl.DateTimeFormat('en', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(at);
+  const value = (type: string) => parts.find(part => part.type === type)!.value;
+  return `${value('year')}-${value('month')}-${value('day')}`;
 }
 
-export function pickVoiceTranscript(messages: ReedMessage[]) {
-  const messageCount = messages.filter(message => message.role === 'user').length;
-  if (messageCount === 0) return 'How did this week go?';
-  if (messageCount % 2 === 0) return 'What should I focus on next?';
-  return 'What changed in my performance?';
+export function formatMessageDate(createdAt: number, timeZone?: string, now = Date.now()) {
+  const today = messageDayKey(now, timeZone);
+  const day = messageDayKey(createdAt, timeZone);
+  if (day === today) return 'Today';
+  const yesterday = new Date(`${today}T12:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  if (day === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+  return new Date(createdAt).toLocaleDateString([], {
+    timeZone, day: 'numeric', month: 'short', year: day.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric',
+  });
+}
+
+export function isSameMessageDay(left: number, right: number, timeZone?: string) {
+  return messageDayKey(left, timeZone) === messageDayKey(right, timeZone);
 }

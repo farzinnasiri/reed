@@ -6,10 +6,12 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 const selectedEnvFile = process.env.REED_ENV_FILE ?? '.env.local';
 const resolvedEnvFile = resolve(selectedEnvFile);
 
-if (existsSync(resolvedEnvFile)) {
+if (!process.env.CI && !process.env.VERCEL && existsSync(resolvedEnvFile)) {
   loadEnv({ path: resolvedEnvFile, override: true, quiet: true });
 }
 
+// Reed is dark only; this is `canvas` from design/system.ts, which Expo config cannot import.
+const canvasColor = '#121110';
 const slug = 'reed';
 const appVariant = getAppVariant();
 const appName = appVariant === 'development' ? 'Reed Development' : appVariant === 'dev' ? 'Reed Dev' : 'Reed';
@@ -26,7 +28,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme,
-  userInterfaceStyle: 'automatic',
+  userInterfaceStyle: 'dark',
+  backgroundColor: canvasColor,
   ios: {
     supportsTablet: true,
     bundleIdentifier: androidPackage,
@@ -36,8 +39,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     permissions: ['android.permission.SCHEDULE_EXACT_ALARM'],
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
-      backgroundColor: '#000000',
+      monochromeImage: './assets/images/monochrome-icon.png',
+      backgroundColor: canvasColor,
     },
+    backgroundColor: canvasColor,
     predictiveBackGestureEnabled: false,
   },
   web: {
@@ -52,19 +57,16 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-splash-screen',
       {
-        image: './assets/images/logo-mark-dark.png',
+        image: './assets/images/splash-icon.png',
         imageWidth: 180,
         resizeMode: 'contain',
-        backgroundColor: '#f7f7f4',
-        dark: {
-          image: './assets/images/logo-mark.png',
-          backgroundColor: '#040404',
-        },
+        backgroundColor: canvasColor,
       },
     ],
     'expo-asset',
     'expo-secure-store',
     'expo-status-bar',
+    'expo-localization',
     'expo-web-browser',
     [
       'expo-image-picker',
@@ -84,7 +86,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     [
       'expo-notifications',
       {
-        color: '#2455e6',
+        color: '#3d66f2',
         defaultChannel: 'rest-timer-alerts-v3',
         icon: './assets/images/notification-icon.png',
         sounds: ['./assets/sounds/rest_timer_complete.wav'],

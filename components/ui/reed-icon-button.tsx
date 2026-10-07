@@ -1,6 +1,5 @@
 import { Pressable, StyleSheet, type PressableProps } from 'react-native';
 import Animated from 'react-native-reanimated';
-import { getGlassControlTokens } from '@/components/ui/glass-material';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { getDisabledOpacity, usePressAnimation } from '@/design/use-press-animation';
@@ -8,7 +7,7 @@ import { getDisabledOpacity, usePressAnimation } from '@/design/use-press-animat
 type ReedIconButtonProps = Omit<PressableProps, 'style'> & {
   children: React.ReactNode;
   shape?: 'rounded' | 'pill';
-  variant?: 'default' | 'ghost' | 'glass';
+  variant?: 'default' | 'ghost';
 };
 
 export function ReedIconButton({
@@ -19,7 +18,6 @@ export function ReedIconButton({
   ...props
 }: ReedIconButtonProps) {
   const { theme } = useReedTheme();
-  const glassControls = getGlassControlTokens(theme);
   const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
 
   return (
@@ -33,21 +31,10 @@ export function ReedIconButton({
       <Animated.View
         style={[
           styles.base,
-          variant === 'default' ? theme.shadows.controlActive : null,
           shape === 'pill' ? styles.pill : null,
           {
-            backgroundColor:
-              variant === 'ghost'
-                ? 'transparent'
-                : variant === 'glass'
-                  ? glassControls.shellBackgroundColor
-                  : theme.colors.controlFill,
-            borderColor:
-              variant === 'ghost'
-                ? 'transparent'
-                : variant === 'glass'
-                  ? glassControls.shellBorderColor
-                  : theme.colors.controlBorder,
+            backgroundColor: variant === 'ghost' ? 'transparent' : theme.colors.surface,
+            borderColor: variant === 'ghost' ? 'transparent' : theme.colors.line,
             opacity: getDisabledOpacity(disabled),
           },
           animatedStyle,

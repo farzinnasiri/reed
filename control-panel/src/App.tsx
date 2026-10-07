@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { adminPrompts, convex, convexUrl, type PromptVersion, type ReedDebugContext, type ReedProfileOption } from './convex';
+import { controlPanelRequest, convexSiteUrl, type PromptVersion, type ReedDebugContext, type ReedProfileOption } from './convex';
 
 const DEFAULT_PROMPT_KEY = 'reed_chat_system';
 
@@ -18,8 +18,8 @@ function formatJson(value: unknown) {
 
 function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('FunctionPathNotFound')) {
-    return 'Convex does not have the Reed debug functions on this deployment yet. Run Convex codegen/dev for the same ENV as the control panel, then reload.';
+  if (message.includes('404')) {
+    return 'This Convex deployment does not have the control panel endpoint yet. Run Convex dev for the same env, then reload.';
   }
   return message;
 }
@@ -38,19 +38,19 @@ export function App() {
   const [status, setStatus] = useState('Enter the admin secret to load the control panel.');
   const [isBusy, setIsBusy] = useState(false);
 
-  const canLoad = Boolean(convex && adminSecret.trim());
+  const canLoad = Boolean(convexSiteUrl && adminSecret.trim());
   const hasChanges = useMemo(() => draft.trim() !== (activePrompt?.content ?? '').trim(), [activePrompt, draft]);
 
   async function loadPrompt(key = selectedKey) {
-    if (!convex || !adminSecret.trim()) return;
+    if (!convexSiteUrl || !adminSecret.trim()) return;
 
     setIsBusy(true);
     setStatus('Loading prompt...');
     try {
       const [keys, active, history] = await Promise.all([
-        convex.query(adminPrompts.listPromptKeys, { adminSecret }),
-        convex.query(adminPrompts.getActivePrompt, { adminSecret, key }),
-        convex.query(adminPrompts.listPromptVersions, { adminSecret, key }),
+        controlPanelRequest<string[]>(adminSecret, 'listPromptKeys'),
+        controlPanelRequest<PromptVersion | null>(adminSecret, 'getActivePrompt', { key }),
+        controlPanelRequest<PromptVersion[]>(adminSecret, 'listPromptVersions', { key }),
       ]);
       setPromptKeys(keys.length > 0 ? keys : [DEFAULT_PROMPT_KEY]);
       setActivePrompt(active);
@@ -65,17 +65,17 @@ export function App() {
   }
 
   async function loadProfiles(nextProfileId = selectedProfileId) {
-    if (!convex || !adminSecret.trim()) return;
+    if (!convexSiteUrl || !adminSecret.trim()) return;
 
     setIsBusy(true);
     setStatus('Loading Reed profiles...');
     try {
-      const loadedProfiles = await convex.query(adminPrompts.listReedProfiles, { adminSecret });
+      const loadedProfiles = await controlPanelRequest<ReedProfileOption[]>(adminSecret, 'listReedProfiles');
       const profileId = nextProfileId || loadedProfiles[0]?._id || '';
       setProfiles(loadedProfiles);
       setSelectedProfileId(profileId);
       if (profileId) {
-        const context = await convex.query(adminPrompts.getReedDebugContext, { adminSecret, profileId });
+        const context = await controlPanelRequest<ReedDebugContext>(adminSecret, 'getReedDebugContext', { profileId });
         setDebugContext(context);
         setStatus(`Loaded Reed context for ${context.profile.email}.`);
       } else {
@@ -107,13 +107,12 @@ export function App() {
   }
 
   async function savePrompt() {
-    if (!convex || !adminSecret.trim()) return;
+    if (!convexSiteUrl || !adminSecret.trim()) return;
 
     setIsBusy(true);
     setStatus('Saving prompt...');
     try {
-      await convex.mutation(adminPrompts.saveActivePrompt, {
-        adminSecret,
+      await controlPanelRequest(adminSecret, 'saveActivePrompt', {
         content: draft,
         key: selectedKey,
       });
@@ -127,14 +126,13 @@ export function App() {
   }
 
   async function rollbackPrompt(version: number) {
-    if (!convex || !adminSecret.trim()) return;
+    if (!convexSiteUrl || !adminSecret.trim()) return;
     if (!window.confirm(`Make version ${version} the active ${selectedKey} prompt?`)) return;
 
     setIsBusy(true);
     setStatus(`Rolling back to v${version}...`);
     try {
-      await convex.mutation(adminPrompts.rollbackPrompt, {
-        adminSecret,
+      await controlPanelRequest(adminSecret, 'rollbackPrompt', {
         key: selectedKey,
         version,
       });
@@ -175,7 +173,7 @@ export function App() {
               value={adminSecret}
             />
           </label>
-          <button disabled={!convex || !adminSecret.trim() || isBusy} type="submit">
+          <button disabled={!convexSiteUrl || !adminSecret.trim() || isBusy} type="submit">
             Load
           </button>
         </form>
@@ -211,8 +209,8 @@ export function App() {
           </label>
         )}
 
-        <p className={convexUrl ? 'status' : 'status error'}>
-          {convexUrl ? status : 'Missing VITE_CONVEX_URL. Run through make control-panel so Reed env is loaded.'}
+        <p className={convexSiteUrl ? 'status' : 'status error'}>
+          {convexSiteUrl ? status : 'Missing VITE_CONVEX_URL. Run through make control-panel so Reed env is loaded.'}
         </p>
       </aside>
 

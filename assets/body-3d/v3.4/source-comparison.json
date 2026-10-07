@@ -1,0 +1,32 @@
+{
+  "male": {
+    "bodyIndicesAttributesMorphs": "byte-identical to v3.3",
+    "comparedBuffers": [
+      "indices",
+      "POSITION",
+      "NORMAL",
+      "TEXCOORD_0",
+      "morph_0_POSITION",
+      "morph_0_NORMAL",
+      "morph_1_POSITION",
+      "morph_1_NORMAL",
+      "morph_2_POSITION",
+      "morph_2_NORMAL"
+    ]
+  },
+  "female": {
+    "bodyIndicesAttributesMorphs": "byte-identical to v3.3",
+    "comparedBuffers": [
+      "indices",
+      "POSITION",
+      "NORMAL",
+      "TEXCOORD_0",
+      "morph_0_POSITION",
+      "morph_0_NORMAL",
+      "morph_1_POSITION",
+      "morph_1_NORMAL",
+      "morph_2_POSITION",
+      "morph_2_NORMAL"
+    ]
+  }
+}

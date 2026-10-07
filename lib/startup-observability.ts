@@ -1,7 +1,8 @@
+import { onboardingComplete } from '@/domains/profile/onboarding';
 import * as SplashScreen from 'expo-splash-screen';
 import { startClientWideEvent } from '@/lib/client-observability';
 
-type StartupViewer = { onboardingCompletedAt?: number } | null;
+type StartupViewer = { onboardingCompletedAt?: number; onboardingVersion?: number } | null;
 
 const startupStartedAt = Date.now();
 const startupEvent = startClientWideEvent('app_startup', {
@@ -66,7 +67,7 @@ export function getStartupResult(session: unknown | null | undefined, viewer: St
     return 'profile_missing';
   }
 
-  return viewer.onboardingCompletedAt ? 'app_ready' : 'onboarding';
+  return onboardingComplete(viewer) ? 'app_ready' : 'onboarding';
 }
 
 export function getStartupViewerState(session: unknown | null | undefined, viewer: StartupViewer | undefined) {
@@ -82,7 +83,7 @@ export function getStartupViewerState(session: unknown | null | undefined, viewe
     return 'missing';
   }
 
-  return viewer.onboardingCompletedAt ? 'ready' : 'needs_onboarding';
+  return onboardingComplete(viewer) ? 'ready' : 'needs_onboarding';
 }
 
 function startupElapsedMs() {

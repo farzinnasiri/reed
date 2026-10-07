@@ -1,0 +1,1590 @@
+{
+  "female": {
+    "assetVersion": "3.0.0",
+    "defaultDrawCalls": 1,
+    "lowerBackChangedFrontPixels": 0,
+    "lowerBackMorphOcclusion": [
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0.5,
+          0.5,
+          0.25
+        ]
+      }
+    ],
+    "morphCases": [
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0.5,
+          0.5,
+          0.25
+        ]
+      }
+    ],
+    "roleSwapChangedPixels": 1034,
+    "sha256": "2b8d55503f422ef554fca5efa9371ddad8720188f3153647e1d70a1d7499f3e9",
+    "simultaneousChangedPixels": 1175,
+    "simultaneousDrawCalls": 3,
+    "variant": "female"
+  },
+  "male": {
+    "assetVersion": "3.0.0",
+    "defaultDrawCalls": 1,
+    "lowerBackChangedFrontPixels": 0,
+    "lowerBackMorphOcclusion": [
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "changedFrontPixels": 0,
+        "weights": [
+          0.5,
+          0.5,
+          0.25
+        ]
+      }
+    ],
+    "morphCases": [
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0,
+          1,
+          0
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          1,
+          1,
+          1
+        ]
+      },
+      {
+        "passed": true,
+        "regionHits": {
+          "abdomen": {
+            "hits": [
+              "abdomen"
+            ],
+            "passed": true
+          },
+          "chest": {
+            "hits": [
+              "chest"
+            ],
+            "passed": true
+          },
+          "left_ankle": {
+            "hits": [
+              "left_ankle"
+            ],
+            "passed": true
+          },
+          "left_calf": {
+            "hits": [
+              "left_calf"
+            ],
+            "passed": true
+          },
+          "left_elbow": {
+            "hits": [
+              "left_elbow"
+            ],
+            "passed": true
+          },
+          "left_foot": {
+            "hits": [
+              "left_foot"
+            ],
+            "passed": true
+          },
+          "left_hip": {
+            "hits": [
+              "left_hip"
+            ],
+            "passed": true
+          },
+          "left_knee": {
+            "hits": [
+              "left_knee"
+            ],
+            "passed": true
+          },
+          "left_shoulder": {
+            "hits": [
+              "left_shoulder"
+            ],
+            "passed": true
+          },
+          "left_thigh": {
+            "hits": [
+              "left_thigh"
+            ],
+            "passed": true
+          },
+          "left_wrist": {
+            "hits": [
+              "left_wrist"
+            ],
+            "passed": true
+          },
+          "lower_back": {
+            "hits": [
+              "lower_back"
+            ],
+            "passed": true
+          },
+          "neck": {
+            "hits": [
+              "neck"
+            ],
+            "passed": true
+          },
+          "right_ankle": {
+            "hits": [
+              "right_ankle"
+            ],
+            "passed": true
+          },
+          "right_calf": {
+            "hits": [
+              "right_calf"
+            ],
+            "passed": true
+          },
+          "right_elbow": {
+            "hits": [
+              "right_elbow"
+            ],
+            "passed": true
+          },
+          "right_foot": {
+            "hits": [
+              "right_foot"
+            ],
+            "passed": true
+          },
+          "right_hip": {
+            "hits": [
+              "right_hip"
+            ],
+            "passed": true
+          },
+          "right_knee": {
+            "hits": [
+              "right_knee"
+            ],
+            "passed": true
+          },
+          "right_shoulder": {
+            "hits": [
+              "right_shoulder"
+            ],
+            "passed": true
+          },
+          "right_thigh": {
+            "hits": [
+              "right_thigh"
+            ],
+            "passed": true
+          },
+          "right_wrist": {
+            "hits": [
+              "right_wrist"
+            ],
+            "passed": true
+          },
+          "upper_back": {
+            "hits": [
+              "upper_back"
+            ],
+            "passed": true
+          }
+        },
+        "weights": [
+          0.5,
+          0.5,
+          0.25
+        ]
+      }
+    ],
+    "roleSwapChangedPixels": 3946,
+    "sha256": "b07768ffca7111e7181587d5c06c8aaeb8fc2b79299b1c16cbc0d7437e03d567",
+    "simultaneousChangedPixels": 4509,
+    "simultaneousDrawCalls": 3,
+    "variant": "male"
+  }
+}

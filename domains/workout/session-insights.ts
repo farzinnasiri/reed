@@ -213,32 +213,10 @@ export function buildLiveSessionInsights(args: {
   logs: SessionInsightsLog[];
   now: number;
   sessionStartedAt: number;
+  durationMs?: number;
   sessionExercises: SessionInsightsExercise[];
 }): LiveSessionInsightsResult {
-  const exerciseById = new Map(
-    args.sessionExercises.map(sessionExercise => [sessionExercise.sessionExerciseId, sessionExercise]),
-  );
-  const sortedLogs = [...args.logs].sort((left, right) => left.loggedAt - right.loggedAt);
-  const enrichedSets = sortedLogs.flatMap<EnrichedSet>(log => {
-    const exercise = exerciseById.get(log.sessionExerciseId);
-    if (!exercise) {
-      return [];
-    }
-
-    return [
-      {
-        distanceKm: getDistanceKm(log.metrics),
-        exercise,
-        floors: finiteOrZero(log.metrics.floors),
-        holdSeconds: getHoldSeconds(log.recipeKey, log.metrics),
-        loadKg: getLoadKg(log),
-        log,
-        modality: classifyModality(exercise, log),
-        reps: getSetRepCount(log.metrics),
-        rpe: getRpe(log.metrics),
-      },
-    ];
-  });
+  const enrichedSets = buildEnrichedSets(args.logs, args.sessionExercises);
 
   const completedSets = enrichedSets.length;
   const totalLoadKg = roundMetric(sum(enrichedSets.map(setEntry => setEntry.loadKg)));
@@ -253,7 +231,7 @@ export function buildLiveSessionInsights(args: {
       .filter((value): value is number => value !== null && value > 0),
   );
 
-  const durationLabel = formatSessionDurationLabel(args.now - args.sessionStartedAt);
+  const durationLabel = formatSessionDurationLabel(args.durationMs ?? (args.now - args.sessionStartedAt));
   const measurableCounts = countModalities(enrichedSets);
   const cardioDurationSeconds = Math.round(
     sum(
@@ -286,7 +264,7 @@ export function buildLiveSessionInsights(args: {
     fullInsights: {
       exerciseMap: {
         entries: buildExerciseMap(enrichedSets),
-        setsPerHour: getSetsPerHour(completedSets, args.now - args.sessionStartedAt),
+        setsPerHour: getSetsPerHour(completedSets, args.durationMs ?? (args.now - args.sessionStartedAt)),
       },
       intensityAnalysis: {
         averageRpe: summaryIntensity.averageRpe,
@@ -343,6 +321,48 @@ export function buildLiveSessionInsights(args: {
       },
     },
   };
+}
+
+export function buildLiveSessionStatusStrip(args: {
+  logs: SessionInsightsLog[];
+  now: number;
+  sessionExercises: SessionInsightsExercise[];
+  sessionStartedAt: number;
+  durationMs?: number;
+}) {
+  const enrichedSets = buildEnrichedSets(args.logs, args.sessionExercises);
+  const measurableCounts = countModalities(enrichedSets);
+  return buildStatusStrip({
+    cardioDurationSeconds: Math.round(sum(enrichedSets.filter(entry => entry.modality === 'cardio').map(entry => getCardioDurationSeconds(entry.log.recipeKey, entry.log.metrics)))),
+    cardioFloors: Math.round(sum(enrichedSets.filter(entry => entry.modality === 'cardio').map(entry => entry.floors))),
+    completedSets: enrichedSets.length,
+    durationLabel: formatSessionDurationLabel(args.durationMs ?? (args.now - args.sessionStartedAt)),
+    measurableCounts,
+    totalDistanceKm: roundMetric(sum(enrichedSets.map(entry => entry.distanceKm))),
+    totalHoldSeconds: Math.round(sum(enrichedSets.map(entry => entry.holdSeconds))),
+    totalLoadKg: roundMetric(sum(enrichedSets.map(entry => entry.loadKg))),
+  });
+}
+
+function buildEnrichedSets(logs: SessionInsightsLog[], sessionExercises: SessionInsightsExercise[]) {
+  const exerciseById = new Map(
+    sessionExercises.map(sessionExercise => [sessionExercise.sessionExerciseId, sessionExercise]),
+  );
+  return [...logs].sort((left, right) => left.loggedAt - right.loggedAt).flatMap<EnrichedSet>(log => {
+    const exercise = exerciseById.get(log.sessionExerciseId);
+    if (!exercise) return [];
+    return [{
+      distanceKm: getDistanceKm(log.metrics),
+      exercise,
+      floors: finiteOrZero(log.metrics.floors),
+      holdSeconds: getHoldSeconds(log.recipeKey, log.metrics),
+      loadKg: getLoadKg(log),
+      log,
+      modality: classifyModality(exercise, log),
+      reps: getSetRepCount(log.metrics),
+      rpe: getRpe(log.metrics),
+    }];
+  });
 }
 
 function buildDistribution(enrichedSets: EnrichedSet[]) {
@@ -820,7 +840,6 @@ function getHoldSeconds(recipeKey: RecipeKey, metrics: Record<string, number>) {
 }
 
 function getLoadKg(log: Pick<SessionInsightsLog, 'derivedEffectiveLoadKg' | 'metrics' | 'recipeKey'>) {
-  const reps = finiteOrZero(log.metrics.reps);
   const derivedVolumeKg = getSetVolume({
     derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
     metrics: log.metrics,

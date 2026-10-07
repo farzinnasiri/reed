@@ -1,8 +1,12 @@
+import { useReedTheme } from '@/design/provider';
+import { getTapScaleStyle } from '@/design/motion';
 import { useEffect, useState } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { Pressable, View, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Id } from '@/convex/_generated/dataModel';
 import { ReedText } from '@/components/ui/reed-text';
-import { styles } from './workout-surface.styles';
+import { ReedSwapExercise, ReedSwapText } from '@/components/reed/session/reed-swap-feedback';
+import { styles } from './workout-exercise-page.styles';
 import type {
   CaptureCard,
   LiveCardioCard,
@@ -39,12 +43,11 @@ type ExercisePageProps = {
   };
   liveCardio: {
     card: LiveCardioCard | null;
-    elapsedSeconds: number;
     errorMessage: string | null;
     finishSummary: LiveCardioFinishSummary | null;
     isWorking: boolean;
     onAdjustMetric: (key: string, delta: number) => void;
-    onFinish: () => void;
+    onFinish: (elapsedSeconds: number) => void;
     onOpenNextExercise: () => void;
     onStart: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
     onToggleRunning: () => void;
@@ -52,14 +55,12 @@ type ExercisePageProps = {
   rest: {
     card: RestCard | null;
     errorMessage: string | null;
-    isRunning: boolean;
     isWorking: boolean;
     onAdjust: (deltaSeconds: number) => void;
     onPreset: (durationSeconds: number) => void;
     onSwipeLeft: () => void;
     onSwipeRight: () => void;
     onToggleRunning: () => void;
-    remaining: number;
   };
 };
 
@@ -73,10 +74,13 @@ export function ExercisePage({ contentTopInset, navigation, capture, liveCardio,
     'Exercise';
   const liveCardRingSize = Math.max(168, Math.min(216, Math.floor(width - 170)));
   const [activeSide, setActiveSide] = useState<'left' | 'right'>('left');
+  const [manualCardio, setManualCardio] = useState(false);
+  const { theme } = useReedTheme();
+  const insets = useSafeAreaInsets();
 
-  useEffect(() => {
-    setActiveSide('left');
-  }, [capture.card?.recipeKey, capture.card?.sessionExerciseId]);
+  const captureKey = `${capture.card?.sessionExerciseId}|${capture.card?.recipeKey}`;
+  const [previousCaptureKey, setPreviousCaptureKey] = useState(captureKey);
+  if (previousCaptureKey !== captureKey) { setPreviousCaptureKey(captureKey); setActiveSide('left'); setManualCardio(false); }
 
   useEffect(() => {
     if (__DEV__ && capture.card?.layoutKind === 'unilateral_pair') {
@@ -88,15 +92,15 @@ export function ExercisePage({ contentTopInset, navigation, capture, liveCardio,
   }, [capture.card]);
 
   const showLiveCardioCaptureStart = capture.card?.processKind === 'live_cardio' && !capture.isEditingSet;
-  const showLiveCardioView = Boolean(liveCardio.finishSummary || liveCardio.card || showLiveCardioCaptureStart);
+  const showLiveCardioView = Boolean(liveCardio.finishSummary || liveCardio.card || (showLiveCardioCaptureStart && !manualCardio));
 
   return (
-    <View style={[styles.exercisePage, contentTopInset !== undefined ? { paddingTop: contentTopInset } : undefined]}>
+    <ReedSwapExercise id={capture.card?.sessionExerciseId ?? rest.card?.sessionExerciseId ?? liveCardio.card?.sessionExerciseId ?? null}><View style={[styles.exercisePage, { paddingBottom: insets.bottom + theme.spacing.xs }, contentTopInset !== undefined ? { paddingTop: contentTopInset } : undefined]}>
       <View style={styles.exerciseTopRow}>
         {/* The session status strip is the canonical back affordance for this nested surface. */}
-        <ReedText numberOfLines={1} style={styles.exerciseTitle} variant="title">
+        <ReedSwapText numberOfLines={1} style={styles.exerciseTitle} variant="title">
           {title}
-        </ReedText>
+        </ReedSwapText>
       </View>
 
       <View style={styles.cardArea}>
@@ -106,7 +110,6 @@ export function ExercisePage({ contentTopInset, navigation, capture, liveCardio,
             errorMessage={liveCardio.errorMessage}
             isEditingSet={capture.isEditingSet}
             isWorking={liveCardio.isWorking}
-            liveElapsedSeconds={liveCardio.elapsedSeconds}
             liveCardioCard={liveCardio.card}
             liveCardioFinishSummary={liveCardio.finishSummary}
             onAdjustLiveCardioMetric={liveCardio.onAdjustMetric}
@@ -147,15 +150,18 @@ export function ExercisePage({ contentTopInset, navigation, capture, liveCardio,
             onRestSwipeRight={rest.onSwipeRight}
             onToggleRestRunning={rest.onToggleRunning}
             restCard={rest.card}
-            restRemaining={rest.remaining}
-            restRunning={rest.isRunning}
           />
         ) : (
           <View style={styles.cardPlaceholder}>
             <ReedText tone="muted">Pick an exercise from the timeline.</ReedText>
           </View>
         )}
+        {showLiveCardioCaptureStart && !liveCardio.card && !liveCardio.finishSummary ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={manualCardio ? 'Track cardio live' : 'Log cardio manually'} onPress={() => setManualCardio(value => !value)} style={({ pressed }) => [{ minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: theme.spacing.sm }, getTapScaleStyle(pressed)]}>
+            <ReedText tone="muted">{manualCardio ? 'Track live instead' : 'Log manually'}</ReedText>
+          </Pressable>
+        ) : null}
       </View>
-    </View>
+    </View></ReedSwapExercise>
   );
 }

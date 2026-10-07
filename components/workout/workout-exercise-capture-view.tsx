@@ -8,7 +8,7 @@ import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { workoutSemanticPalette } from '@/design/system';
 import { WorkoutMetricPicker } from './workout-metric-picker';
-import { styles } from './workout-surface.styles';
+import { styles } from './workout-exercise-capture-view.styles';
 import type { CaptureCard, MetricValues, RangeOfMotion, SetOutcomeDetails } from './workout-surface.types';
 import { WorkoutSwipeCard } from './workout-swipe-card';
 
@@ -53,9 +53,8 @@ export function WorkoutExerciseCaptureView({
 }: CaptureViewProps) {
   const { theme } = useReedTheme();
   const warmupPalette = workoutSemanticPalette.warmup;
-  const warmupActiveFill = theme.mode === 'dark' ? warmupPalette.activeFillDark : warmupPalette.activeFillLight;
-  const warmupActiveBorder = theme.mode === 'dark' ? warmupPalette.activeBorderDark : warmupPalette.activeBorderLight;
-  const warmupActiveText = theme.mode === 'dark' ? warmupPalette.activeTextDark : warmupPalette.activeTextLight;
+  const warmupActiveFill = warmupPalette.activeFill;
+  const warmupActiveText = warmupPalette.activeText;
   const { activeSideFields, sharedFields } = getSideFields(captureCard, activeSide);
   const supportsInclineAngle = captureCard.modifierCapabilities.setup.includes('inclineAngle');
   const inclineAngle = setOutcomeDetails.inclineAngleDegrees;
@@ -107,13 +106,12 @@ export function WorkoutExerciseCaptureView({
               style={({ pressed }) => [
                 styles.warmupChip,
                 {
-                  backgroundColor: showModifierControls || hasActiveModifier ? theme.colors.controlActiveFill : theme.colors.controlFill,
-                  borderColor: showModifierControls || hasActiveModifier ? theme.colors.borderStrong : theme.colors.controlBorder,
+                  backgroundColor: showModifierControls || hasActiveModifier ? theme.colors.accentSoft : theme.colors.surfaceRaised,
                   ...getTapScaleStyle(pressed, false),
                 },
               ]}
             >
-              <ReedText variant="caption">Details</ReedText>
+              <ReedText tone={showModifierControls || hasActiveModifier ? 'accent' : 'secondary'} variant="caption">Details</ReedText>
             </Pressable>
           ) : null}
           <Pressable
@@ -122,13 +120,12 @@ export function WorkoutExerciseCaptureView({
             style={({ pressed }) => [
               styles.warmupChip,
               {
-                backgroundColor: warmup ? warmupActiveFill : theme.colors.controlFill,
-                borderColor: warmup ? warmupActiveBorder : theme.colors.controlBorder,
+                backgroundColor: warmup ? warmupActiveFill : theme.colors.surfaceRaised,
                 ...getTapScaleStyle(pressed, false),
               },
             ]}
           >
-            <ReedText style={{ color: warmup ? warmupActiveText : theme.colors.textPrimary }} variant="caption">
+            <ReedText style={{ color: warmup ? warmupActiveText : theme.colors.inkSecondary }} variant="caption">
               Warm-up
             </ReedText>
           </Pressable>
@@ -149,13 +146,12 @@ export function WorkoutExerciseCaptureView({
               style={({ pressed }) => [
                 styles.warmupChip,
                 {
-                  backgroundColor: inclineAngle === undefined ? theme.colors.controlFill : theme.colors.controlActiveFill,
-                  borderColor: inclineAngle === undefined ? theme.colors.controlBorder : theme.colors.borderStrong,
+                  backgroundColor: inclineAngle === undefined ? theme.colors.surfaceRaised : theme.colors.accentSoft,
                   ...getTapScaleStyle(pressed, false),
                 },
               ]}
             >
-              <ReedText variant="caption">{inclineAngle === undefined ? 'Angle' : `${inclineAngle}°`}</ReedText>
+              <ReedText tone={inclineAngle === undefined ? 'secondary' : 'accent'} variant="caption">{inclineAngle === undefined ? 'Angle' : `${inclineAngle}°`}</ReedText>
             </Pressable>
           ) : null}
           {supportsRangeOfMotion ? (
@@ -165,13 +161,12 @@ export function WorkoutExerciseCaptureView({
               style={({ pressed }) => [
                 styles.warmupChip,
                 {
-                  backgroundColor: rangeOfMotion === 'full' ? theme.colors.controlFill : theme.colors.controlActiveFill,
-                  borderColor: rangeOfMotion === 'full' ? theme.colors.controlBorder : theme.colors.borderStrong,
+                  backgroundColor: rangeOfMotion === 'full' ? theme.colors.surfaceRaised : theme.colors.accentSoft,
                   ...getTapScaleStyle(pressed, false),
                 },
               ]}
             >
-              <ReedText variant="caption">{getRangeOfMotionLabel(rangeOfMotion)}</ReedText>
+              <ReedText tone={rangeOfMotion === 'full' ? 'secondary' : 'accent'} variant="caption">{getRangeOfMotionLabel(rangeOfMotion)}</ReedText>
             </Pressable>
           ) : null}
           {supportsFailure ? (
@@ -186,13 +181,12 @@ export function WorkoutExerciseCaptureView({
               style={({ pressed }) => [
                 styles.warmupChip,
                 {
-                  backgroundColor: failedReps > 0 ? theme.colors.dangerFill : theme.colors.controlFill,
-                  borderColor: failedReps > 0 ? theme.colors.dangerBorder : theme.colors.controlBorder,
+                  backgroundColor: failedReps > 0 ? theme.colors.dangerFill : theme.colors.surfaceRaised,
                   ...getTapScaleStyle(pressed, false),
                 },
               ]}
             >
-              <ReedText style={{ color: failedReps > 0 ? theme.colors.dangerText : theme.colors.textPrimary }} variant="caption">
+              <ReedText style={{ color: failedReps > 0 ? theme.colors.dangerInk : theme.colors.inkSecondary }} variant="caption">
                 Fail
               </ReedText>
             </Pressable>
@@ -225,7 +219,7 @@ export function WorkoutExerciseCaptureView({
           <WorkoutMetricPicker
             compact={captureFieldCount > 3}
             field={field}
-            key={field.key}
+            key={`${captureCard.sessionExerciseId}:${editingSetNumber ?? captureCard.currentSetNumber}:${field.key}`}
             onChange={nextValue => onUpdateMetric(field.key, nextValue)}
             onInteractionEnd={onPickerInteractionEnd}
             onInteractionStart={onPickerInteractionStart}

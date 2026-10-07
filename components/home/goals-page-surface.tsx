@@ -4,16 +4,15 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { Surface } from '@/components/ui/surface';
 import { ReedText } from '@/components/ui/reed-text';
 import { ReedButton } from '@/components/ui/reed-button';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { ScreenHeader } from '@/components/ui/screen-header';
 import { blurActiveElementOnWeb } from '@/components/ui/focus';
-import { SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/components/ui/glass-material';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import { reedRadii } from '@/design/system';
+import { reedRadii, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/design/system';
 import { CreateGoalSheet } from './profile/goals-surface';
 import { ProgressRow, getProgressRatio, getProgressSlices, type TrainingTarget } from './target-progress';
 
@@ -63,14 +62,14 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
     >
       <ScreenHeader variant="identity" action={{ accessibilityLabel: 'Create goal', iconName: 'add', onPress: openCreateGoal }}>
         <Pressable onPress={goBack} style={({ pressed }) => [styles.backRow, getTapScaleStyle(pressed)]}>
-          <Ionicons color={String(theme.colors.textMuted)} name="chevron-back" size={20} />
+          <Ionicons color={String(theme.colors.inkMuted)} name="chevron-back" size={20} />
           <ReedText variant="title">Goals</ReedText>
         </Pressable>
       </ScreenHeader>
 
-      <GlassSurface style={styles.card}>
+      <Surface style={styles.card}>
         <View style={styles.leadBlock}>
-          <ReedText variant="section">Your goals</ReedText>
+          <ReedText variant="headline">Your goals</ReedText>
         </View>
         <SegmentedControl<StatusFilter>
           compact
@@ -92,12 +91,12 @@ export function GoalsPageSurface({ onBack }: { onBack: () => void }) {
           ]}
           value={sortOrder}
         />
-      </GlassSurface>
+      </Surface>
 
       {targets === undefined ? (
-        <View style={styles.loadingRow}><ActivityIndicator color={String(theme.colors.accentPrimary)} /><ReedText tone="muted">Loading goals.</ReedText></View>
+        <View style={styles.loadingRow}><ActivityIndicator color={String(theme.colors.accent)} /><ReedText tone="muted">Loading goals.</ReedText></View>
       ) : visibleTargets.length === 0 ? (
-        <GlassSurface style={styles.card}><ReedText variant="bodyStrong">No goals here.</ReedText><ReedText tone="muted" variant="caption">Try another filter or create a new measurable goal.</ReedText><ReedButton label="New goal" onPress={openCreateGoal} /></GlassSurface>
+        <Surface style={styles.card}><ReedText variant="bodyStrong">No goals here.</ReedText><ReedText tone="muted" variant="caption">Try another filter or create a new measurable goal.</ReedText><ReedButton label="New goal" onPress={openCreateGoal} /></Surface>
       ) : (
         visibleTargets.map(target => <GoalDetailCard key={target._id} target={target} />)
       )}
@@ -121,7 +120,7 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
   }
 
   return (
-    <GlassSurface style={[styles.card, styles.goalCard, target.status === 'archived' && styles.archivedGoalCard]}>
+    <Surface style={[styles.card, styles.goalCard, target.status === 'archived' && styles.archivedGoalCard]}>
       <Pressable onPress={toggle} style={({ pressed }) => [styles.goalHeader, getTapScaleStyle(pressed)]}>
         <View style={styles.goalHeaderCopy}>
           <View style={styles.goalTitleRow}>
@@ -132,7 +131,7 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
           </View>
           <ReedText numberOfLines={2} tone="muted" variant="caption">{target.previewText}</ReedText>
         </View>
-        <Ionicons color={String(theme.colors.textMuted)} name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} />
+        <Ionicons color={String(theme.colors.inkMuted)} name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} />
       </Pressable>
 
       <View style={styles.goalProgressStack}>
@@ -147,19 +146,19 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
 
       {isOpen ? (
         <View style={styles.detailStack}>
-          <View style={[styles.detailBox, { borderColor: theme.colors.controlBorder }]}> 
-            <ReedText tone="muted" variant="label">Required</ReedText>
+          <View style={[styles.detailBox, { borderColor: theme.colors.line }]}> 
+            <ReedText tone="muted" variant="caption">Required</ReedText>
             <ReedText variant="bodyStrong">{target.progressSummary.requiredLabel}</ReedText>
           </View>
           {target.progressSummary.totalPeriods ? (
-            <View style={[styles.detailBox, { borderColor: theme.colors.controlBorder }]}> 
-              <ReedText tone="muted" variant="label">Periods</ReedText>
+            <View style={[styles.detailBox, { borderColor: theme.colors.line }]}> 
+              <ReedText tone="muted" variant="caption">Periods</ReedText>
               <ReedText variant="bodyStrong">{target.progressSummary.satisfiedPeriods ?? 0}/{target.progressSummary.totalPeriods}</ReedText>
             </View>
           ) : null}
           {target.notes ? (
-            <View style={[styles.detailBox, { borderColor: theme.colors.controlBorder }]}> 
-              <ReedText tone="muted" variant="label">Notes</ReedText>
+            <View style={[styles.detailBox, { borderColor: theme.colors.line }]}> 
+              <ReedText tone="muted" variant="caption">Notes</ReedText>
               <ReedText variant="caption">{target.notes}</ReedText>
             </View>
           ) : null}
@@ -187,7 +186,7 @@ function GoalDetailCard({ target }: { target: TrainingTarget }) {
           </View>
         </View>
       ) : null}
-    </GlassSurface>
+    </Surface>
   );
 }
 
@@ -200,7 +199,7 @@ function IconAction({ accessibilityLabel, icon, onPress }: { accessibilityLabel:
       onPress={onPress}
       style={({ pressed }) => [styles.iconAction, getTapScaleStyle(pressed)]}
     >
-      <Ionicons color={String(theme.colors.textMuted)} name={icon} size={20} />
+      <Ionicons color={String(theme.colors.inkMuted)} name={icon} size={20} />
     </Pressable>
   );
 }
@@ -218,10 +217,10 @@ function formatDate(ts: number) {
 }
 
 function getStatusColor(status: TrainingTarget['status'], theme: ReturnType<typeof useReedTheme>['theme']) {
-  if (status === 'active') return theme.colors.accentPrimary;
-  if (status === 'completed') return theme.colors.successText;
-  if (status === 'missed') return theme.colors.dangerText;
-  return theme.colors.textMuted;
+  if (status === 'active') return theme.colors.accent;
+  if (status === 'completed') return theme.colors.successInk;
+  if (status === 'missed') return theme.colors.dangerInk;
+  return theme.colors.inkMuted;
 }
 
 function statusLabel(status: TrainingTarget['status']) {
@@ -232,7 +231,7 @@ function statusLabel(status: TrainingTarget['status']) {
 const styles = StyleSheet.create({
   actionRow: { alignItems: 'center', alignSelf: 'flex-end', flexDirection: 'row', gap: 16, paddingTop: 2 },
   backRow: { alignItems: 'center', flexDirection: 'row', gap: 4 },
-  card: { borderRadius: reedRadii.xl },
+  card: { borderRadius: reedRadii.card },
   archivedGoalCard: { opacity: 0.72 },
   content: { gap: 14 },
   detailBox: { borderRadius: reedRadii.lg, borderWidth: 1, gap: 3, padding: 12 },

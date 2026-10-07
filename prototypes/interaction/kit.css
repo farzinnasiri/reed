@@ -1,0 +1,251 @@
+/* Reed interaction mockups. Two layers of styles:
+   1. the documentation page around the phone (centered, three columns: steps | phone | notes)
+   2. the app inside the phone (.app), same tokens as prototypes/redesign/home.html and DESIGN.md */
+
+* { box-sizing: border-box; margin: 0; padding: 0 }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer }
+html { background: #151517; color: #e6e6e9; font-family: "Inter Tight", system-ui, sans-serif; -webkit-font-smoothing: antialiased }
+body { padding: 28px 28px 140px }
+a { color: #aec2ff; text-decoration: none }
+code, .mono { font-family: "Geist Mono", ui-monospace, monospace; font-size: .92em }
+code { background: #232327; padding: 1px 5px; border-radius: 5px; color: #d9d9de }
+
+/* ---------- page chrome ---------- */
+.nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; max-width: 1180px; margin: 0 auto 44px }
+.nav a { height: 32px; padding: 0 13px; border-radius: 16px; display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #a6a6ae; background: #1d1d20 }
+.nav a b { font: 500 11px/1 "Geist Mono", monospace; color: #6f6f77 }
+.nav a.on { background: #2a2f45; color: #e8ecff }
+.nav a.on b { color: #aec2ff }
+
+.intro { max-width: 760px; margin: 0 auto 40px; text-align: center }
+.kicker { font: 500 11.5px/1 "Geist Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: #85858c; margin-bottom: 14px }
+.intro h1 { font-size: 34px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 14px; color: #f2f2f4 }
+.intro p { font-size: 15.5px; line-height: 1.65; color: #a6a6ae; text-wrap: pretty }
+.intro p + p { margin-top: 10px }
+.intro b { color: #e2e2e6; font-weight: 600 }
+
+.stage-grid { display: grid; grid-template-columns: 300px 390px 360px; gap: 44px; justify-content: center; align-items: start }
+@media (max-width: 1180px) { .stage-grid { grid-template-columns: 390px; } .steps-col, .notes-col { width: 390px } }
+
+/* steps list (left) */
+.steps-col { position: sticky; top: 24px }
+.col-label { font: 500 11px/1 "Geist Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: #75757c; margin-bottom: 12px }
+.steps { list-style: none; display: flex; flex-direction: column; gap: 4px }
+.steps button { width: 100%; text-align: left; display: grid; grid-template-columns: 28px 1fr; gap: 2px 10px; padding: 10px 12px; border-radius: 14px; color: #a6a6ae }
+.steps button:hover { background: #1c1c1f }
+.steps button.on { background: #1f2333; color: #eef1ff }
+.steps .n { grid-row: span 2; width: 24px; height: 24px; border-radius: 12px; background: #26262a; display: grid; place-items: center; font: 500 11px/1 "Geist Mono", monospace; color: #8a8a92; margin-top: 1px }
+.steps button.on .n { background: #3d66f2; color: #fff }
+.steps button.done .n { background: #2a2f45; color: #aec2ff }
+.steps .t { font-size: 14px; font-weight: 600; color: inherit }
+.steps .u { font-size: 12.5px; color: #7c7c84; line-height: 1.4 }
+
+/* phone column */
+.phone-col { display: flex; flex-direction: column; align-items: center }
+.readout { height: 30px; display: flex; gap: 8px; align-items: center; margin-bottom: 14px }
+.pill { height: 26px; padding: 0 11px; border-radius: 13px; background: #1d1d20; display: inline-flex; align-items: center; gap: 7px; font: 500 11.5px/1 "Geist Mono", monospace; color: #9a9aa2 }
+.pill i { width: 7px; height: 7px; border-radius: 4px; background: #3d66f2 }
+.pill.haptic { background: transparent; box-shadow: inset 0 0 0 1px #2c2c31; color: #5f5f66; transition: background .15s, color .15s, box-shadow .15s }
+.pill.haptic.fire { background: #3a2e1d; color: #f2c38f; box-shadow: inset 0 0 0 1px #6b5130 }
+
+.phone { width: 390px; height: 844px; border-radius: 54px; overflow: hidden; position: relative; flex: none;
+  box-shadow: 0 0 0 1px #2e2e33, 0 0 0 10px #0b0b0c, 0 0 0 11px #2e2e33, 0 50px 90px rgba(0, 0, 0, .55) }
+
+.controls { margin-top: 30px; display: flex; flex-direction: column; align-items: center; gap: 12px }
+.ctl-row { display: flex; gap: 8px; align-items: center }
+.ctl { height: 36px; padding: 0 14px; border-radius: 18px; background: #1f1f23; font-size: 13.5px; color: #d8d8dd; display: inline-flex; align-items: center; gap: 6px }
+.ctl:hover { background: #26262b }
+.ctl.primary { background: #3d66f2; color: #fff }
+.ctl:disabled { opacity: .35; cursor: default }
+.seg { display: inline-flex; background: #1b1b1e; border-radius: 16px; padding: 3px }
+.seg button { height: 26px; padding: 0 10px; border-radius: 13px; font: 500 11.5px/1 "Geist Mono", monospace; color: #8a8a92 }
+.seg button.on { background: #2e2e34; color: #ededf0 }
+.ctl-hint { font-size: 12px; color: #6c6c74; text-align: center; max-width: 360px; line-height: 1.5 }
+
+/* notes (right) */
+.notes-col { position: sticky; top: 24px }
+.note-card { background: #19191c; border-radius: 20px; padding: 18px 18px 6px; box-shadow: inset 0 0 0 1px #232327 }
+.note-card h2 { font-size: 18px; font-weight: 600; letter-spacing: -.01em; color: #f2f2f4; margin-bottom: 4px }
+.note-card .user { font-size: 13.5px; color: #9a9aa2; margin-bottom: 14px; line-height: 1.5 }
+.nsec { padding: 12px 0; border-top: 1px solid #242428 }
+.nsec h3 { font: 500 10.5px/1 "Geist Mono", monospace; letter-spacing: .14em; text-transform: uppercase; color: #6f6f77; margin-bottom: 9px }
+.nsec ul { list-style: none }
+.nsec li { font-size: 13px; line-height: 1.5; color: #b4b4bb; padding-left: 14px; position: relative; margin-bottom: 6px }
+.nsec li::before { content: ""; position: absolute; left: 0; top: .72em; width: 6px; height: 1px; background: #5c5c63 }
+.nsec li b { color: #e6e6ea; font-weight: 600 }
+.tl { display: grid; grid-template-columns: 58px 1fr; gap: 5px 10px; font-size: 13px; line-height: 1.45; color: #b4b4bb }
+.tl .ms { font: 500 11.5px/1.6 "Geist Mono", monospace; color: #7f93d8; text-align: right }
+.tl b { color: #e6e6ea; font-weight: 600 }
+
+/* full spec at the bottom (same data as the notes, every step at once) */
+.spec { max-width: 1110px; margin: 110px auto 0 }
+.spec > h2 { text-align: center; font-size: 26px; font-weight: 600; letter-spacing: -.02em; color: #f2f2f4; margin-bottom: 8px }
+.spec > p { text-align: center; color: #9a9aa2; font-size: 14.5px; margin: 0 auto 34px; max-width: 680px; line-height: 1.6 }
+.spec-step { display: grid; grid-template-columns: 260px 1fr 1fr; gap: 28px; padding: 24px 0; border-top: 1px solid #242428 }
+.spec-step .hd .n { font: 500 11px/1 "Geist Mono", monospace; color: #7f93d8; margin-bottom: 8px }
+.spec-step .hd h3 { font-size: 16.5px; font-weight: 600; color: #f2f2f4; margin-bottom: 6px }
+.spec-step .hd p { font-size: 13px; color: #8f8f97; line-height: 1.5 }
+.spec-step .nsec:first-child { border-top: 0; padding-top: 0 }
+
+/* overview / prose pages */
+.prose { max-width: 860px; margin: 0 auto }
+.prose h2 { font-size: 22px; font-weight: 600; letter-spacing: -.015em; color: #f2f2f4; margin: 56px 0 12px; text-align: center }
+.prose > p { font-size: 15px; line-height: 1.65; color: #a6a6ae; margin: 0 auto 12px; max-width: 720px; text-align: center }
+.prose table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 18px }
+.prose th { text-align: left; font: 500 10.5px/1 "Geist Mono", monospace; letter-spacing: .12em; text-transform: uppercase; color: #6f6f77; padding: 0 10px 10px }
+.prose td { padding: 11px 10px; border-top: 1px solid #242428; color: #b4b4bb; vertical-align: top; line-height: 1.45 }
+.prose td:first-child { color: #ececf0; font-weight: 600; white-space: nowrap }
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px }
+.cards a { background: #1a1a1d; border-radius: 18px; padding: 16px; display: block; box-shadow: inset 0 0 0 1px #232327 }
+.cards a:hover { background: #1f1f23 }
+.cards a b { display: block; font: 500 11px/1 "Geist Mono", monospace; color: #7f93d8; margin-bottom: 8px }
+.cards a span { display: block; font-size: 15px; font-weight: 600; color: #f0f0f3; margin-bottom: 5px }
+.cards a small { font-size: 13px; color: #8f8f97; line-height: 1.45; display: block }
+.rules { list-style: none; max-width: 720px; margin: 16px auto 0 }
+.rules li { font-size: 14.5px; line-height: 1.6; color: #b4b4bb; padding: 10px 0 10px 26px; border-top: 1px solid #242428; position: relative }
+.rules li::before { content: attr(data-n); position: absolute; left: 0; top: 11px; font: 500 11px/1.6 "Geist Mono", monospace; color: #7f93d8 }
+.rules li b { color: #ececf0 }
+.pager { display: flex; justify-content: center; gap: 10px; margin-top: 70px }
+
+/* ======================================================================
+   The app inside the phone
+   ====================================================================== */
+.app {
+  --bg: #121110; --raise: #1c1a18; --raise-2: #26231f; --raise-3: #302c27; --shade: #1a1816;
+  --line: rgba(255, 240, 220, .07); --line-2: rgba(255, 240, 220, .14);
+  --ink: #f4efe8; --ink-2: #b8afa4; --ink-3: #938a7f;
+  --accent: #3d66f2; --accent-ink: #aec2ff; --accent-soft: rgba(61, 102, 242, .16); --warm: #e5a36f;
+  --sans: "Figtree", system-ui, sans-serif;
+  /* --k scales every transition (0 = instant, used to fast-forward steps); --ks scales loops (never 0) */
+  --k: 1; --ks: 1;
+  position: absolute; inset: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); overflow: hidden }
+.app .ic { width: 20px; height: 20px; flex: none }
+.app .num { font-variant-numeric: tabular-nums }
+.app canvas.glow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0 }
+
+.app .status { position: absolute; top: 0; left: 0; right: 0; height: 54px; display: flex; align-items: center; justify-content: space-between; padding: 4px 30px 0 38px; z-index: 60; pointer-events: none }
+.app .st-time { font: 600 16px/1 -apple-system, "SF Pro Text", "Inter Tight", sans-serif; letter-spacing: -.01em }
+.app .st-island { position: absolute; left: 50%; top: 11px; width: 124px; height: 36px; margin-left: -62px; background: #000; border-radius: 20px }
+.app .st-sys { display: flex; gap: 6px; align-items: center }
+.app .home-ind { position: absolute; bottom: 8px; left: 50%; width: 136px; height: 5px; margin-left: -68px; border-radius: 3px; background: var(--ink); opacity: .55; z-index: 70 }
+
+/* stage = everything between the Pulse and the bottom edge; its bottom follows the keyboard */
+.app .stage { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column; padding-top: 118px; z-index: 2;
+  transition: bottom calc(var(--k) * 380ms) cubic-bezier(.2, .9, .25, 1) }
+.app.kb-up .stage { bottom: 262px }
+
+/* Pulse strip + You button */
+.app .pulse { position: absolute; top: 58px; left: 14px; right: 68px; height: 52px; border-radius: 26px; background: var(--raise); z-index: 20; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px }
+.app .pm { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600; white-space: nowrap }
+.app .pm small { font-size: 12.5px; font-weight: 500; color: var(--ink-3) }
+.app .days { display: flex; gap: 3px }
+.app .days i { width: 6px; height: 14px; border-radius: 3px; background: var(--raise-3) }
+.app .days i.done { background: var(--accent) }
+.app .days i.is-today { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent) }
+.app .sep { width: 1px; height: 18px; background: var(--line-2) }
+.app .pulse > .ic { margin-left: auto; width: 16px; height: 16px; color: var(--ink-3) }
+.app .you-btn { position: absolute; top: 58px; right: 14px; width: 48px; height: 52px; border-radius: 26px; background: var(--raise); display: grid; place-items: center; z-index: 20; color: var(--ink-2) }
+
+/* thread */
+.app .thread { flex: 1; min-height: 0; overflow: hidden; position: relative }
+.app .tscroll { position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 14px; padding: 0 18px 14px; will-change: transform }
+.app .thread { -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 12px), transparent); mask-image: linear-gradient(to bottom, transparent 0, #000 40px, #000 calc(100% - 12px), transparent) }
+.app .turn { display: flex; flex-direction: column; gap: 12px }
+.app .voice { font: 400 16.5px/1.55 var(--sans); color: var(--ink-2); text-wrap: pretty }
+.app .voice strong { color: var(--ink); font-weight: 500 }
+.app .voice.center { text-align: center; padding: 0 10px }
+.app .you { align-self: flex-end; max-width: 80%; background: var(--raise-2); padding: 11px 15px; border-radius: 22px 22px 8px 22px; font-size: 15.5px; line-height: 1.45; color: var(--ink) }
+.app .chapter { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-3); padding: 4px 0 }
+.app .chapter::before, .app .chapter::after { content: ""; flex: 1; height: 1px; background: var(--line) }
+.app .past { display: flex; align-items: center; gap: 10px; height: 46px; padding: 0 14px 0 8px; border-radius: 23px; background: var(--raise); font-size: 14.5px; color: var(--ink-2) }
+.app .past .tag { width: 32px; height: 32px; border-radius: 16px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-3) }
+.app .past .tag .ic { width: 16px; height: 16px }
+.app .past .meta { margin-left: auto; color: var(--ink-3); font-size: 13.5px }
+
+/* cards */
+.app .card { background: var(--raise); border-radius: 26px; padding: 16px 18px 18px }
+.app .card-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; gap: 12px }
+.app .card-hd b { font-size: 17.5px; font-weight: 600; letter-spacing: -.01em }
+.app .card-hd span { font-size: 13px; color: var(--ink-3) }
+.app .items { list-style: none }
+.app .items li { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 15px }
+.app .items .num { margin-left: auto; color: var(--ink-3); font-size: 14.5px }
+.app .bigstats { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; padding: 8px 0 12px; margin-bottom: 4px; border-bottom: 1px solid var(--line) }
+.app .bigstats b { display: block; font-size: 26px; font-weight: 600; letter-spacing: -.03em }
+.app .bigstats span { font-size: 12.5px; color: var(--ink-3) }
+.app .soft { height: 38px; padding: 0 15px; border-radius: 19px; background: var(--accent-soft); color: var(--accent-ink); font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px }
+.app .ghost { height: 38px; padding: 0 12px; color: var(--ink-3); font-size: 14px }
+.app .row-btns { display: flex; gap: 8px; margin-top: 12px }
+.app .swapline { display: flex; align-items: center; gap: 10px; font-size: 15.5px; margin: 6px 0 2px }
+.app .swapline s { color: var(--ink-3) }
+.app .swapline .ic { width: 17px; height: 17px; color: var(--ink-3) }
+
+/* chips */
+.app .chips { display: flex; gap: 8px; flex-wrap: wrap }
+.app .chips.center { justify-content: center }
+.app .chip { height: 36px; padding: 0 15px; border-radius: 18px; background: var(--raise); font-size: 14px; color: var(--ink-2); white-space: nowrap; flex: none }
+.app .chip.pressed { transform: scale(.97) }
+
+/* today mode */
+.app .today { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 14px; padding: 0 18px 14px }
+.app .hero { display: flex; flex-direction: column; align-items: center }
+.app .hero-slot { width: 112px; height: 112px }
+.app .greet { font: 600 26px/1.2 var(--sans); letter-spacing: -.02em; text-align: center; text-wrap: balance; margin-top: 14px }
+
+/* presence row (chat mode) */
+.app .presence { flex: none; height: 104px; display: flex; align-items: center; gap: 12px; padding: 0 14px 2px 8px; position: relative; z-index: 4 }
+.app .corner-slot { width: 96px; height: 96px; flex: none }
+.app .presence .chips { flex-wrap: nowrap; overflow: hidden }
+.app .hint { font-size: 13.5px; color: var(--ink-3); white-space: nowrap }
+
+/* the one mascot: absolutely positioned, flies between slots */
+.app .mascot-layer { position: absolute; left: 0; top: 0; z-index: 30; transform-origin: 0 0; will-change: transform; cursor: pointer }
+
+/* dock */
+.app .dock { flex: none; display: flex; gap: 8px; padding: 6px 14px 30px; align-items: flex-end; position: relative; z-index: 5;
+  transition: padding calc(var(--k) * 380ms) cubic-bezier(.2, .9, .25, 1) }
+.app.kb-up .dock { padding-bottom: 8px }
+.app .act { flex: none; width: 56px; height: 56px; border-radius: 28px; background: var(--accent); color: #fff; display: grid; place-items: center;
+  transition: width calc(var(--k) * 380ms) var(--pop), height calc(var(--k) * 380ms) var(--pop), border-radius calc(var(--k) * 380ms) var(--pop), background calc(var(--k) * 180ms), margin calc(var(--k) * 380ms) var(--pop) }
+.app .act .ic { width: 24px; height: 24px; transition: transform calc(var(--k) * 380ms) var(--pop) }
+.app .act.small { width: 44px; height: 44px; border-radius: 22px; background: var(--raise-2); color: var(--ink-2); margin-bottom: 6px }
+.app .act.small .ic { transform: scale(.84) }
+.app .composer { flex: 1; min-height: 56px; border-radius: 28px; background: var(--raise); display: flex; align-items: flex-end; gap: 10px; padding: 8px 8px 8px 16px; color: var(--ink-3); font-size: 16px; position: relative;
+  transition: box-shadow calc(var(--k) * 180ms) ease-out, background calc(var(--k) * 180ms), border-radius calc(var(--k) * 300ms) }
+.app .composer .plus { height: 40px; display: grid; place-items: center }
+.app .composer .field { flex: 1; min-height: 40px; display: flex; align-items: center; padding: 8px 0; line-height: 1.4; color: var(--ink-3); outline: none; white-space: pre-wrap; word-break: break-word }
+.app .composer .field.has-text { color: var(--ink) }
+.app .composer .caret { display: inline-block; width: 2px; height: 1.15em; background: var(--accent-ink); vertical-align: -3px; margin-left: 1px; animation: caret calc(var(--ks) * 1s) steps(1) infinite }
+@keyframes caret { 50% { opacity: 0 } }
+.app .composer.focus { box-shadow: 0 0 0 1px rgba(110, 145, 255, .55), 0 0 22px rgba(61, 102, 242, .28) }
+.app .composer.typing { box-shadow: 0 0 0 1px rgba(130, 160, 255, .75), 0 0 28px rgba(61, 102, 242, .36) }
+.app .composer.multi { border-radius: 24px }
+.app .send { width: 40px; height: 40px; border-radius: 20px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2); position: relative; flex: none;
+  transition: background calc(var(--k) * 180ms) }
+.app .send.armed { background: var(--accent); color: #fff }
+.app .send.waiting { background: rgba(61, 102, 242, .4); color: rgba(255, 255, 255, .7) }
+.app .send > span { position: absolute; inset: 0; display: grid; place-items: center; transition: opacity calc(var(--k) * 120ms), transform calc(var(--k) * 360ms) var(--pop) }
+.app .send .i-send { opacity: 0; transform: scale(.6) }
+.app .send.armed .i-send, .app .send.waiting .i-send { opacity: 1; transform: none }
+.app .send.armed .i-mic, .app .send.waiting .i-mic { opacity: 0; transform: scale(.6) }
+
+/* keyboard (iOS-ish, for context only) */
+.app .kb { position: absolute; left: 0; right: 0; bottom: 0; height: 262px; background: #2b2a2c; z-index: 50; padding: 8px 3px 0; display: flex; flex-direction: column; gap: 11px;
+  transform: translateY(100%); transition: transform calc(var(--k) * 380ms) cubic-bezier(.2, .9, .25, 1) }
+.app.kb-up .kb { transform: none }
+.app .kb div { display: flex; gap: 6px; justify-content: center }
+.app .kb i { width: 33px; height: 42px; border-radius: 5px; background: #4a494c; display: block }
+.app .kb i.w { width: 180px }
+.app .kb i.m { width: 44px; background: #3a393c }
+
+/* sheet (in-session Reed) */
+.app .scrim { position: absolute; inset: 0; background: rgba(6, 5, 4, .5); opacity: 0; pointer-events: none; z-index: 40; transition: opacity calc(var(--k) * 400ms) }
+.app.sheet-open .scrim { opacity: 1; pointer-events: auto }
+.app .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--shade); border-radius: 36px 36px 0 0; z-index: 45; transform: translateY(104%); display: flex; flex-direction: column;
+  transition: transform calc(var(--k) * 450ms) var(--sheet), height calc(var(--k) * 450ms) var(--sheet) }
+.app.sheet-open .sheet { transform: none }
+.app .grab { width: 38px; height: 5px; border-radius: 3px; background: var(--raise-3); margin: 10px auto 0; flex: none }
+
+/* generic enter helpers */
+.app .hide { opacity: 0; pointer-events: none }
+.app .fade { transition: opacity calc(var(--k) * 220ms) ease-out, transform calc(var(--k) * 420ms) var(--smooth) }

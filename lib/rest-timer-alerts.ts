@@ -1,4 +1,4 @@
-import { restCompleteAlert, type RestCompleteAlertPayload } from '@/domains/alerts/alert-definitions';
+import { restCompleteAlert, type RestCompleteAlertPayload } from '@/lib/rest-alert-definition';
 import {
   clearBackgroundAlertDefinitionAsync,
   clearBackgroundAlertAsync,

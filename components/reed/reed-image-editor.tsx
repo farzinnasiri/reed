@@ -13,12 +13,12 @@ import {
 } from 'react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { PanGestureHandler } from 'react-native-gesture-handler';
-import type { PanGestureHandlerProps } from 'react-native-gesture-handler';
-import type { PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
+import type { PanGestureHandlerProps , PanGestureHandlerEventPayload } from 'react-native-gesture-handler';
 import Svg, { Path } from 'react-native-svg';
 import { captureRef } from 'react-native-view-shot';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
+import { reedRadii } from '@/design/system';
 
 type EditableImage = {
   height?: number;
@@ -152,14 +152,16 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
   const [cropHistory, setCropHistory] = useState<WorkingImage[]>([]);
   const activeImage = workingImage ?? image;
   const paintColors = useMemo(() => [
-    String(theme.colors.accentPrimary),
-    String(theme.colors.accentSecondary),
-    String(theme.colors.dangerText),
-    String(theme.colors.textPrimary),
-  ], [theme.colors.accentPrimary, theme.colors.accentSecondary, theme.colors.dangerText, theme.colors.textPrimary]);
+    String(theme.colors.accent),
+    String(theme.colors.dataWarm),
+    String(theme.colors.dangerInk),
+    String(theme.colors.ink),
+  ], [theme.colors.accent, theme.colors.dataWarm, theme.colors.dangerInk, theme.colors.ink]);
   const paintColor = paintColors[paintColorIndex] ?? paintColors[0];
 
-  useEffect(() => {
+  const [previousImage, setPreviousImage] = useState(image);
+  if (previousImage !== image) {
+    setPreviousImage(image);
     setBrushSize(BRUSH_SIZES[1]);
     setCropRect(null);
     setCropHistory([]);
@@ -168,7 +170,7 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
     setPaintColorIndex(0);
     setStrokes([]);
     setWorkingImage(image);
-  }, [image?.uri]);
+  }
 
   useEffect(() => {
     if (!activeImage?.uri || (activeImage.width && activeImage.height)) return;
@@ -348,19 +350,19 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
       <View style={[styles.root, { backgroundColor: theme.colors.canvas }]}>
         <View style={styles.header}>
           <Pressable accessibilityLabel="Cancel image edit" onPress={onCancel} style={styles.iconButton}>
-            <Ionicons color={String(theme.colors.textPrimary)} name="close" size={24} />
+            <Ionicons color={String(theme.colors.ink)} name="close" size={24} />
           </Pressable>
           <ReedText variant="bodyStrong">Edit photo</ReedText>
           <Pressable
             accessibilityLabel="Use edited image"
             disabled={isExporting}
             onPress={() => void exportEditedImage()}
-            style={[styles.useButton, { backgroundColor: theme.colors.accentPrimary }]}
+            style={[styles.useButton, { backgroundColor: theme.colors.accent }]}
           >
             {isExporting ? (
-              <ActivityIndicator color={String(theme.colors.accentPrimaryText)} size="small" />
+              <ActivityIndicator color={String(theme.colors.accentText)} size="small" />
             ) : (
-              <Ionicons color={String(theme.colors.accentPrimaryText)} name="checkmark" size={22} />
+              <Ionicons color={String(theme.colors.accentText)} name="checkmark" size={22} />
             )}
           </Pressable>
         </View>
@@ -385,7 +387,7 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
             </Svg>
             {mode === 'crop' ? (
               <CropOverlay
-                borderColor={String(theme.colors.accentPrimaryText)}
+                borderColor={String(theme.colors.accentText)}
                 cropRect={activeCropRect}
               />
             ) : null}
@@ -396,12 +398,12 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
                 style={[
                   styles.imageResetButton,
                   {
-                    backgroundColor: theme.colors.controlFill,
-                    borderColor: theme.colors.controlBorder,
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.line,
                   },
                 ]}
               >
-                <Ionicons color={String(theme.colors.textPrimary)} name="refresh" size={17} />
+                <Ionicons color={String(theme.colors.ink)} name="refresh" size={17} />
                 <ReedText variant="caption">Reset</ReedText>
               </Pressable>
             ) : null}
@@ -444,7 +446,7 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
         </View>
 
         <View style={styles.tools}>
-              <View style={[styles.segment, { backgroundColor: theme.colors.controlFill }]}>
+              <View style={[styles.segment, { backgroundColor: theme.colors.surface }]}>
             <ToolButton
               active={mode === 'crop'}
               icon="crop-outline"
@@ -475,7 +477,7 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
                     onPress={() => setPaintColorIndex(index)}
                     style={[
                       styles.swatch,
-                      { backgroundColor: color, borderColor: paintColorIndex === index ? theme.colors.textPrimary : theme.colors.borderSoft },
+                      { backgroundColor: color, borderColor: paintColorIndex === index ? theme.colors.ink : theme.colors.line },
                     ]}
                   />
                 ))}
@@ -488,14 +490,14 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
                     onPress={() => setBrushSize(size)}
                     style={[
                       styles.brushButton,
-                      { borderColor: brushSize === size ? theme.colors.textPrimary : theme.colors.borderSoft },
+                      { borderColor: brushSize === size ? theme.colors.ink : theme.colors.line },
                     ]}
                   >
-                    <View style={{ backgroundColor: theme.colors.textPrimary, borderRadius: size / 2, height: size, width: size }} />
+                    <View style={{ backgroundColor: theme.colors.ink, borderRadius: size / 2, height: size, width: size }} />
                   </Pressable>
                 ))}
                 <Pressable accessibilityLabel="Undo paint stroke" onPress={() => setStrokes(current => current.slice(0, -1))} style={styles.iconButton}>
-                  <Ionicons color={String(theme.colors.textPrimary)} name="arrow-undo" size={20} />
+                  <Ionicons color={String(theme.colors.ink)} name="arrow-undo" size={20} />
                 </Pressable>
               </View>
             </View>
@@ -508,7 +510,7 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
                     setCropRect(null);
                     setMode('paint');
                   }}
-                  style={[styles.cropActionButton, { borderColor: theme.colors.controlBorder }]}
+                  style={[styles.cropActionButton, { borderColor: theme.colors.line }]}
                 >
                   <ReedText variant="caption">Cancel</ReedText>
                 </Pressable>
@@ -516,13 +518,13 @@ export function ReedImageEditor({ image, onCancel, onUseImage, visible }: Props)
                   accessibilityLabel="Apply crop"
                   disabled={isApplyingCrop}
                   onPress={() => void applyCrop()}
-                  style={[styles.cropActionButton, { backgroundColor: theme.colors.controlActiveFill, borderColor: theme.colors.controlBorder }]}
+                  style={[styles.cropActionButton, { backgroundColor: theme.colors.surfaceHigh, borderColor: theme.colors.line }]}
                 >
                   {isApplyingCrop ? (
-                    <ActivityIndicator color={String(theme.colors.textPrimary)} size="small" />
+                    <ActivityIndicator color={String(theme.colors.ink)} size="small" />
                   ) : (
                     <>
-                      <Ionicons color={String(theme.colors.textPrimary)} name="checkmark" size={18} />
+                      <Ionicons color={String(theme.colors.ink)} name="checkmark" size={18} />
                       <ReedText variant="caption">Apply</ReedText>
                     </>
                   )}
@@ -622,9 +624,9 @@ function ToolButton({
       accessibilityRole="button"
       accessibilityState={{ selected: active }}
       onPress={onPress}
-      style={[styles.toolButton, active ? { backgroundColor: theme.colors.controlActiveFill } : null]}
+      style={[styles.toolButton, active ? { backgroundColor: theme.colors.surfaceHigh } : null]}
     >
-      <Ionicons color={String(active ? theme.colors.textPrimary : theme.colors.textMuted)} name={icon} size={18} />
+      <Ionicons color={String(active ? theme.colors.ink : theme.colors.inkMuted)} name={icon} size={18} />
       <ReedText tone={active ? 'default' : 'muted'} variant="caption">{label}</ReedText>
     </Pressable>
   );
@@ -654,7 +656,7 @@ const styles = StyleSheet.create({
   },
   brushButton: {
     alignItems: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.pill,
     borderWidth: 1,
     height: 36,
     justifyContent: 'center',
@@ -749,7 +751,7 @@ const styles = StyleSheet.create({
   },
   segment: {
     alignSelf: 'center',
-    borderRadius: 18,
+    borderRadius: reedRadii.md,
     flexDirection: 'row',
     gap: 4,
     padding: 4,
@@ -761,7 +763,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   swatch: {
-    borderRadius: 18,
+    borderRadius: reedRadii.pill,
     borderWidth: 2,
     height: 36,
     width: 36,
@@ -773,7 +775,7 @@ const styles = StyleSheet.create({
   },
   toolButton: {
     alignItems: 'center',
-    borderRadius: 14,
+    borderRadius: reedRadii.sm,
     flexDirection: 'row',
     gap: 8,
     height: 42,

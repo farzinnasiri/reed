@@ -1,7 +1,8 @@
+import { onboardingComplete } from '@/domains/profile/onboarding';
 import { posthog } from '@/lib/posthog';
 import type { Id } from '@/convex/_generated/dataModel';
 
-type AuthMethod = 'email' | 'google';
+type AuthMethod = 'email' | 'google' | 'apple';
 type MessageSource = 'quick-action' | 'typed' | 'voice';
 type ProductEventName =
   | 'account_signed_out'
@@ -31,10 +32,10 @@ const productEvents = {
 } as const satisfies Record<string, ProductEventName>;
 
 export const analytics = {
-  identifyProfile(profile: { _id: Id<'profiles'>; onboardingCompletedAt?: number }) {
+  identifyProfile(profile: { _id: Id<'profiles'>; onboardingCompletedAt?: number; onboardingVersion?: number }) {
     posthog.identify(profile._id, {
       $set: {
-        onboarding_completed: Boolean(profile.onboardingCompletedAt),
+        onboarding_completed: onboardingComplete(profile),
       },
     });
   },
@@ -58,9 +59,9 @@ export const analytics = {
     });
   },
 
-  onboardingCompleted(input: { rankedGoalCount: number }) {
+  onboardingCompleted(input: { practiceCount: number; valueCount: number }) {
     captureProductEvent(productEvents.onboardingCompleted, {
-      ranked_goal_count: input.rankedGoalCount,
+      version: 2, practice_count: input.practiceCount, value_count: input.valueCount,
     });
   },
 

@@ -1,0 +1,36 @@
+{
+  "sourceSha256": "720386568579d94b7d2754f025ee5c0aee04b76dc73530fc952225c6945b858f",
+  "revisedSha256": "6e407e65984624cff8d9603e9e93a68a0f2efaff729c9eb5f0f0a7c020ff2758",
+  "variants": {
+    "male": {
+      "topologyUVsRegionMembershipPatchTopology": "unchanged",
+      "headAndGroundContactMaximumDisplacementM": 0.0,
+      "heightM": 1.7200000286102295,
+      "symmetryBefore": {
+        "meanM": 0.0002870662252744009,
+        "p95M": 0.0008942237298469981,
+        "maximumM": 0.004156407434493303
+      },
+      "symmetryAfter": {
+        "meanM": 0.00029063361829191294,
+        "p95M": 0.00094097786641214,
+        "maximumM": 0.0033771891612559557
+      }
+    },
+    "female": {
+      "topologyUVsRegionMembershipPatchTopology": "unchanged",
+      "headAndGroundContactMaximumDisplacementM": 0.0,
+      "heightM": 1.7200000286102295,
+      "symmetryBefore": {
+        "meanM": 0.00044015713568614607,
+        "p95M": 0.0013798371248412876,
+        "maximumM": 0.004723932594060898
+      },
+      "symmetryAfter": {
+        "meanM": 0.00038535928972343724,
+        "p95M": 0.0011389901104848824,
+        "maximumM": 0.003495946992188692
+      }
+    }
+  }
+}

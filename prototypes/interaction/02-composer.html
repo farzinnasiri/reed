@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 02 Composer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .app .menu { position: absolute; left: 14px; bottom: 100px; width: 236px; background: var(--raise-2); border-radius: 22px; padding: 6px; z-index: 48; transform-origin: 24px 100%;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, .5); opacity: 0; transform: scale(.9); pointer-events: none }
+  .app .menu .row { display: flex; align-items: center; gap: 12px; height: 46px; padding: 0 12px; border-radius: 16px; font-size: 15.5px; color: var(--ink) }
+  .app .menu .row .ic { color: var(--ink-2); width: 19px; height: 19px }
+  .app .menu .row + .row { box-shadow: inset 0 1px 0 var(--line) }
+  .app .menu-scrim { position: absolute; inset: 0; z-index: 47; background: rgba(6, 5, 4, .35); opacity: 0; pointer-events: none }
+  .app .composer .plus .ic { transition: transform calc(var(--k) * 380ms) var(--pop) }
+  .app .composer.menu-open .plus .ic { transform: rotate(45deg) }
+  .app .field-scroll { max-height: 112px; overflow: hidden }
+</style>
+</head>
+<body>
+<script>
+const { icon, ui, chat } = REED;
+REED.page({
+  kicker: 'Reed · Interaction · 02',
+  title: 'The composer is where you meet Reed',
+  intro: [
+    'Today the composer is a passive text field that goes grey while Reed thinks. It should feel like the thing you are talking <i>to</i>: it answers your touch, it makes room for longer thoughts, and what you write visibly leaves your hands and goes to Reed.',
+    'Layout and contents are unchanged from v2 (session button, <code>+</code>, field, mic/send). Only behaviour is designed here.',
+  ],
+  build(c) {
+    c.app.innerHTML = `<canvas class="glow"></canvas>${ui.pulse()}
+      <div class="stage">
+        <div class="thread"><div class="tscroll">
+          <div class="chapter">Today · 9:12</div>
+          <div class="you">Upper body today?</div>
+          <div class="voice">Yes. Rows first, then bench. About <strong>45 minutes</strong>.</div>
+        </div></div>
+        <div class="presence"><div class="corner-slot"></div><span class="hint"></span><div class="chips"></div></div>
+        ${ui.dock()}
+      </div>
+      <div class="menu-scrim"></div>
+      <div class="menu">
+        <div class="row">${icon('pulse')}Quick log</div>
+        <div class="row">${icon('plus')}Take photo</div>
+        <div class="row">${icon('copy')}Photo library</div>
+        <div class="row">${icon('note')}Choose files</div>
+      </div>
+      ${ui.mascotLayer()}${REED.keyboard}`;
+  },
+  async settle(c) { await c.placeMascot(c.$('.corner-slot')); },
+  steps: [
+    {
+      t: 'At rest', u: 'Home in chat mode, nothing focused.',
+      async run(c) { await c.wait(1200); },
+      when: [
+        ['—', 'Session button 56 × 56 accent, left. Composer: 56 tall, pill, <code>surface</code>, <code>+</code> · “Talk to Reed” · mic in a 40 px <code>surfaceRaised</code> circle.'],
+        ['—', 'No rim, no glow on the composer. The ambient glow is at rest.'],
+      ],
+      spec: ['Gutters 14 (chrome). Gap between button and composer 8.', 'Placeholder is always “Talk to Reed”, in every state (never “Reed is thinking”).'],
+      haptic: 'none',
+      build: ['<code>reed-dock.tsx</code>, <code>reed-composer.tsx</code>: structure stays.'],
+    },
+    {
+      t: 'Focus', u: 'You tap the composer.',
+      async run(c) { await chat.focus(c); await c.wait(500); },
+      when: [
+        ['0', 'Press: composer scales 1 → 1.03 over 110 ms, then <code>pop</code> back to 1. (Same move as tapping Reed, page 06.)'],
+        ['0–180', 'Rim fades in: 1 px accent ring at 55 % + 22 px accent glow at 28 %.'],
+        ['0–380', 'Session button: 56 → 44, accent → <code>surfaceRaised</code>, icon .84 ×, bottom-aligned with the composer (<code>pop</code>). Gives the field ~12 px more width.'],
+        ['0–380', 'Keyboard rises; dock, thread and corner mascot ride it.'],
+        ['0', 'Caret appears before the placeholder.'],
+      ],
+      spec: ['The pop is on press-in (finger down), not on focus, so it answers the touch immediately.', 'Reed reacts too (listening, page 01).'],
+      haptic: 'none',
+      reduce: 'Rim crossfades. No pop, button size changes instantly.',
+      build: ['Pressable wrapper on the composer handles <code>onPressIn</code> → pop, then focuses the TextInput.', 'Session button collapse: one shared value <code>dockFocus</code> 0→1 drives size, colour and icon scale.'],
+    },
+    {
+      t: 'Mic becomes Send', u: 'You type the first characters.',
+      async run(c) { await chat.type(c, 'Can I ', { tick: true }); await c.wait(700); },
+      when: [
+        ['1st char', 'Mic scales to .6 and fades out (120 ms). The arrow scales .6 → 1 with <code>pop</code> and fades in. Circle background <code>surfaceRaised</code> → accent (180 ms).'],
+        ['empty again', 'Exactly the reverse.'],
+        ['—', 'Rim steps up to the typing level (75 % ring, 36 % glow).'],
+      ],
+      spec: ['One button, two icons crossfading in place. Never a layout shift.', 'Voice stays on the mic: tap to record, as today.'],
+      haptic: 'none',
+      reduce: 'Icons crossfade (120 ms), no scale.',
+      build: ['Shared value <code>hasText</code> (0/1) animated with <code>pop</code>; icons interpolate scale/opacity.'],
+    },
+    {
+      t: 'It grows', u: 'You keep typing past one line.',
+      async run(c) { await chat.type(c, 'swap bench for dumbbell press today? my left shoulder felt a bit tight on Monday and I would rather not push it', { tick: true }); await c.wait(700); },
+      when: [
+        ['wrap', 'Composer height follows the text, animated with <code>smooth</code> (no jump per line). Corner radius 28 → 24 once it’s more than one line.'],
+        ['—', 'The thread above stays pinned to its latest message while the composer grows.'],
+        ['5 lines', 'Stops growing at 5 lines (~140 px); the field scrolls inside.'],
+        ['—', '<code>+</code> and Send stay bottom-aligned with the last line.'],
+      ],
+      spec: ['Max 5 lines. Text 16 / 22.', 'Pasting a long text grows once, in one animation.'],
+      haptic: 'none',
+      reduce: 'Height changes without animation.',
+      build: ['<code>onContentSizeChange</code> → height shared value with <code>smooth</code>. Thread bottom inset follows the same value so the list stays pinned.'],
+    },
+    {
+      t: 'Send', u: 'You tap Send.',
+      async run(c) { await chat.send(c); c.face.mood('thinking'); c.state('thinking'); c.glow.set({ breath: 1, speed: 2.5, warmth: .15 }); await c.wait(700); },
+      when: [
+        ['0', 'Haptic light. Composer clears immediately, shrinks back to one line (<code>smooth</code>), keeps focus and keyboard.'],
+        ['0–480', 'The text lifts into the thread as your bubble (<code>lift</code>). Text keeps its size; the bubble fill fades in and its corners form on the way.'],
+        ['0–420', 'Thread rises to make room (<code>smooth</code>).'],
+        ['0–900', 'Wave of light rises from the dock (glow).'],
+        ['0', 'Send morphs back to mic (field empty).'],
+      ],
+      spec: ['Long messages: the bubble is wider and taller than the field; it is laid out first (hidden), measured, then the copy travels to it. No scale.'],
+      haptic: 'light',
+      reduce: 'Bubble fades in place (200 ms). Composer clears.',
+      build: ['See page 01 step 4. The lift overlay lives in the same absolute layer as the mascot.'],
+    },
+    {
+      t: 'Typing while Reed thinks', u: 'You start your next message before the reply.',
+      async run(c) { await chat.type(c, 'and keep it under 40 min', { tick: false }); await c.wait(1300); await chat.reply(c, 'Sure. Dumbbell press instead, 3 × 10, and we cut the last accessory. <strong>38 minutes</strong>.'); await c.wait(500); },
+      when: [
+        ['—', 'The field works normally. Send shows the arrow but dimmed (accent 40 %): <b>waiting</b>.'],
+        ['reply lands', 'Send becomes live (accent 100 %, 180 ms). You send when ready.'],
+        ['tap while waiting', 'Nothing is sent; the button gives a tiny shake (± 3 px, 200 ms) and Reed stays thinking.'],
+      ],
+      spec: ['No queue, no Stop (backend has no cancel). Simple and honest.'],
+      haptic: 'none (selection on the refused tap)',
+      reduce: 'No shake; the button stays dimmed.',
+      build: ['<code>canSend = hasText && !isReplyPending</code>; <code>waiting = hasText && isReplyPending</code>.'],
+    },
+    {
+      t: 'The + menu', u: 'You tap +.',
+      async run(c) {
+        const menu = c.$('.menu'), scrim = c.$('.menu-scrim');
+        menu.style.bottom = `${844 - c.rect(c.$('.composer')).y + 8}px`;
+        c.$('.composer').classList.add('menu-open');
+        c.haptic('selection');
+        scrim.style.pointerEvents = 'auto';
+        await Promise.all([
+          c.anim(scrim, [{ opacity: 0 }, { opacity: 1 }], { dur: 200 }),
+          c.anim(menu, [{ opacity: 0, transform: 'scale(.9)' }, { opacity: 1, transform: 'scale(1)' }], { dur: REED.springs.pop.duration, spring: 'pop' }),
+          ...[...menu.children].map((r, i) => c.anim(r, [{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { dur: 220, delay: 40 + i * 30 })),
+        ]);
+        await c.wait(900);
+      },
+      when: [
+        ['0', '<code>+</code> rotates 45° into ×  (<code>pop</code>).'],
+        ['0–380', 'Menu grows from the <code>+</code> (origin bottom-left), scale .9 → 1 with <code>pop</code>, fade 120 ms. Light scrim behind (35 %).'],
+        ['40 → 130', 'Rows fade up 6 px, 30 ms apart.'],
+        ['tap row', 'Menu closes (reverse, 200 ms) and the chosen action runs.'],
+      ],
+      spec: ['Same rows as today: Quick log, Take photo, Photo library, Choose files.', 'Keyboard stays up if it was up.'],
+      haptic: 'selection on open',
+      reduce: 'Menu and rows fade together (200 ms).',
+      build: ['<code>composer-menu.tsx</code>: replace the current entry animation with this one.'],
+    },
+    {
+      t: 'Blur', u: 'You close the menu and swipe the keyboard down.',
+      async run(c) {
+        const menu = c.$('.menu'), scrim = c.$('.menu-scrim');
+        c.$('.composer').classList.remove('menu-open');
+        await Promise.all([c.anim(scrim, [{ opacity: 1 }, { opacity: 0 }], { dur: 200 }), c.anim(menu, [{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(.94)' }], { dur: 200 })]);
+        scrim.style.pointerEvents = 'none';
+        await chat.blur(c);
+        await c.wait(800);
+      },
+      when: [
+        ['0', 'Keyboard falls; dock rides it down (interactive dismiss follows your finger).'],
+        ['0–380', 'Session button grows back to 56 accent (<code>pop</code>).'],
+        ['0–180', 'Rim fades out. If there is a draft, it stays (field shows the text, Send stays live).'],
+        ['0', 'Mascot back to idle, glow back to rest.'],
+      ],
+      spec: ['Drafts persist across blur and across leaving home (existing behaviour).'],
+      haptic: 'none',
+      reduce: 'Instant size change, rim crossfade.',
+      build: ['<code>keyboardDismissMode="interactive"</code> on the thread list.'],
+    },
+  ],
+});
+</script>
+</body>
+</html>

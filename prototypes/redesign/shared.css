@@ -1,0 +1,31 @@
+/* Page + phone chrome shared by every direction. Direction styles live in each file. */
+* { box-sizing: border-box; margin: 0; padding: 0 }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer }
+html { background: #19191b; color: #e6e6e9; font-family: "Inter Tight", system-ui, sans-serif; -webkit-font-smoothing: antialiased }
+body { padding: 56px 56px 110px; min-width: 1340px }
+
+.intro { max-width: 780px; margin-bottom: 48px }
+.kicker, .frame-label { font: 500 11.5px/1 "Geist Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: #85858c }
+.kicker { margin-bottom: 16px }
+.intro h1 { font-size: 34px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 14px; color: #f2f2f4 }
+.intro p { font-size: 15.5px; line-height: 1.65; color: #a6a6ae }
+.intro p + p { margin-top: 10px }
+
+.frames { display: flex; gap: 48px; align-items: flex-start }
+.frame { width: 390px; flex: none }
+.frame-label { margin-bottom: 18px }
+.phone { width: 390px; height: 844px; border-radius: 54px; overflow: hidden; position: relative;
+  box-shadow: 0 0 0 1px #2e2e33, 0 0 0 10px #0b0b0c, 0 0 0 11px #2e2e33, 0 50px 90px rgba(0, 0, 0, .55) }
+.notes { margin-top: 40px; font-size: 13.5px; line-height: 1.55; color: #a2a2aa; list-style: none }
+.notes li { padding-left: 16px; position: relative; margin-bottom: 9px }
+.notes li::before { content: ""; position: absolute; left: 0; top: .72em; width: 7px; height: 1px; background: #66666d }
+.notes b { color: #e2e2e6; font-weight: 600 }
+
+.screen { position: absolute; inset: 0; display: flex; flex-direction: column; overflow: hidden }
+.status { height: 54px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 4px 30px 0 38px; position: relative; z-index: 5 }
+.st-time { font: 600 16px/1 -apple-system, "SF Pro Text", "Inter Tight", sans-serif; letter-spacing: -.01em }
+.st-island { position: absolute; left: 50%; top: 11px; width: 124px; height: 36px; margin-left: -62px; background: #000; border-radius: 20px }
+.st-sys { display: flex; gap: 6px; align-items: center }
+.home-ind { position: absolute; bottom: 8px; left: 50%; width: 136px; height: 5px; margin-left: -68px; border-radius: 3px; background: currentColor; opacity: .55; z-index: 5 }
+.ic { width: 20px; height: 20px; flex: none }
+.num { font-variant-numeric: tabular-nums }

@@ -13,15 +13,16 @@ export function ReedInput({ containerStyle, label, style, ...props }: ReedInputP
 
   return (
     <View style={[styles.container, containerStyle]}>
-      {label ? <ReedText variant="label" tone="muted">{label}</ReedText> : null}
+      {label ? <ReedText variant="caption" tone="muted">{label}</ReedText> : null}
       <TextInput
-        placeholderTextColor={String(theme.colors.textMuted)}
+        accessibilityLabel={props.accessibilityLabel ?? label}
+        placeholderTextColor={String(theme.colors.inkMuted)}
         style={[
           styles.input,
           {
-            backgroundColor: theme.colors.inputFill,
-            borderColor: theme.colors.inputBorder,
-            color: theme.colors.textPrimary,
+            backgroundColor: theme.colors.surface,
+            borderColor: theme.colors.lineStrong,
+            color: theme.colors.ink,
             fontFamily: theme.typography.body.fontFamily,
           },
           style,

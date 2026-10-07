@@ -1,29 +1,13 @@
+import { localDayBounds, localDayNumber, localWeekDayNumbers, normalizeTimeZone } from '../time/local-calendar';
+import { resolveWeeklyActiveDaysTarget } from './weekly-target';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
-const WEEK_MS = 7 * DAY_MS;
 const GRID_WEEK_COUNT = 12;
 const RECENT_WEEK_COUNT = 8;
 
-type WeeklySessions = 'one_to_two' | 'two_to_four' | 'four_plus';
-
-type CadenceTarget = { label: string; targetActiveDays: number };
-
-const cadenceTargets: Record<WeeklySessions, CadenceTarget> = {
-  four_plus: {
-    label: '4+ days/week',
-    targetActiveDays: 4,
-  },
-  one_to_two: {
-    label: '1-2 days/week',
-    targetActiveDays: 1,
-  },
-  two_to_four: {
-    label: '2-4 days/week',
-    targetActiveDays: 2,
-  },
-};
-
 export type ConsistencyDay = {
   activityCount: number;
+  activityCountIsCapped: boolean;
   active: boolean;
   date: string;
   dayStartAt: number;
@@ -31,36 +15,66 @@ export type ConsistencyDay = {
   weekStartAt: number;
 };
 
-export function getConsistencyWindow(now: number) {
-  const currentWeekStartAt = startOfUtcWeek(now);
+export function getConsistencyWindow(now: number, timeZone: string) {
+  const currentWeekFirstDay = localWeekDayNumbers(now, timeZone)[0];
+  const gridFirstDay = currentWeekFirstDay - (GRID_WEEK_COUNT - 1) * 7;
   return {
-    currentWeekStartAt,
-    gridEndAt: currentWeekStartAt + WEEK_MS,
-    gridStartAt: currentWeekStartAt - (GRID_WEEK_COUNT - 1) * WEEK_MS,
+    currentWeekStartAt: localDayBounds(currentWeekFirstDay, timeZone).startAt,
+    gridEndAt: localDayBounds(currentWeekFirstDay + 7, timeZone).startAt,
+    gridStartAt: localDayBounds(gridFirstDay, timeZone).startAt,
+    dayNumbers: Array.from({ length: GRID_WEEK_COUNT * 7 }, (_, index) => gridFirstDay + index),
   };
 }
 
 export function summarizeConsistency(args: {
   loggedAts: number[];
   now: number;
-  weeklySessions: string | null;
+  timeZone: string;
+  weeklyActiveDaysTarget?: number;
+  cappedDayNumbers?: number[];
 }) {
-  const { currentWeekStartAt, gridEndAt, gridStartAt } = getConsistencyWindow(args.now);
-  const activityByDay = countActivityByUtcDay(args.loggedAts);
-  const target = resolveCadenceTarget(args.weeklySessions);
-
-  const weekSummaries = Array.from({ length: GRID_WEEK_COUNT }, (_, index) => {
-    const weekStartAt = gridStartAt + index * WEEK_MS;
-    const activeDays = countActiveDaysInWeek(activityByDay, weekStartAt);
+  const timeZone = normalizeTimeZone(args.timeZone);
+  const { currentWeekStartAt, dayNumbers } = getConsistencyWindow(args.now, timeZone);
+  const activityByDay = new Map<number, number>();
+  for (const loggedAt of args.loggedAts) {
+    if (loggedAt > args.now) continue;
+    const day = localDayNumber(loggedAt, timeZone);
+    activityByDay.set(day, (activityByDay.get(day) ?? 0) + 1);
+  }
+  const cappedDays = new Set(args.cappedDayNumbers);
+  const targetActiveDays = resolveWeeklyActiveDaysTarget(args);
+  const target = targetActiveDays === null ? null : {
+    label: `${targetActiveDays} ${targetActiveDays === 1 ? 'day' : 'days'}/week`,
+    targetActiveDays,
+  };
+  const weekGrid = Array.from({ length: GRID_WEEK_COUNT }, (_, index) => {
+    const firstDay = dayNumbers[index * 7];
+    const weekStartAt = localDayBounds(firstDay, timeZone).startAt;
+    const days: ConsistencyDay[] = dayNumbers.slice(index * 7, index * 7 + 7).map(day => {
+      const dayStartAt = localDayBounds(day, timeZone).startAt;
+      const activityCount = activityByDay.get(day) ?? 0;
+      return {
+        activityCount,
+        activityCountIsCapped: cappedDays.has(day),
+        active: activityCount > 0,
+        date: new Date(day * DAY_MS).toISOString().slice(0, 10),
+        dayStartAt,
+        isFuture: dayStartAt > args.now,
+        weekStartAt,
+      };
+    });
+    return { days, weekStartAt };
+  });
+  const weekSummaries = weekGrid.map((week, index) => {
+    const activeDays = week.days.filter(day => day.active).length;
     return {
       activeDays,
-      isCurrent: weekStartAt === currentWeekStartAt,
+      isCurrent: week.weekStartAt === currentWeekStartAt,
       isOnTarget: target ? activeDays >= target.targetActiveDays : false,
-      weekEndAt: weekStartAt + WEEK_MS,
-      weekStartAt,
+      weekEndAt: localDayBounds(dayNumbers[index * 7] + 7, timeZone).startAt,
+      weekStartAt: week.weekStartAt,
     };
   });
-
   const currentWeek = weekSummaries[weekSummaries.length - 1];
   const recentCompleteWeeks = weekSummaries
     .filter(week => !week.isCurrent)
@@ -69,15 +83,6 @@ export function summarizeConsistency(args: {
   const remainingActiveDays = target
     ? Math.max(0, target.targetActiveDays - currentWeek.activeDays)
     : 0;
-
-  const dayMap = buildDayMap({
-    activityByDay,
-    endAt: gridEndAt,
-    now: args.now,
-    startAt: gridStartAt,
-  });
-
-  const weekGrid = groupByWeek(dayMap);
 
   if (!target) {
     return {
@@ -88,6 +93,7 @@ export function summarizeConsistency(args: {
         targetActiveDays: 0,
       },
       hasTrainingTarget: false,
+      timeZone,
       helperLine: 'Finish your training profile before Reed evaluates rhythm.',
       recentOnTargetRate: {
         onTargetWeeks: 0,
@@ -111,6 +117,7 @@ export function summarizeConsistency(args: {
       targetActiveDays: target.targetActiveDays,
     },
     hasTrainingTarget: true,
+    timeZone,
     helperLine: `Your target is ${target.label}. Each filled square is a day with logged training. Reed checks weeks against your cadence target, not daily streaks.`,
     recentOnTargetRate: {
       onTargetWeeks: recentOnTargetWeeks,
@@ -134,33 +141,6 @@ export function summarizeConsistency(args: {
   };
 }
 
-function resolveCadenceTarget(weeklySessions: string | null): CadenceTarget | null {
-  if (weeklySessions === 'one_to_two' || weeklySessions === 'two_to_four' || weeklySessions === 'four_plus') {
-    return cadenceTargets[weeklySessions];
-  }
-
-  return null;
-}
-
-function countActivityByUtcDay(loggedAts: number[]) {
-  const counts = new Map<string, number>();
-  for (const loggedAt of loggedAts) {
-    const key = formatUtcDateKey(startOfUtcDay(loggedAt));
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function countActiveDaysInWeek(activityByDay: Map<string, number>, weekStartAt: number) {
-  let activeDays = 0;
-  for (let offset = 0; offset < 7; offset += 1) {
-    if ((activityByDay.get(formatUtcDateKey(weekStartAt + offset * DAY_MS)) ?? 0) > 0) {
-      activeDays += 1;
-    }
-  }
-  return activeDays;
-}
-
 function countOnTargetRun(weekSummaries: Array<{ isCurrent: boolean; isOnTarget: boolean }>) {
   let run = 0;
   for (let index = weekSummaries.length - 1; index >= 0; index -= 1) {
@@ -174,64 +154,6 @@ function countOnTargetRun(weekSummaries: Array<{ isCurrent: boolean; isOnTarget:
     run += 1;
   }
   return run;
-}
-
-function buildDayMap({
-  activityByDay,
-  endAt,
-  now,
-  startAt,
-}: {
-  activityByDay: Map<string, number>;
-  endAt: number;
-  now: number;
-  startAt: number;
-}) {
-  const days = Math.round((endAt - startAt) / DAY_MS);
-  return Array.from({ length: days }, (_, index) => {
-    const dayStartAt = startAt + index * DAY_MS;
-    const key = formatUtcDateKey(dayStartAt);
-    const activityCount = activityByDay.get(key) ?? 0;
-    return {
-      activityCount,
-      active: activityCount > 0,
-      date: key,
-      dayStartAt,
-      isFuture: dayStartAt > now,
-      weekStartAt: startOfUtcWeek(dayStartAt),
-    };
-  });
-}
-
-function groupByWeek(days: ConsistencyDay[]) {
-  const byWeek = new Map<number, ConsistencyDay[]>();
-  for (const day of days) {
-    const week = byWeek.get(day.weekStartAt) ?? [];
-    week.push(day);
-    byWeek.set(day.weekStartAt, week);
-  }
-
-  return Array.from(byWeek.entries())
-    .sort(([left], [right]) => left - right)
-    .map(([weekStartAt, weekDays]) => ({
-      days: getSevenDayWeek(weekStartAt, weekDays),
-      weekStartAt,
-    }));
-}
-
-function getSevenDayWeek(weekStartAt: number, weekDays: ConsistencyDay[]) {
-  const byDayStart = new Map(weekDays.map(day => [day.dayStartAt, day]));
-  return Array.from({ length: 7 }, (_, index) => {
-    const dayStartAt = weekStartAt + index * DAY_MS;
-    return byDayStart.get(dayStartAt) ?? {
-      activityCount: 0,
-      active: false,
-      date: new Date(dayStartAt).toISOString().slice(0, 10),
-      dayStartAt,
-      isFuture: true,
-      weekStartAt,
-    };
-  });
 }
 
 function formatConsistencySubline({
@@ -270,20 +192,4 @@ function formatSummaryLine({
   }
 
   return `${remainingActiveDays} more ${remainingActiveDays === 1 ? 'day' : 'days'} puts this week on target.`;
-}
-
-function startOfUtcDay(timestamp: number) {
-  const date = new Date(timestamp);
-  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-}
-
-function startOfUtcWeek(timestamp: number) {
-  const dayStartAt = startOfUtcDay(timestamp);
-  const day = new Date(dayStartAt).getUTCDay();
-  const daysSinceMonday = (day + 6) % 7;
-  return dayStartAt - daysSinceMonday * DAY_MS;
-}
-
-function formatUtcDateKey(dayStartAt: number) {
-  return new Date(dayStartAt).toISOString().slice(0, 10);
 }

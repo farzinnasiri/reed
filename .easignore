@@ -54,3 +54,13 @@ yarn-error.*
 .claude/
 CLAUDE.md
 skills-lock.json
+
+# local generated artifacts
+.scratch/
+assets/workout-image-reference/
+assets/workout-images/
+exports/
+tmp/
+
+# Web hosting metadata
+.vercel/

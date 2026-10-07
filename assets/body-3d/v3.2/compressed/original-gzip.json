@@ -1,0 +1,21 @@
+{
+  "assetVersion": "3.2.0",
+  "encoding": "gzip",
+  "decodedManifest": "../manifest.json",
+  "variants": {
+    "male": {
+      "filename": "male.glb.gz",
+      "bytes": 2934045,
+      "sha256": "c6d2355871375568be9bb7d40f528990e58b11b2c3ea9559c4aa84c8855aa286",
+      "decodedBytes": 5711884,
+      "decodedSha256": "2c6dd5e79bbfb667053d1bf08e6cf7c6ed0e0db32e0a552bb61feaa2ee57c469"
+    },
+    "female": {
+      "filename": "female.glb.gz",
+      "bytes": 2938359,
+      "sha256": "d7ee604082b259c84553fa4bf502e4829d96fce76afed845eb05b4b5d924a20e",
+      "decodedBytes": 5722568,
+      "decodedSha256": "e2db2132da77289614f497c8bf1b6d12249cba4fe17040698d381482181f3701"
+    }
+  }
+}

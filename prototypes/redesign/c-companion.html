@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Direction C · Companion</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="shared.css">
+<script src="kit.js"></script>
+<style>
+  .c {
+    --bg: #121110; --raise: #1c1a18; --raise-2: #26231f; --line: rgba(255, 240, 220, .07); --line-2: rgba(255, 240, 220, .14);
+    --ink: #f4efe8; --ink-2: #b8afa4; --ink-3: #7d756c; --accent: #4f78ff; --accent-soft: rgba(79, 120, 255, .16);
+    --sans: "Figtree", system-ui, sans-serif;
+  }
+  .c .screen { background: var(--bg); color: var(--ink); font-family: var(--sans) }
+  .c .glow { position: absolute; left: 50%; top: -120px; width: 520px; height: 420px; margin-left: -260px; pointer-events: none;
+    background: radial-gradient(closest-side, rgba(79, 120, 255, .20), rgba(79, 120, 255, .06) 55%, transparent) }
+
+  .c .hdr { height: 50px; flex: none; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; position: relative; z-index: 2 }
+  .c .round { width: 40px; height: 40px; border-radius: 20px; background: var(--raise); display: grid; place-items: center; color: var(--ink-2); font-weight: 600; font-size: 14px }
+  .c .round .ic { width: 19px; height: 19px }
+
+  .c .thread { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 0 22px 16px; position: relative; z-index: 1 }
+  .c .hero { display: flex; flex-direction: column; align-items: center; padding: 6px 0 4px }
+  .c .greet { font: 600 27px/1.2 var(--sans); letter-spacing: -.02em; text-align: center; text-wrap: balance; margin-top: 16px }
+  .c .voice { font: 400 17px/1.55 var(--sans); color: var(--ink-2); text-wrap: pretty }
+  .c .voice.center { text-align: center; padding: 0 8px }
+  .c .voice strong { color: var(--ink); font-weight: 500 }
+
+  .c .card { background: var(--raise); border-radius: 26px; padding: 18px }
+  .c .card-hd { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px }
+  .c .card-hd b { font-size: 18px; font-weight: 600; letter-spacing: -.01em }
+  .c .card-hd span { font-size: 13.5px; color: var(--ink-3) }
+  .c .items { list-style: none }
+  .c .items li { display: flex; align-items: center; gap: 12px; padding: 9px 0; font-size: 15.5px }
+  .c .items .dot { width: 26px; height: 26px; border-radius: 13px; background: var(--raise-2); display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--ink-3) }
+  .c .items .num { margin-left: auto; color: var(--ink-3); font-size: 14.5px }
+  .c .cta { margin-top: 12px; width: 100%; height: 54px; border-radius: 27px; background: var(--accent); color: #fff; font-size: 16px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px }
+  .c .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center }
+  .c .chips button { height: 36px; padding: 0 15px; border-radius: 18px; background: var(--raise); font-size: 14px; color: var(--ink-2) }
+
+  .c .dock { flex: none; padding: 0 16px 30px; position: relative; z-index: 2 }
+  .c .composer { height: 56px; border-radius: 28px; background: var(--raise); display: flex; align-items: center; gap: 12px; padding: 0 8px 0 18px; color: var(--ink-3); font-size: 16px }
+  .c .composer span { flex: 1 }
+  .c .composer .mic { width: 40px; height: 40px; border-radius: 20px; background: var(--raise-2); display: grid; place-items: center; color: var(--ink-2) }
+
+  /* live session */
+  .c .sess { height: 56px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px }
+  .c .sess .mid { flex: 1; text-align: center }
+  .c .sess .mid b { display: block; font-size: 15px; font-weight: 600 }
+  .c .sess .mid span { font-size: 13px; color: var(--ink-3) }
+  .c .pips { width: 40px; display: flex; gap: 4px; justify-content: flex-end }
+  .c .pips i { width: 6px; height: 6px; border-radius: 3px; background: var(--raise-2) }
+  .c .pips i.on { background: var(--ink-2) } .c .pips i.cur { background: var(--accent) }
+  .c .excard { margin: 8px 14px 0; background: var(--raise); border-radius: 32px; padding: 22px 20px 20px }
+  .c .ex-top { display: flex; justify-content: space-between; align-items: center }
+  .c .ex-top h2 { font-size: 28px; font-weight: 600; letter-spacing: -.02em }
+  .c .pill { height: 28px; padding: 0 11px; border-radius: 14px; background: var(--raise-2); font-size: 13px; color: var(--ink-2); display: inline-flex; align-items: center }
+  .c .ex-sub { margin-top: 6px; font-size: 14.5px; color: var(--ink-3) }
+  .c .pickers { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-top: 22px }
+  .c .picker { background: var(--bg); border-radius: 22px; padding: 14px 0 12px; display: flex; flex-direction: column; align-items: center }
+  .c .picker .lbl { font-size: 12.5px; color: var(--ink-3); font-weight: 500 }
+  .c .picker .gh { font-size: 22px; color: var(--ink-3); opacity: .5; font-weight: 400 }
+  .c .picker .v { font-size: 64px; font-weight: 600; letter-spacing: -.04em; line-height: 1.1 }
+  .c .done { display: flex; gap: 8px; margin-top: 16px }
+  .c .done span { flex: 1; height: 38px; border-radius: 19px; background: var(--raise-2); display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 14px; color: var(--ink-2) }
+  .c .done span.todo { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent); color: var(--ink) }
+  .c .done .ic { width: 15px; height: 15px }
+  .c .coach { margin: auto 14px 12px; display: flex; gap: 10px; align-items: flex-end }
+  .c .bubble { flex: 1; background: var(--raise-2); border-radius: 22px 22px 22px 8px; padding: 13px 15px 12px }
+  .c .bubble p { font-size: 15.5px; line-height: 1.45 }
+  .c .bubble-actions { display: flex; gap: 6px; margin-top: 10px }
+  .c .bubble-actions button { height: 32px; padding: 0 13px; border-radius: 16px; font-size: 13.5px; font-weight: 600; background: var(--accent-soft); color: #aec2ff }
+  .c .bubble-actions button + button { background: transparent; color: var(--ink-3); font-weight: 500 }
+  .c .swipe { margin: 0 14px 34px; height: 64px; border-radius: 32px; background: var(--accent); display: flex; align-items: center; padding: 6px; gap: 16px; font-size: 16px; font-weight: 600; color: #fff }
+  .c .knob { width: 52px; height: 52px; border-radius: 26px; background: #fff; color: var(--accent); display: grid; place-items: center }
+
+  /* summary */
+  .c .bigstats { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; padding: 8px 0 14px; margin-bottom: 4px; border-bottom: 1px solid var(--line) }
+  .c .bigstats b { display: block; font-size: 28px; font-weight: 600; letter-spacing: -.03em }
+  .c .bigstats span { font-size: 12.5px; color: var(--ink-3) }
+  .c .badge { font-size: 12px; font-weight: 700; color: #aec2ff; background: var(--accent-soft); padding: 3px 8px; border-radius: 10px; margin-right: 8px }
+  .c .items.tight li { padding: 7px 0; font-size: 15px }
+</style>
+</head>
+<body>
+<section class="intro">
+  <div class="kicker">Direction C</div>
+  <h1>Companion: someone's in the room with you</h1>
+  <p>Warmer and softer. A warm charcoal instead of pure black, a friendly rounded sans, big soft shapes. The mascot is the <b>hero of the home screen</b>, lit by a faint glow in Reed blue, which is the one piece of atmosphere in the whole app. During a session it steps down to the corner and talks in bubbles.</p>
+  <p>This is the most emotionally inviting option and the easiest one to like on day one. The risk is drifting toward "wellness app", so the type and copy have to stay adult.</p>
+</section>
+
+<div class="frames">
+  <!-- BEFORE -->
+  <div class="frame">
+    <div class="frame-label">01 · Before · home</div>
+    <div class="phone c"><div class="screen">
+      <div class="status"></div>
+      <div class="glow"></div>
+      <header class="hdr"><button class="round"><i data-icon="history"></i></button><button class="round">F</button></header>
+      <main class="thread">
+        <div class="hero">
+          <reed-mascot size="92"></reed-mascot>
+          <h2 class="greet">Legs get a break today.</h2>
+        </div>
+        <p class="voice center">Friday's squats slowed on the last set. Let's do <strong>upper body</strong> instead, about 45 minutes, with rows first.</p>
+        <div class="card">
+          <div class="card-hd"><b>Upper body</b><span>~45 min</span></div>
+          <ul class="items">
+            <li><span class="dot">1</span>Seated cable row<span class="num">3 × 10</span></li>
+            <li><span class="dot">2</span>Bench press<span class="num">3 × 8</span></li>
+            <li><span class="dot">3</span>Lat pulldown<span class="num">3 × 10</span></li>
+            <li><span class="dot">4</span>Pallof press<span class="num">2 × 12</span></li>
+          </ul>
+          <button class="cta">Start upper body<i data-icon="arrow"></i></button>
+        </div>
+        <div class="chips"><button>Make it shorter</button><button>Swap bench</button><button>Not today</button></div>
+      </main>
+      <footer class="dock">
+        <div class="composer"><i data-icon="plus"></i><span>Talk to Reed</span><button class="mic"><i data-icon="mic"></i></button></div>
+      </footer>
+    </div></div>
+    <ul class="notes">
+      <li>Home opens on <b>today's conversation</b>, with the mascot as host. History sits above it; scroll up to see it.</li>
+      <li>The headline is Reed's decision, in plain words. The reasoning is one line under it.</li>
+      <li>The glow is the only ambient effect in the app and it belongs to the mascot, not to the background.</li>
+    </ul>
+  </div>
+
+  <!-- DURING -->
+  <div class="frame">
+    <div class="frame-label">02 · During · recording a set</div>
+    <div class="phone c"><div class="screen">
+      <div class="status"></div>
+      <header class="sess">
+        <button class="round"><i data-icon="chevron-down"></i></button>
+        <div class="mid"><b>Upper body</b><span class="num">23:14 · 2 of 4</span></div>
+        <div class="pips"><i class="on"></i><i class="cur"></i><i></i><i></i></div>
+      </header>
+      <div class="excard">
+        <div class="ex-top"><h2>Bench press</h2><span class="pill">Set 3 of 3</span></div>
+        <p class="ex-sub">Last week 60 × 8</p>
+        <div class="pickers">
+          <div class="picker"><span class="lbl">kg</span><span class="gh num">57.5</span><span class="v num">60</span><span class="gh num">62.5</span></div>
+          <div class="picker"><span class="lbl">reps</span><span class="gh num">7</span><span class="v num">8</span><span class="gh num">9</span></div>
+        </div>
+        <div class="done">
+          <span class="num"><i data-icon="check"></i>60 × 8</span>
+          <span class="num"><i data-icon="check"></i>60 × 8</span>
+          <span class="todo">Set 3</span>
+        </div>
+      </div>
+      <div class="coach">
+        <reed-mascot size="44" mood="speak"></reed-mascot>
+        <div class="bubble">
+          <p>Both sets moved quickly. Want to try 62.5 for this one?</p>
+          <div class="bubble-actions"><button>Use 62.5</button><button>Stay at 60</button></div>
+        </div>
+      </div>
+      <div class="swipe"><span class="knob"><i data-icon="arrow"></i></span>Swipe to log set</div>
+    </div></div>
+    <ul class="notes">
+      <li>The mascot <b>steps down to the corner</b> and speaks in a bubble right above your thumb. You see it without looking away from the set.</li>
+      <li>The bubble fades after a few seconds if you ignore it. It never blocks the swipe.</li>
+      <li>Logged sets become pills, so progress through the exercise is visible at a glance.</li>
+    </ul>
+  </div>
+
+  <!-- AFTER -->
+  <div class="frame">
+    <div class="frame-label">03 · After · back home</div>
+    <div class="phone c"><div class="screen">
+      <div class="status"></div>
+      <div class="glow"></div>
+      <header class="hdr"><button class="round"><i data-icon="history"></i></button><button class="round">F</button></header>
+      <main class="thread">
+        <div class="hero">
+          <reed-mascot size="72" mood="happy"></reed-mascot>
+          <h2 class="greet">Bench is moving again.</h2>
+        </div>
+        <div class="card">
+          <div class="card-hd"><b>Upper body</b><span>Today · 47 min</span></div>
+          <div class="bigstats">
+            <div><b class="num">11</b><span>sets</span></div>
+            <div><b class="num">108</b><span>reps</span></div>
+            <div><b class="num">4,970</b><span>kg moved</span></div>
+          </div>
+          <ul class="items tight">
+            <li>Seated cable row<span class="num">55 × 10</span></li>
+            <li>Bench press<span class="num"><span class="badge">+2.5 kg</span>62.5 × 8</span></li>
+            <li>Lat pulldown<span class="num">50 × 10</span></li>
+            <li>Pallof press<span class="num">15 × 12</span></li>
+          </ul>
+        </div>
+        <p class="voice">62.5 for all eight, and the last rep didn't look like a grind. Rows lead again on Thursday. <strong>How did your neck hold up?</strong></p>
+        <div class="chips" style="justify-content:flex-start"><button>Felt fine</button><button>A bit stiff</button><button>Sore</button></div>
+      </main>
+      <footer class="dock">
+        <div class="composer"><i data-icon="plus"></i><span>Talk to Reed</span><button class="mic"><i data-icon="mic"></i></button></div>
+      </footer>
+    </div></div>
+    <ul class="notes">
+      <li>The headline is the <b>one thing worth knowing</b>. The summary card backs it up for anyone who wants the numbers.</li>
+      <li>The mascot's happy face does the celebrating. No confetti, no badges.</li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,234 @@
+{
+  "male": {
+    "sha256": "ef158063344e4107d4a1a0f74d5df14667a5d3ffaf699e3dcf84e973e9938896",
+    "freshBlenderReimport": true,
+    "meshCount": 80,
+    "anatomicalLeftRight": "passed all classified triangles",
+    "selectionCoverage": "contiguous final-export triangle runs, including explicit null areas",
+    "maximumPatchMorphDeltaErrorM": 6.006850128414953e-08,
+    "maximumPatchNormalError": 0.0,
+    "morphChecks": [
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0,
+        "muscularity": 0,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 3.488651501015738e-08,
+        "innerThighClearanceM": 0.03492995724081993,
+        "bounds": {
+          "min": [
+            -0.4642155170440674,
+            0.0,
+            -0.12526004016399384
+          ],
+          "max": [
+            0.46413785219192505,
+            1.7200000286102295,
+            0.17032529413700104
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 1,
+        "muscularity": 0,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 3.489166644499164e-08,
+        "innerThighClearanceM": 0.04088542237877846,
+        "bounds": {
+          "min": [
+            -0.4642155170440674,
+            -4.888454656893872e-22,
+            -0.1359478235244751
+          ],
+          "max": [
+            0.46413785219192505,
+            1.7200000286102295,
+            0.18148349225521088
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0,
+        "muscularity": 1,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 3.488651501015738e-08,
+        "innerThighClearanceM": 0.032116927206516266,
+        "bounds": {
+          "min": [
+            -0.4642155170440674,
+            -2.206606859039839e-12,
+            -0.129343643784523
+          ],
+          "max": [
+            0.46413785219192505,
+            1.7200000286102295,
+            0.17032529413700104
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 1,
+        "muscularity": 1,
+        "fullness_corrective": 1,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 3.489166644499164e-08,
+        "innerThighClearanceM": 0.03933825343847275,
+        "bounds": {
+          "min": [
+            -0.4642155170440674,
+            -1.213633794155955e-12,
+            -0.1381932497024536
+          ],
+          "max": [
+            0.46413785219192505,
+            1.7200000286102295,
+            0.18206335604190826
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0.5,
+        "muscularity": 0.5,
+        "fullness_corrective": 0.25,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 3.488651501015738e-08,
+        "innerThighClearanceM": 0.03681764006614685,
+        "bounds": {
+          "min": [
+            -0.4642155170440674,
+            -8.550601632989485e-13,
+            -0.13218620419502258
+          ],
+          "max": [
+            0.46413785219192505,
+            1.7200000286102295,
+            0.17032529413700104
+          ]
+        }
+      }
+    ]
+  },
+  "female": {
+    "sha256": "f0026c6d19597419ae13c2bf667be7509d8561dcfedd0c367ffb59d6b8d1a951",
+    "freshBlenderReimport": true,
+    "meshCount": 80,
+    "anatomicalLeftRight": "passed all classified triangles",
+    "selectionCoverage": "contiguous final-export triangle runs, including explicit null areas",
+    "maximumPatchMorphDeltaErrorM": 6.006850128414953e-08,
+    "maximumPatchNormalError": 0.0,
+    "morphChecks": [
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0,
+        "muscularity": 0,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 1.7114199124534935e-07,
+        "innerThighClearanceM": 0.06337124109268188,
+        "bounds": {
+          "min": [
+            -0.46967923641204834,
+            0.0,
+            -0.11068292707204819
+          ],
+          "max": [
+            0.4694664478302002,
+            1.7200000286102295,
+            0.17566004395484924
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 1,
+        "muscularity": 0,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 1.7014626507716457e-07,
+        "innerThighClearanceM": 0.06322015076875687,
+        "bounds": {
+          "min": [
+            -0.46967923641204834,
+            -4.968749337448336e-22,
+            -0.12674599885940552
+          ],
+          "max": [
+            0.4694664478302002,
+            1.7200000286102295,
+            0.1908126026391983
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0,
+        "muscularity": 1,
+        "fullness_corrective": 0,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 1.688693487267301e-07,
+        "innerThighClearanceM": 0.06078796461224556,
+        "bounds": {
+          "min": [
+            -0.46967923641204834,
+            -1.2727340882590088e-14,
+            -0.11415910720825195
+          ],
+          "max": [
+            0.4694664478302002,
+            1.7200000286102295,
+            0.17566004395484924
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 1,
+        "muscularity": 1,
+        "fullness_corrective": 1,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 1.684277606273099e-07,
+        "innerThighClearanceM": 0.061799343675374985,
+        "bounds": {
+          "min": [
+            -0.46967923641204834,
+            -7.0000386712706746e-15,
+            -0.1284523606300354
+          ],
+          "max": [
+            0.4694664478302002,
+            1.7200000286102295,
+            0.19173437356948853
+          ]
+        }
+      },
+      {
+        "nonadjacentBelowNeckIntersections": 0,
+        "adiposity": 0.5,
+        "muscularity": 0.5,
+        "fullness_corrective": 0.25,
+        "flippedTriangles": 0,
+        "minimumTriangleAreaM2": 1.6983092621103424e-07,
+        "innerThighClearanceM": 0.062294669449329376,
+        "bounds": {
+          "min": [
+            -0.46967923641204834,
+            -4.9318451002234275e-15,
+            -0.11995872110128403
+          ],
+          "max": [
+            0.4694664478302002,
+            1.7200000286102295,
+            0.17566007375717163
+          ]
+        }
+      }
+    ]
+  }
+}

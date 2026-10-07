@@ -1,31 +1,29 @@
+import { DurationStopwatch } from '@/components/workout/duration-stopwatch';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { analytics } from '@/lib/analytics';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { ActivityIndicator, Animated, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
+import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import type { Id } from '@/convex/_generated/dataModel';
-import { GlassSurface } from '@/components/ui/glass-surface';
+import { ReedIconButton } from '@/components/ui/reed-icon-button';
+import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
-import { createTiming, getTapScaleStyle, reedMotion } from '@/design/motion';
+import * as haptics from '@/design/haptics';
+import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 
-type QuickLogPreset = {
-  _id: Id<'quickLogPresets'>;
-  group: 'strength' | 'cardio' | 'recovery';
-  inputKind: 'reps' | 'duration' | 'duration_or_distance';
-  key: string;
-  label: string;
-  sortOrder: number;
-};
+import { readQuickLogCache, type QuickLogPreset } from './quick-log-cache';
 
 type QuickLogSheetProps = {
   onClose: () => void;
+  /** Opens with this preset selected (a widget's tile) instead of the preset list. */
+  presetKey?: string | null;
   visible: boolean;
 };
 
@@ -38,8 +36,8 @@ const groupLabels: Record<QuickLogPreset['group'], string> = {
 const groupOrder: QuickLogPreset['group'][] = ['strength', 'cardio', 'recovery'];
 const PRESET_CACHE_KEY = 'quick_log_presets_v1';
 const PRESET_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const DRAG_START_THRESHOLD_Y = 6;
-const DISMISS_DRAG_THRESHOLD_Y = 72;
+// One height for the list and the form, so choosing an activity never resizes the sheet.
+const SHEET_FRACTION = 0.74;
 
 const quickValuesByPreset: Record<string, { distance?: number[]; duration?: number[]; reps?: number[] }> = {
   air_squats: { reps: [10, 15, 20, 30, 50] },
@@ -54,55 +52,21 @@ const quickValuesByPreset: Record<string, { distance?: number[]; duration?: numb
   walk: { distance: [1, 2, 3, 5], duration: [10, 20, 30, 45, 60] },
 };
 
-type CachedPresetPayload = {
-  cachedAt: number;
-  presets: QuickLogPreset[];
-};
-
-export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
+export function QuickLogSheet({ onClose, presetKey = null, visible }: QuickLogSheetProps) {
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
-  const [isMounted, setIsMounted] = useState(visible);
   const [cachedPresets, setCachedPresets] = useState<QuickLogPreset[] | null>(null);
-  const { height } = useWindowDimensions();
   const [shouldFetchPresets, setShouldFetchPresets] = useState(false);
   const fetchedPresets = useQuery(api.quickLogs.listPresets, visible && shouldFetchPresets ? {} : 'skip');
   const ensurePresets = useMutation(api.quickLogs.ensurePresets);
   const logActivity = useMutation(api.quickLogs.log);
-  const sheetProgress = useRef(new Animated.Value(0)).current;
-  const dragOffsetY = useRef(new Animated.Value(0)).current;
-  const overlayOpacity = sheetProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
-  const openTranslateY = sheetProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [height, 0],
-  });
-  const sheetTranslateY = Animated.add(openTranslateY, dragOffsetY);
   const [selectedPreset, setSelectedPreset] = useState<QuickLogPreset | null>(null);
   const [reps, setReps] = useState('');
   const [durationMinutes, setDurationMinutes] = useState('');
+  const [isTimingActivity, setIsTimingActivity] = useState(false);
   const [distanceKm, setDistanceKm] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (visible) {
-      setIsMounted(true);
-      sheetProgress.setValue(0);
-      dragOffsetY.setValue(0);
-      createTiming(sheetProgress, 1, reedMotion.durations.mode + 80).start();
-      return;
-    }
-
-    if (!isMounted) {
-      return;
-    }
-
-    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(({ finished }) => {
-      if (finished) {
-        setIsMounted(false);
-      }
-    });
-  }, [isMounted, sheetProgress, visible]);
 
   useEffect(() => {
     if (!visible) {
@@ -120,7 +84,7 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
           void ensurePresets({}).catch(error => setErrorMessage(getErrorMessage(error)));
           return;
         }
-        const parsed = JSON.parse(value) as CachedPresetPayload;
+        const parsed = readQuickLogCache(value);
         const isFresh = Date.now() - parsed.cachedAt < PRESET_CACHE_TTL_MS;
         if (isFresh && parsed.presets.length > 0) {
           setCachedPresets(parsed.presets);
@@ -147,16 +111,16 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
     if (!fetchedPresets || fetchedPresets.length === 0) {
       return;
     }
-    const nextPresets = fetchedPresets as QuickLogPreset[];
-    setCachedPresets(nextPresets);
-    setShouldFetchPresets(false);
+    const nextPresets = fetchedPresets;
     void AsyncStorage.setItem(
       PRESET_CACHE_KEY,
-      JSON.stringify({ cachedAt: Date.now(), presets: nextPresets } satisfies CachedPresetPayload),
+      JSON.stringify({ cachedAt: Date.now(), presets: nextPresets }),
     );
   }, [fetchedPresets]);
 
-  useEffect(() => {
+  const [wasVisible, setWasVisible] = useState(visible);
+  if (wasVisible !== visible) {
+    setWasVisible(visible);
     if (!visible) {
       setSelectedPreset(null);
       setReps('');
@@ -164,46 +128,23 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
       setDistanceKm('');
       setErrorMessage(null);
       setIsSaving(false);
+      setIsTimingActivity(false);
     }
-  }, [visible]);
-
-  function requestClose() {
-    if (!isMounted) {
-      onClose();
-      return;
-    }
-
-    dragOffsetY.setValue(0);
-    createTiming(sheetProgress, 0, reedMotion.durations.mode).start(() => {
-      setIsMounted(false);
-      onClose();
-    });
   }
 
-  const handlePanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          gestureState.dy > DRAG_START_THRESHOLD_Y && Math.abs(gestureState.dy) > Math.abs(gestureState.dx),
-        onPanResponderMove: (_, gestureState) => {
-          dragOffsetY.setValue(Math.max(0, gestureState.dy));
-        },
-        onPanResponderRelease: (_, gestureState) => {
-          if (gestureState.dy > DISMISS_DRAG_THRESHOLD_Y || gestureState.vy > 0.9) {
-            requestClose();
-            return;
-          }
+  const presets = fetchedPresets ?? cachedPresets ?? undefined;
 
-          createTiming(dragOffsetY, 0, reedMotion.durations.standard).start();
-        },
-        onPanResponderTerminate: () => {
-          createTiming(dragOffsetY, 0, reedMotion.durations.standard).start();
-        },
-      }),
-    [dragOffsetY, requestClose],
-  );
-
-  const presets = cachedPresets ?? fetchedPresets ?? undefined;
+  // A widget tile opens the sheet on its preset, once per opening, so "Choose another" still works.
+  const [appliedPresetKey, setAppliedPresetKey] = useState<string | null>(null);
+  {
+    if (!visible && appliedPresetKey !== null) setAppliedPresetKey(null);
+    const preset = visible && presetKey && appliedPresetKey !== presetKey
+      ? presets?.find(candidate => candidate.key === presetKey) : null;
+    if (preset) {
+      setAppliedPresetKey(presetKey);
+      setSelectedPreset(preset);
+    }
+  }
 
   const groupedPresets = useMemo(() => {
     const byGroup = new Map<QuickLogPreset['group'], QuickLogPreset[]>();
@@ -218,7 +159,9 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
     return byGroup;
   }, [presets]);
 
-  const canSave = selectedPreset ? isInputValid(selectedPreset, { distanceKm, durationMinutes, reps }) : false;
+  const [previousPresetKey, setPreviousPresetKey] = useState(selectedPreset?.key);
+  if (previousPresetKey !== selectedPreset?.key) { setPreviousPresetKey(selectedPreset?.key); setIsTimingActivity(false); }
+  const canSave = selectedPreset && !isTimingActivity ? isInputValid(selectedPreset, { distanceKm, durationMinutes, reps }) : false;
 
   async function handleSave() {
     if (!selectedPreset || !canSave) {
@@ -238,6 +181,7 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
         exerciseGroup: selectedPreset.group,
         inputKind: selectedPreset.inputKind,
       });
+      haptics.success();
       onClose();
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
@@ -246,197 +190,162 @@ export function QuickLogSheet({ onClose, visible }: QuickLogSheetProps) {
     }
   }
 
-  if (!isMounted) {
-    return null;
-  }
-
   return (
-    <Modal animationType="none" onRequestClose={requestClose} transparent visible={isMounted}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
-        style={styles.overlay}
-      >
-        <Animated.View
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: theme.colors.overlayScrim,
-              opacity: overlayOpacity,
-              pointerEvents: 'none',
-            },
-          ]}
-        />
-        <Pressable accessibilityLabel="Close quick log" onPress={requestClose} style={styles.backdrop} />
-        <Animated.View
-          style={[
-            styles.sheetFrame,
-            {
-              transform: [{ translateY: sheetTranslateY }],
-            },
-          ]}
-        >
-        <GlassSurface contentStyle={styles.sheetContent} style={styles.sheet}>
-          <View {...handlePanResponder.panHandlers} style={styles.handleArea}>
-            <View style={[styles.handle, { backgroundColor: theme.colors.textMuted }]} />
+    <ReedSheet heightFraction={SHEET_FRACTION} onDismiss={onClose} open={visible}>
+      <View style={styles.sheet}>
+        <View style={[styles.sheetHeader, { paddingHorizontal: theme.spacing.gutter }]}>
+          <View style={styles.titleBlock}>
+            <ReedText variant="title">Quick log</ReedText>
+            <ReedText tone="muted" variant="caption">
+              Capture one activity. No workout session created.
+            </ReedText>
           </View>
+          <ReedIconButton accessibilityLabel="Close quick log" onPress={onClose} variant="ghost">
+            <Ionicons color={String(theme.colors.inkSecondary)} name="close" size={22} />
+          </ReedIconButton>
+        </View>
 
-          <View style={styles.sheetHeader}>
-            <View style={styles.titleBlock}>
-              <ReedText variant="section">Quick log</ReedText>
-              <ReedText tone="muted" variant="caption">
-                Capture one activity. No workout session created.
-              </ReedText>
-            </View>
-            <Pressable
-              accessibilityLabel="Close quick log"
-              onPress={requestClose}
-              style={({ pressed }) => [styles.closeButton, getTapScaleStyle(pressed)]}
-            >
-              <Ionicons color={String(theme.colors.textMuted)} name="close" size={18} />
-            </Pressable>
-          </View>
-
-          {selectedPreset ? (
-            <>
-              <ScrollView
-                contentContainerStyle={styles.formScrollContent}
-                keyboardShouldPersistTaps="handled"
-                showsVerticalScrollIndicator={false}
-                style={styles.formScroll}
-              >
-                <Pressable onPress={() => setSelectedPreset(null)} style={({ pressed }) => getTapScaleStyle(pressed)}>
-                  <ReedText tone="muted" variant="caption">← Choose another</ReedText>
-                </Pressable>
-
-                <View style={styles.selectedTitleRow}>
-                  <ReedText variant="title">{selectedPreset.label}</ReedText>
-                </View>
-
-                {selectedPreset.inputKind === 'reps' ? (
-                  <View style={styles.formStack}>
-                    <ReedInput
-                      keyboardType="number-pad"
-                      label="Reps"
-                      onChangeText={setReps}
-                      placeholder="e.g. 10"
-                      value={reps}
-                    />
-                    <QuickValueRow
-                      label="Quick reps"
-                      onSelect={value => setReps(String(value))}
-                      selectedValue={parseOptionalInteger(reps)}
-                      values={quickValuesByPreset[selectedPreset.key]?.reps ?? []}
-                    />
-                  </View>
-                ) : null}
-
-                {selectedPreset.inputKind === 'duration' ? (
-                  <View style={styles.formStack}>
-                    <ReedInput
-                      keyboardType="decimal-pad"
-                      label="Minutes"
-                      onChangeText={setDurationMinutes}
-                      placeholder="e.g. 20"
-                      value={durationMinutes}
-                    />
-                    <QuickValueRow
-                      label="Quick minutes"
-                      onSelect={value => setDurationMinutes(formatQuickNumber(value))}
-                      selectedValue={parseOptionalNumber(durationMinutes)}
-                      values={quickValuesByPreset[selectedPreset.key]?.duration ?? []}
-                    />
-                  </View>
-                ) : null}
-
-                {selectedPreset.inputKind === 'duration_or_distance' ? (
-                  <View style={styles.formStack}>
-                    <ReedInput
-                      keyboardType="decimal-pad"
-                      label="Minutes"
-                      onChangeText={setDurationMinutes}
-                      placeholder="Optional"
-                      value={durationMinutes}
-                    />
-                    <QuickValueRow
-                      label="Quick minutes"
-                      onSelect={value => setDurationMinutes(formatQuickNumber(value))}
-                      selectedValue={parseOptionalNumber(durationMinutes)}
-                      values={quickValuesByPreset[selectedPreset.key]?.duration ?? []}
-                    />
-                    <ReedInput
-                      keyboardType="decimal-pad"
-                      label="Distance (km)"
-                      onChangeText={setDistanceKm}
-                      placeholder="Optional"
-                      value={distanceKm}
-                    />
-                    <QuickValueRow
-                      label="Quick km"
-                      onSelect={value => setDistanceKm(formatQuickNumber(value))}
-                      selectedValue={parseOptionalNumber(distanceKm)}
-                      values={quickValuesByPreset[selectedPreset.key]?.distance ?? []}
-                    />
-                    <ReedText tone="muted" variant="caption">Add duration, distance, or both.</ReedText>
-                  </View>
-                ) : null}
-              </ScrollView>
-
-              <View style={[styles.formFooter, { paddingBottom: Math.max(28, insets.bottom + 16) }]}>
-                {errorMessage ? <ReedText tone="danger">{errorMessage}</ReedText> : null}
-                <ReedButton disabled={!canSave || isSaving} label={isSaving ? 'Saving...' : 'Save'} onPress={() => void handleSave()} />
-              </View>
-            </>
-          ) : presets === undefined ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color={String(theme.colors.accentPrimary)} />
-              <ReedText tone="muted">Loading quick actions...</ReedText>
-            </View>
-          ) : (
-            <ScrollView
-              contentContainerStyle={[styles.presetScrollContent, { paddingBottom: Math.max(28, insets.bottom + 16) }]}
+        {selectedPreset ? (
+          <>
+            <BottomSheetScrollView
+              contentContainerStyle={[styles.formScrollContent, { paddingHorizontal: theme.spacing.gutter }]}
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}
-              style={styles.presetScroll}
+              style={styles.scroll}
             >
-              <View style={styles.groupStack}>
-                {groupOrder.map(group => {
-                  const items = groupedPresets.get(group) ?? [];
-                  if (items.length === 0) {
-                    return null;
-                  }
-                  return (
-                    <View key={group} style={styles.groupBlock}>
-                      <ReedText tone="muted" variant="label">{groupLabels[group].toUpperCase()}</ReedText>
-                      <View style={styles.presetGrid}>
-                        {items.map(preset => (
-                          <Pressable
-                            accessibilityLabel={`Quick log ${preset.label}`}
-                            key={preset.key}
-                            onPress={() => setSelectedPreset(preset)}
-                            style={({ pressed }) => [
-                              styles.presetButton,
-                              {
-                                backgroundColor: theme.colors.inputFill,
-                                borderColor: theme.colors.inputBorder,
-                              },
-                              getTapScaleStyle(pressed),
-                            ]}
-                          >
-                            <ReedText variant="bodyStrong">{preset.label}</ReedText>
-                          </Pressable>
-                        ))}
-                      </View>
+              <Pressable
+                accessibilityLabel="Choose another activity"
+                accessibilityRole="button"
+                onPress={() => setSelectedPreset(null)}
+                style={({ pressed }) => [styles.backRow, getTapScaleStyle(pressed)]}
+              >
+                <Ionicons color={String(theme.colors.inkMuted)} name="chevron-back" size={16} />
+                <ReedText tone="muted" variant="caption">Choose another</ReedText>
+              </Pressable>
+
+              <ReedText variant="headline">{selectedPreset.label}</ReedText>
+
+              {selectedPreset.inputKind === 'reps' ? (
+                <View style={styles.formStack}>
+                  <ReedInput
+                    keyboardType="number-pad"
+                    label="Reps"
+                    onChangeText={setReps}
+                    placeholder="e.g. 10"
+                    value={reps}
+                  />
+                  <QuickValueRow
+                    label="Quick reps"
+                    onSelect={value => setReps(String(value))}
+                    selectedValue={parseOptionalInteger(reps)}
+                    values={quickValuesByPreset[selectedPreset.key]?.reps ?? []}
+                  />
+                </View>
+              ) : null}
+
+              {selectedPreset.inputKind !== 'reps' ? <DurationStopwatch key={selectedPreset.key} onDuration={seconds => setDurationMinutes(String(Number((seconds / 60).toFixed(3))))} onRunningChange={setIsTimingActivity} /> : null}
+              {selectedPreset.inputKind === 'duration' ? (
+                <View style={styles.formStack}>
+                  <ReedInput
+                    keyboardType="decimal-pad"
+                    label="Minutes"
+                    onChangeText={setDurationMinutes}
+                    placeholder="e.g. 20"
+                    value={durationMinutes}
+                  />
+                  <QuickValueRow
+                    label="Quick minutes"
+                    onSelect={value => setDurationMinutes(formatQuickNumber(value))}
+                    selectedValue={parseOptionalNumber(durationMinutes)}
+                    values={quickValuesByPreset[selectedPreset.key]?.duration ?? []}
+                  />
+                </View>
+              ) : null}
+
+              {selectedPreset.inputKind === 'duration_or_distance' ? (
+                <View style={styles.formStack}>
+                  <ReedInput
+                    keyboardType="decimal-pad"
+                    label="Minutes"
+                    onChangeText={setDurationMinutes}
+                    placeholder="Optional"
+                    value={durationMinutes}
+                  />
+                  <QuickValueRow
+                    label="Quick minutes"
+                    onSelect={value => setDurationMinutes(formatQuickNumber(value))}
+                    selectedValue={parseOptionalNumber(durationMinutes)}
+                    values={quickValuesByPreset[selectedPreset.key]?.duration ?? []}
+                  />
+                  <ReedInput
+                    keyboardType="decimal-pad"
+                    label="Distance (km)"
+                    onChangeText={setDistanceKm}
+                    placeholder="Optional"
+                    value={distanceKm}
+                  />
+                  <QuickValueRow
+                    label="Quick km"
+                    onSelect={value => setDistanceKm(formatQuickNumber(value))}
+                    selectedValue={parseOptionalNumber(distanceKm)}
+                    values={quickValuesByPreset[selectedPreset.key]?.distance ?? []}
+                  />
+                  <ReedText tone="muted" variant="caption">Add duration, distance, or both.</ReedText>
+                </View>
+              ) : null}
+            </BottomSheetScrollView>
+
+            <View style={[styles.formFooter, { paddingBottom: insets.bottom + theme.spacing.md, paddingHorizontal: theme.spacing.gutter }]}>
+              {errorMessage ? <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{errorMessage}</ReedText> : null}
+              <ReedButton disabled={!canSave || isSaving} label={isSaving ? 'Saving...' : 'Save'} onPress={() => void handleSave()} />
+            </View>
+          </>
+        ) : presets === undefined ? (
+          <View style={[styles.loadingRow, { paddingHorizontal: theme.spacing.gutter }]}>
+            <ActivityIndicator color={String(theme.colors.accent)} />
+            <ReedText tone="muted">Loading quick actions...</ReedText>
+          </View>
+        ) : (
+          <BottomSheetScrollView
+            contentContainerStyle={[styles.presetScrollContent, { paddingBottom: insets.bottom + theme.spacing.md, paddingHorizontal: theme.spacing.gutter }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={styles.scroll}
+          >
+            <View style={styles.groupStack}>
+              {groupOrder.map(group => {
+                const items = groupedPresets.get(group) ?? [];
+                if (items.length === 0) {
+                  return null;
+                }
+                return (
+                  <View key={group} style={styles.groupBlock}>
+                    <ReedText tone="muted" variant="caption">{groupLabels[group]}</ReedText>
+                    <View style={styles.presetGrid}>
+                      {items.map(preset => (
+                        <Pressable
+                          accessibilityLabel={`Quick log ${preset.label}`}
+                          accessibilityRole="button"
+                          key={preset.key}
+                          onPress={() => setSelectedPreset(preset)}
+                          style={({ pressed }) => [
+                            styles.presetButton,
+                            { backgroundColor: theme.colors.surfaceRaised },
+                            getTapScaleStyle(pressed),
+                          ]}
+                        >
+                          <ReedText variant="bodyStrong">{preset.label}</ReedText>
+                        </Pressable>
+                      ))}
                     </View>
-                  );
-                })}
-              </View>
-            </ScrollView>
-          )}
-        </GlassSurface>
-        </Animated.View>
-      </KeyboardAvoidingView>
-    </Modal>
+                  </View>
+                );
+              })}
+            </View>
+          </BottomSheetScrollView>
+        )}
+      </View>
+    </ReedSheet>
   );
 }
 
@@ -469,14 +378,11 @@ function QuickValueRow({
               onPress={() => onSelect(value)}
               style={({ pressed }) => [
                 styles.quickValueChip,
-                {
-                  backgroundColor: isSelected ? theme.colors.controlActiveFill : theme.colors.controlFill,
-                  borderColor: theme.colors.controlBorder,
-                },
+                { backgroundColor: isSelected ? theme.colors.accentSoft : theme.colors.surfaceRaised },
                 getTapScaleStyle(pressed),
               ]}
             >
-              <ReedText tone={isSelected ? 'default' : 'muted'} variant="bodyStrong">
+              <ReedText tone={isSelected ? 'accent' : 'secondary'} variant="bodyStrong">
                 {formatQuickNumber(value)}
               </ReedText>
             </Pressable>
@@ -533,41 +439,10 @@ function getErrorMessage(error: unknown) {
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    padding: 12,
-    zIndex: 1000,
-    elevation: 1000,
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFill,
-  },
-  sheetFrame: {
-    height: '78%',
-    minHeight: 320,
-    zIndex: 1001,
-    elevation: 1001,
-  },
   sheet: {
     flex: 1,
-  },
-  sheetContent: {
-    flex: 1,
-    gap: 18,
+    gap: 12,
     minHeight: 0,
-    paddingBottom: 0,
-  },
-  handleArea: {
-    alignItems: 'center',
-    paddingBottom: 4,
-    paddingTop: 2,
-  },
-  handle: {
-    borderRadius: reedRadii.pill,
-    height: 4,
-    opacity: 0.45,
-    width: 42,
   },
   sheetHeader: {
     alignItems: 'flex-start',
@@ -578,13 +453,7 @@ const styles = StyleSheet.create({
   titleBlock: {
     flex: 1,
     gap: 4,
-  },
-  closeButton: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    height: 36,
-    justifyContent: 'center',
-    width: 36,
+    paddingTop: 4,
   },
   loadingRow: {
     alignItems: 'center',
@@ -592,12 +461,13 @@ const styles = StyleSheet.create({
     gap: 10,
     minHeight: 96,
   },
-  presetScroll: {
+  scroll: {
     flex: 1,
     minHeight: 0,
   },
   presetScrollContent: {
     flexGrow: 1,
+    paddingTop: 4,
   },
   groupStack: {
     gap: 20,
@@ -608,31 +478,32 @@ const styles = StyleSheet.create({
   presetGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
+    gap: 8,
   },
   presetButton: {
+    alignItems: 'center',
     borderRadius: reedRadii.md,
-    borderWidth: 1,
+    justifyContent: 'center',
     minHeight: 48,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  backRow: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    gap: 2,
+    minHeight: 44,
   },
   formStack: {
     gap: 14,
   },
   formFooter: {
     gap: 12,
-  },
-  formScroll: {
-    flex: 1,
-    minHeight: 0,
+    paddingTop: 8,
   },
   formScrollContent: {
     gap: 14,
     paddingBottom: 18,
-  },
-  selectedTitleRow: {
-    paddingBottom: 2,
   },
   quickValueBlock: {
     gap: 8,
@@ -643,12 +514,11 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   quickValueChip: {
+    alignItems: 'center',
     borderRadius: reedRadii.pill,
-    borderWidth: 1,
+    justifyContent: 'center',
     minHeight: 40,
     minWidth: 48,
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: 14,
   },
 });

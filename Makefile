@@ -4,10 +4,11 @@ ENV_FILE := .env.$(ENV)
 CONVEX_TARGET := $(if $(filter prod production,$(ENV)),prod,dev)
 EAS_ENV := $(if $(filter prod production,$(ENV)),production,development)
 
-.PHONY: help install expo expo-clean control-panel run convex-dev convex-codegen convex-deploy convex-env-push env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
+.PHONY: help install dev expo expo-clean control-panel run convex-dev convex-codegen convex-deploy convex-env-push env-check env-show eas-env-sync android-dev-client android-arm-dev android-arm-prod
 
 help:
 	@echo "make install           # npm install"
+	@echo "make dev               # start web app at https://reed.localhost"
 	@echo "make expo ENV=dev      # start Expo with .env.dev"
 	@echo "make expo-clean ENV=dev # start Expo with .env.dev and clear Metro cache"
 	@echo "make expo ENV=prod     # start Expo with .env.prod"
@@ -35,6 +36,9 @@ env-show: env-check
 install:
 	npm install
 
+dev:
+	portless reed sh -c 'npm run web:dev -- --port "$$PORT"'
+
 expo: env-check
 	@set -a; source "$(ENV_FILE)"; set +a; \
 	REED_ENV_FILE="$(ENV_FILE)" npm start
@@ -60,22 +64,18 @@ convex-codegen: env-check
 
 convex-deploy:
 	@test -f ".env.prod" || (echo "Missing .env.prod"; exit 1)
+	@$(MAKE) convex-env-push ENV=prod
 	npm run convex:deploy -- --env-file .env.prod
 
 convex-env-push: env-check
-	@test -f "$(ENV_FILE)" || (echo "Missing $(ENV_FILE)"; exit 1)
-	@set -a; source "$(ENV_FILE)"; set +a; \
-	test -n "$$BETTER_AUTH_SECRET" || (echo "BETTER_AUTH_SECRET is missing in $(ENV_FILE)"; exit 1); \
-	npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_SECRET "$$BETTER_AUTH_SECRET"; \
-	if [ -n "$$GOOGLE_CLIENT_ID" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_CLIENT_ID "$$GOOGLE_CLIENT_ID"; fi; \
-	if [ -n "$$GOOGLE_CLIENT_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_CLIENT_SECRET "$$GOOGLE_CLIENT_SECRET"; fi; \
-	if [ -n "$$SITE_URL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" SITE_URL "$$SITE_URL"; fi; \
-	if [ -n "$$BETTER_AUTH_TRUSTED_ORIGINS" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" BETTER_AUTH_TRUSTED_ORIGINS "$$BETTER_AUTH_TRUSTED_ORIGINS"; fi; \
+	@set -e; set -a; source "$(ENV_FILE)"; set +a; \
+	test -n "$$CLERK_JWT_ISSUER_DOMAIN" || (echo "CLERK_JWT_ISSUER_DOMAIN is missing in $(ENV_FILE)"; exit 1); \
+	npx convex env set --deployment "$(CONVEX_TARGET)" CLERK_JWT_ISSUER_DOMAIN "$$CLERK_JWT_ISSUER_DOMAIN"; \
 	if [ -n "$$XAI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" XAI_API_KEY "$$XAI_API_KEY"; fi; \
+	if [ -n "$$OPENROUTER_API_KEY" ]; then printf '%s' "$$OPENROUTER_API_KEY" | npx convex env set --deployment "$(CONVEX_TARGET)" OPENROUTER_API_KEY; fi; \
 	if [ -n "$$OPENAI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" OPENAI_API_KEY "$$OPENAI_API_KEY"; fi; \
 	if [ -n "$$GOOGLE_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GOOGLE_API_KEY "$$GOOGLE_API_KEY"; fi; \
 	if [ -n "$$GEMINI_API_KEY" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" GEMINI_API_KEY "$$GEMINI_API_KEY"; fi; \
-	if [ -n "$$REED_CHAT_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CHAT_MODEL "$$REED_CHAT_MODEL"; fi; \
 	if [ -n "$$REED_COACH_STATE_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_MODEL "$$REED_COACH_STATE_MODEL"; fi; \
 	if [ -n "$$REED_COACH_STATE_REASONING_EFFORT" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_COACH_STATE_REASONING_EFFORT "$$REED_COACH_STATE_REASONING_EFFORT"; fi; \
 	if [ -n "$$REED_SUMMARY_MODEL" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_SUMMARY_MODEL "$$REED_SUMMARY_MODEL"; fi; \
@@ -94,11 +94,14 @@ convex-env-push: env-check
 	if [ -n "$$REED_CONTROL_PANEL_SECRET" ]; then npx convex env set --deployment "$(CONVEX_TARGET)" REED_CONTROL_PANEL_SECRET "$$REED_CONTROL_PANEL_SECRET"; fi
 
 eas-env-sync: env-check
-	@set -a; source "$(ENV_FILE)"; set +a; \
+	@set -e; set -a; source "$(ENV_FILE)"; set +a; \
 	test -n "$$EXPO_PUBLIC_CONVEX_URL" || (echo "EXPO_PUBLIC_CONVEX_URL is missing in $(ENV_FILE)"; exit 1); \
 	test -n "$$EXPO_PUBLIC_CONVEX_SITE_URL" || (echo "EXPO_PUBLIC_CONVEX_SITE_URL is missing in $(ENV_FILE)"; exit 1); \
+	test -n "$$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" || (echo "EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is missing in $(ENV_FILE)"; exit 1); \
+	case "$(EAS_ENV):$$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" in development:pk_test_*|production:pk_live_*) ;; *) echo "Clerk publishable key does not match $(EAS_ENV)"; exit 1;; esac; \
 	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CONVEX_URL --value "$$EXPO_PUBLIC_CONVEX_URL" --visibility plaintext --scope project --force --non-interactive; \
-	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CONVEX_SITE_URL --value "$$EXPO_PUBLIC_CONVEX_SITE_URL" --visibility plaintext --scope project --force --non-interactive
+	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CONVEX_SITE_URL --value "$$EXPO_PUBLIC_CONVEX_SITE_URL" --visibility plaintext --scope project --force --non-interactive; \
+	npx eas-cli env:create "$(EAS_ENV)" --name EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY --value "$$EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY" --visibility plaintext --scope project --force --non-interactive
 
 android-dev-client:
 	@$(MAKE) eas-env-sync ENV=dev

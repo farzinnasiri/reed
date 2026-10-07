@@ -33,7 +33,7 @@ export function WorkoutRestRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={theme.mode === 'dark' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.08)'}
+          stroke={String(theme.colors.surfaceHigh)}
           strokeWidth={strokeWidth}
         />
         <Circle
@@ -41,7 +41,7 @@ export function WorkoutRestRing({
           cy={size / 2}
           r={radius}
           fill="none"
-          stroke={String(theme.colors.accentPrimary)}
+          stroke={String(theme.colors.accent)}
           strokeDasharray={circumference}
           strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
@@ -52,7 +52,7 @@ export function WorkoutRestRing({
       <View style={styles.copy}>
         <ReedText
           style={{
-            color: theme.colors.textPrimary,
+            color: theme.colors.ink,
             fontSize: Math.round(size * 0.3),
             letterSpacing: -2,
             lineHeight: Math.round(size * 0.28),
@@ -61,7 +61,7 @@ export function WorkoutRestRing({
         >
           {formatSeconds(remainingSeconds)}
         </ReedText>
-        <ReedText style={{ color: theme.colors.textMuted }} variant="section">
+        <ReedText style={{ color: theme.colors.inkMuted }} variant="headline">
           {isRunning ? 'Tap to pause' : 'Tap to start'}
         </ReedText>
       </View>

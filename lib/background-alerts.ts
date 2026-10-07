@@ -1,12 +1,13 @@
 import { AppState, Platform } from 'react-native';
+import type { AudioSource } from 'expo-audio';
 
 export type ScheduledAlertPermissionStatus = 'granted' | 'permission_denied' | 'unavailable';
-export type ScheduledAlertStatus = 'scheduled' | ScheduledAlertPermissionStatus;
+export type ScheduledAlertStatus = 'scheduled' | 'expired' | ScheduledAlertPermissionStatus;
 
 export type ScheduledAlertDefinition<Payload> = {
   androidChannelId: string;
   androidChannelName: string;
-  foregroundSound?: unknown;
+  foregroundSound?: AudioSource;
   sound: 'default' | string;
   vibrationPattern?: number[];
   buildContent: (payload: Payload) => {
@@ -15,71 +16,8 @@ export type ScheduledAlertDefinition<Payload> = {
   };
 };
 
-type NotificationPermissionStatus = {
-  canAskAgain: boolean;
-  granted: boolean;
-  ios?: {
-    status?: number;
-  } | null;
-};
-
-type NotificationHandlerResponse = {
-  shouldPlaySound: boolean;
-  shouldSetBadge: boolean;
-  shouldShowBanner: boolean;
-  shouldShowList: boolean;
-};
-
-type NotificationRequest = {
-  content: {
-    body: string;
-    sound: 'default' | string;
-    title: string;
-  };
-  trigger:
-    | null
-    | {
-        channelId?: string;
-        seconds: number;
-        type: string;
-      };
-};
-
-type NotificationModule = {
-  AndroidImportance: {
-    MAX: number;
-  };
-  AndroidNotificationVisibility: {
-    PUBLIC: number;
-  };
-  SchedulableTriggerInputTypes: {
-    TIME_INTERVAL: string;
-  };
-  cancelScheduledNotificationAsync: (identifier: string) => Promise<void>;
-  dismissNotificationAsync: (identifier: string) => Promise<void>;
-  getPermissionsAsync: () => Promise<NotificationPermissionStatus>;
-  requestPermissionsAsync: (request: {
-    ios: {
-      allowAlert: boolean;
-      allowBadge: boolean;
-      allowSound: boolean;
-    };
-  }) => Promise<NotificationPermissionStatus>;
-  scheduleNotificationAsync: (request: NotificationRequest) => Promise<string>;
-  setNotificationChannelAsync: (
-    channelId: string,
-    config: {
-      importance: number;
-      lockscreenVisibility: number;
-      name: string;
-      sound: 'default' | string;
-      vibrationPattern: number[];
-    },
-  ) => Promise<void>;
-  setNotificationHandler: (handler: {
-    handleNotification: () => Promise<NotificationHandlerResponse>;
-  }) => void;
-};
+type NotificationModule = typeof import('expo-notifications');
+type NotificationPermissionStatus = Awaited<ReturnType<NotificationModule['getPermissionsAsync']>>;
 
 let configuredNotificationHandler = false;
 let notificationsModulePromise: Promise<NotificationModule | null> | null = null;
@@ -96,9 +34,7 @@ async function getNotificationsModule() {
   }
 
   if (!notificationsModulePromise) {
-    notificationsModulePromise = import('expo-notifications').then(
-      module => module as unknown as NotificationModule,
-    );
+    notificationsModulePromise = import('expo-notifications');
   }
 
   return notificationsModulePromise;
@@ -169,11 +105,11 @@ export async function requestAppNotificationPermissionsAsync(): Promise<Schedule
 
 export async function scheduleBackgroundAlertAsync<Payload>({
   definition,
-  fireInSeconds,
+  fireAt,
   payload,
 }: {
   definition: ScheduledAlertDefinition<Payload>;
-  fireInSeconds: number;
+  fireAt: number;
   payload: Payload;
 }): Promise<{ notificationId: string | null; status: ScheduledAlertStatus }> {
   const Notifications = await getNotificationsModule();
@@ -187,7 +123,9 @@ export async function scheduleBackgroundAlertAsync<Payload>({
   }
 
   const content = definition.buildContent(payload);
-  const seconds = Math.max(1, Math.round(fireInSeconds));
+  await clearBackgroundAlertDefinitionAsync(definition);
+  const seconds = Math.ceil((fireAt - Date.now()) / 1000);
+  if (seconds <= 0) return { notificationId: null, status: 'expired' };
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       body: content.body,
@@ -251,10 +189,12 @@ export async function clearBackgroundAlertAsync(notificationId: string | null) {
     return;
   }
 
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     Notifications.cancelScheduledNotificationAsync(notificationId),
     Notifications.dismissNotificationAsync(notificationId),
   ]);
+  const failure = results.find(result => result.status === 'rejected');
+  if (failure?.status === 'rejected') throw failure.reason;
   logScheduledAlert('cleared', { notificationId });
 
   for (const [channelId, activeNotificationId] of activeNotificationIdsByChannel) {

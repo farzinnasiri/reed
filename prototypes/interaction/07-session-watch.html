@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 07 Reed watches</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  /* workout surfaces: same layout as today's app (capture + rest), Reed added in the header */
+  .app .wk-head { position: absolute; top: 56px; left: 12px; right: 12px; height: 60px; border-radius: 30px; background: var(--raise); display: flex; align-items: center; padding: 0 8px 0 14px; z-index: 20; gap: 6px }
+  .app .wk-head .ic { width: 20px; height: 20px; color: var(--ink) }
+  .app .wk-stats { flex: 1; display: flex; justify-content: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); white-space: nowrap }
+  .app .wk-stats span { color: var(--ink-3); font-weight: 500 }
+  .app .wk-reed { width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; position: relative }
+  .app .wk-dots { width: 32px; display: grid; place-items: center; color: var(--ink-2) }
+  .app .wk-title { position: absolute; top: 134px; left: 0; right: 0; text-align: center; font-size: 20px; font-weight: 600; letter-spacing: -.01em }
+  .app .wk-card { position: absolute; top: 176px; left: 10px; right: 10px; bottom: 18px; border-radius: 32px; background: var(--raise); padding: 22px 22px 18px; display: flex; flex-direction: column; z-index: 2 }
+  .app .wk-row { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; color: var(--ink-3) }
+  .app .wk-row .b { height: 32px; padding: 0 13px; border-radius: 16px; box-shadow: inset 0 0 0 1px var(--line-2); display: inline-flex; align-items: center; color: var(--ink-2); font-size: 13px; margin-left: 6px }
+  .app .metric { margin-top: 58px; display: flex; justify-content: space-between; align-items: center }
+  .app .metric small { display: block; font-size: 12px; letter-spacing: .06em; color: var(--ink-3); margin-bottom: 6px }
+  .app .metric b { font-size: 64px; font-weight: 600; letter-spacing: -.04em; line-height: 1 }
+  .app .metric b i { font-style: normal; font-size: 18px; color: var(--ink-3); font-weight: 500; letter-spacing: 0; margin-left: 6px }
+  .app .metric .ticks { display: flex; flex-direction: column; gap: 9px; align-items: flex-end }
+  .app .metric .ticks i { display: block; height: 2px; width: 26px; background: var(--raise-3); border-radius: 1px }
+  .app .metric .ticks i.s { width: 12px }
+  .app .metric .ticks i.on { width: 40px; background: var(--ink); height: 3px }
+  .app .wk-hint { margin-top: auto; text-align: center; font-size: 13px; color: var(--ink-3) }
+  .app .rest { position: absolute; top: 176px; left: 10px; right: 10px; bottom: 18px; border-radius: 32px; background: var(--raise); padding: 22px; display: flex; flex-direction: column; align-items: center; opacity: 0; z-index: 1 }
+  .app .rest .next { align-self: flex-start; font-size: 13px; color: var(--ink-3) }
+  .app .ring { margin-top: 120px; width: 220px; height: 220px; border-radius: 50%; display: grid; place-items: center; position: relative }
+  .app .ring svg { position: absolute; inset: 0 }
+  .app .ring b { font-size: 58px; font-weight: 600; letter-spacing: -.03em }
+  .app .ring small { display: block; text-align: center; font-size: 13px; color: var(--ink-3); margin-top: -4px }
+  .app .whisper { position: absolute; top: 124px; left: 14px; right: 14px; z-index: 25; background: var(--raise-2); border-radius: 22px; padding: 12px 14px 12px 16px; font-size: 15px; line-height: 1.42; color: var(--ink-2); display: flex; gap: 10px; align-items: flex-start;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .45); transform-origin: 92% 0; opacity: 0; pointer-events: none }
+  .app .whisper strong { color: var(--ink); font-weight: 600 }
+  .app .whisper .go { margin-left: auto; flex: none; color: var(--ink-3); padding-top: 2px }
+  .app .whisper .go .ic { width: 16px; height: 16px }
+  .app .whisper.warm { box-shadow: 0 16px 40px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(229, 163, 111, .35) }
+  .app .whisper.pr { box-shadow: 0 16px 40px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(61, 102, 242, .55) }
+</style>
+</head>
+<body>
+<script>
+const { icon } = REED;
+const card = (set, reps, kg) => `<div class="wk-row"><span>Set ${set}</span><span><span class="b">Details</span><span class="b">Warm-up</span></span></div>
+  <div class="metric"><div><small>REPS</small><b class="num">${reps}</b></div><div class="ticks"><i></i><i class="s"></i><i class="on"></i><i class="s"></i><i></i></div></div>
+  <div class="metric" style="margin-top:44px"><div><small>WEIGHT</small><b class="num">${kg}<i>kg</i></b></div><div class="ticks"><i></i><i class="s"></i><i class="on"></i><i class="s"></i><i></i></div></div>
+  <div class="wk-hint">Swipe right to log set</div>`;
+
+async function whisper(c, html, { cls = '', mood = 'happy', stay = 2200 } = {}) {
+  const w = c.$('.whisper');
+  w.className = `whisper ${cls}`;
+  w.innerHTML = `<span>${html}</span><span class="go">${icon('chevron')}</span>`;
+  c.face.mood(mood);
+  c.face.act('nod');
+  await c.anim(w, [{ opacity: 0, transform: 'translateY(-10px) scale(.92)' }, { opacity: 1, transform: 'none' }], { dur: REED.springs.pop.duration, spring: 'pop' });
+  w.style.pointerEvents = 'auto';
+  await c.wait(stay);
+}
+async function hideWhisper(c) {
+  const w = c.$('.whisper');
+  w.style.pointerEvents = 'none';
+  await c.anim(w, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(-6px) scale(.96)' }], { dur: 200, easing: 'ease-in' });
+}
+async function logSet(c, next) {
+  const k = c.$('.wk-card');
+  c.haptic('success (existing set haptic)');
+  await c.anim(k, [{ transform: 'none', opacity: 1 }, { transform: 'translateX(420px) rotate(7deg)', opacity: 1 }], { dur: 300, easing: 'cubic-bezier(.4,0,.6,1)' });
+  k.innerHTML = next;
+  c.face.act('tick');
+  await c.anim(k, [{ transform: 'scale(.96)', opacity: 0 }, { transform: 'none', opacity: 1 }], { dur: REED.springs.smooth.duration, spring: 'smooth' });
+}
+async function toRest(c, secs) {
+  const k = c.$('.wk-card'), r = c.$('.rest');
+  c.$('.rest b').textContent = secs;
+  c.haptic('success (existing set haptic)');
+  await c.anim(k, [{ transform: 'none', opacity: 1 }, { transform: 'translateX(420px) rotate(7deg)', opacity: 1 }], { dur: 300, easing: 'cubic-bezier(.4,0,.6,1)' });
+  k.style.opacity = 0;
+  c.face.act('tick');
+  c.face.mood('watching');
+  await c.anim(r, [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'none' }], { dur: REED.springs.smooth.duration, spring: 'smooth' });
+}
+
+REED.page({
+  kicker: 'Reed · Interaction · 07',
+  title: 'Reed watches your session',
+  intro: [
+    'During a workout you don’t want a chat, you want a coach who is paying attention. Reed sits small in the workout header, watching what you log, and speaks only at natural pauses, in one line, when it has something worth saying.',
+    'The logging layout is untouched: same header, same swipe card, same rest view. Reed adds <b>a 40 px mascot in the header</b> and <b>a whisper</b> that drops from it. Tapping either opens Reed (page 08).',
+  ],
+  build(c) {
+    c.app.innerHTML = `
+      <div class="wk-head">${icon('back', 2)}<div class="wk-stats">18:42 <span>·</span> 5 sets <span>·</span> 2,180 kg</div><div class="wk-reed"><reed-face size="40" mood="watching"></reed-face></div><div class="wk-dots">${icon('dots', 2.4)}</div></div>
+      <div class="wk-title">Bench press</div>
+      <div class="rest"><div class="next">Next set 3 · 8 reps · 42.5 kg</div><div class="ring"><svg viewBox="0 0 220 220"><circle cx="110" cy="110" r="100" fill="none" stroke="#302c27" stroke-width="12"/><circle cx="110" cy="110" r="100" fill="none" stroke="#3d66f2" stroke-width="12" stroke-dasharray="628" stroke-dashoffset="90" stroke-linecap="round" transform="rotate(-90 110 110)"/></svg><div><b class="num">1:29</b><small>Tap to pause</small></div></div></div>
+      <div class="wk-card">${card(2, 8, '42.5')}</div>
+      <div class="whisper"></div>`;
+  },
+  steps: [
+    {
+      t: 'Reed in the header', u: 'A session is running. You’re on the capture card.',
+      async run(c) { c.state('watching'); await c.wait(1500); },
+      when: [
+        ['—', 'A 40 px Reed sits in the header, left of the menu, <code>watching</code> (small ring, slow blink).'],
+        ['—', 'No glow, no halo pulse in workout. Reed is quiet here.'],
+      ],
+      spec: [
+        '40 px is the smallest size; below that the mascot loses its face (see the broken 30 px “From Reed”). The header gets a 44 px hit area.',
+        'The header stats shift left by the mascot’s width; nothing else in the layout moves.',
+        'Accessibility: “Reed, watching. Talk to Reed.”',
+        'At 40 px use only expressions that read as a face: <code>watching</code>, <code>happy</code>, <code>concerned</code>, <code>surprised</code>, <code>thinking</code>. The vertical-eye ones (<code>encouraging</code>, <code>excited</code>, <code>ready</code>) read as a pause button at this size.',
+      ],
+      haptic: 'none',
+      reduce: 'Static mascot.',
+      build: ['<code>workout-session-status-strip.tsx</code>: add the mascot button. This is the only layout change in the workout module.'],
+    },
+    {
+      t: 'You log a set', u: 'You swipe right on the card.',
+      async run(c) { await logSet(c, card(3, 8, '42.5')); await c.wait(700); },
+      when: [
+        ['0', 'The existing swipe and set haptic, unchanged.'],
+        ['commit', 'Reed nods once (<code>tick</code>, 200 ms). No words.'],
+      ],
+      spec: ['Most sets get only the nod. Reed speaks rarely so that it means something when it does.'],
+      haptic: 'existing set haptic only',
+      reduce: 'No nod.',
+      build: ['The workout surface emits <code>setLogged</code>; the header mascot subscribes.'],
+    },
+    {
+      t: 'A whisper on rest', u: 'Rest starts after the set.',
+      async run(c) {
+        await toRest(c, '1:29');
+        await c.wait(500);
+        await whisper(c, 'Last time <strong>3 × 8 at 40 kg</strong>. You’re moving 42.5 well, keep it.', { stay: 2600 });
+      },
+      when: [
+        ['0', 'Rest view appears as today. Reed <code>watching</code>.'],
+        ['+600', 'A whisper drops from the mascot: one line in a <code>surfaceRaised</code> pill under the header (origin at Reed, scale .92 → 1, 10 px down, <code>pop</code>). Reed nods.'],
+        ['6 s', 'Fades out (200 ms) unless touched. Also leaves on the next swipe.'],
+        ['tap', 'Opens the Reed sheet with this line as context (page 08).'],
+      ],
+      spec: [
+        'When Reed may speak: only during rest or right after a set; never while the capture card is being adjusted.',
+        'How often: at most one whisper per exercise, plus PRs and warnings. Never two in a row without a set between.',
+        'Length ≤ 80 characters. Never a question you have to answer.',
+      ],
+      haptic: 'none (rest already has its own)',
+      reduce: 'Whisper fades in and out.',
+      build: [
+        'v1 is deterministic: whispers come from data the session already has (last time’s sets, best set, RPE trend, rest length). No LLM call mid-set.',
+        'Backend: <code>reed.getSessionWhisper({ sessionId, exerciseId, now })</code> returns at most one line + kind (<code>info | pr | caution</code>). See page 09.',
+      ],
+    },
+    {
+      t: 'A personal record', u: 'You log a set that beats your best.',
+      async run(c) {
+        await hideWhisper(c);
+        c.$('.rest').style.opacity = 0;
+        const k = c.$('.wk-card'); k.style.opacity = 1; k.innerHTML = card(3, 8, '45');
+        await c.wait(400);
+        await logSet(c, card(4, 8, '45'));
+        c.face.mood('surprised');
+        await c.face.act('hop');
+        c.haptic('success');
+        await whisper(c, 'New best: <strong>45 kg × 8</strong>. That’s 2.5 kg over September.', { cls: 'pr', mood: 'happy', stay: 2400 });
+      },
+      when: [
+        ['commit', 'Existing PR celebration in the card stays as is.'],
+        ['+0', 'Reed <code>surprised</code> (not <code>excited</code>: too small), hops 12 px. Haptic success (the existing PR haptic; not doubled).'],
+        ['+300', 'Whisper with an accent edge: the record in one line. Reed <code>happy</code>.'],
+      ],
+      spec: ['Reed’s reaction is in addition to the card’s PR moment, not instead of it, and shares its haptic.'],
+      haptic: 'success (shared with the existing PR haptic)',
+      reduce: 'No hop; whisper fades.',
+      build: ['PR detection already exists in workout insights; the whisper is <code>kind: \'pr\'</code>.'],
+    },
+    {
+      t: 'Something looks off', u: 'You log a set at RPE 10 with two sets left.',
+      async run(c) {
+        await hideWhisper(c);
+        await logSet(c, card(5, 8, '45'));
+        c.face.mood('concerned');
+        await whisper(c, 'That one was a <strong>10</strong>. Want to drop to 42.5 for the last two?', { cls: 'warm', mood: 'concerned', stay: 2600 });
+      },
+      when: [
+        ['commit', 'Reed <code>concerned</code>, small nod.'],
+        ['+300', 'A caution whisper with a warm edge. Tap to talk it through (page 08).'],
+      ],
+      spec: [
+        'Reed never changes your session from a whisper. Changes only happen through the sheet with a confirmation card (BE-12 rules).',
+        'Caution topics in v1: RPE ≥ 9.5 early, a pain/“stop” note, a big drop in reps at the same weight.',
+      ],
+      haptic: 'none',
+      reduce: 'Whisper fades.',
+      build: ['<code>kind: \'caution\'</code>; tapping passes the whisper text as context to the sheet.'],
+    },
+  ],
+});
+</script>
+</body>
+</html>

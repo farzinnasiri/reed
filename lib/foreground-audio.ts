@@ -1,22 +1,11 @@
 import { Platform } from 'react-native';
 
-type AudioPlayer = {
-  play: () => void;
-  seekTo: (seconds: number) => void;
-};
-
-type AudioModule = {
-  createAudioPlayer: (source: unknown) => AudioPlayer;
-  setAudioModeAsync: (mode: {
-    interruptionMode?: 'mixWithOthers';
-    playsInSilentMode?: boolean;
-    shouldPlayInBackground?: boolean;
-  }) => Promise<void>;
-};
+import type { AudioPlayer, AudioSource } from 'expo-audio';
+type AudioModule = typeof import('expo-audio');
 
 let audioModeConfigured = false;
 let audioModulePromise: Promise<AudioModule | null> | null = null;
-const audioPlayers = new Map<unknown, AudioPlayer>();
+const audioPlayers = new Map<AudioSource, AudioPlayer>();
 
 async function getAudioModule() {
   if (Platform.OS === 'web') {
@@ -24,15 +13,13 @@ async function getAudioModule() {
   }
 
   if (!audioModulePromise) {
-    audioModulePromise = import('expo-audio').then(
-      module => module as unknown as AudioModule,
-    );
+    audioModulePromise = import('expo-audio');
   }
 
   return audioModulePromise;
 }
 
-export async function playForegroundSoundAsync(source: unknown) {
+export async function playForegroundSoundAsync(source: AudioSource) {
   const Audio = await getAudioModule();
   if (!Audio) {
     return false;
@@ -53,7 +40,7 @@ export async function playForegroundSoundAsync(source: unknown) {
     audioPlayers.set(source, player);
   }
 
-  player.seekTo(0);
+  await player.seekTo(0);
   player.play();
   return true;
 }

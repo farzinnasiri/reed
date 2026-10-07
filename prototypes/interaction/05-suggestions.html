@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Reed · Interaction · 05 Suggestions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@300..700&family=Geist+Mono:wght@400;500&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="kit.css">
+<script src="kit.js"></script>
+<style>
+  .app .presence .chips { flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; padding-right: 18px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent) }
+  .app .presence .chips::-webkit-scrollbar { display: none }
+  .app .presence .chips.aside { pointer-events: none }
+  .rules-box { max-width: 860px; margin: 90px auto 0 }
+  .rules-box h2 { text-align: center; font-size: 24px; font-weight: 600; color: #f2f2f4; margin-bottom: 18px; letter-spacing: -.02em }
+  .rules-box table { width: 100%; border-collapse: collapse; font-size: 13.5px }
+  .rules-box td { padding: 11px 10px; border-top: 1px solid #242428; color: #b4b4bb; vertical-align: top; line-height: 1.5 }
+  .rules-box td:first-child { color: #ececf0; font-weight: 600; width: 190px }
+</style>
+</head>
+<body>
+<script>
+const { icon, ui, chat } = REED;
+const setChipsAside = async (c, aside) => {
+  const box = c.$('.presence .chips');
+  if (aside === box.classList.contains('aside')) return;
+  box.classList.toggle('aside', aside);
+  if (aside) await c.anim(box, [{ opacity: 1, transform: 'none' }, { opacity: 0, transform: 'translateY(6px)' }], { dur: 160, easing: 'ease-in' });
+  else await c.anim(box, [{ opacity: 0, transform: 'translateY(6px) scale(.96)' }, { opacity: 1, transform: 'none' }], { dur: REED.springs.pop.duration, spring: 'pop' });
+};
+
+REED.page({
+  kicker: 'Reed · Interaction · 05',
+  title: 'Suggestions: what you might say next',
+  intro: [
+    'Suggestions (chips) are Reed’s guess at your next message. They save typing, but they should never compete with what you are actually doing. So: few, short, attached to the latest reply only, out of the way while you type, and gone once the moment has passed.',
+  ],
+  build(c) {
+    c.app.innerHTML = `<canvas class="glow"></canvas>${ui.pulse()}
+      <div class="stage">
+        <div class="thread"><div class="tscroll">
+          <div class="chapter">Today · 18:40</div>
+          <div class="you">Done with upper body</div>
+          <div class="voice">Nice. <strong>6 sets</strong>, bench moved well. That’s <strong>2 of 3</strong> this week, with Friday left.</div>
+        </div></div>
+        <div class="presence"><div class="corner-slot"></div><span class="hint"></span><div class="chips"></div></div>
+        ${ui.dock()}
+      </div>
+      ${ui.mascotLayer()}${REED.keyboard}`;
+  },
+  async settle(c) { await c.placeMascot(c.$('.corner-slot')); },
+  steps: [
+    {
+      t: 'They arrive', u: 'Reed’s reply ends with three suggestions.',
+      async run(c) { await chat.chipsIn(c, ['How was my week?', 'Plan Friday', 'Log weight']); },
+      when: [
+        ['0', 'Chips slide in beside the mascot: from 8 px right, scale .94 → 1, fade, <code>pop</code>, 60 ms apart.'],
+        ['0', 'Reed <code>encouraging</code>, eyes on the chips; <code>idle</code> after 1.6 s.'],
+        ['—', 'If they don’t fit, the row scrolls sideways and fades out at the right edge (28 px).'],
+      ],
+      spec: ['Max 3 chips. Labels ≤ 24 characters, sentence case, no emoji, no trailing punctuation except “?”.', 'Order = Reed’s order; the first is the most likely.'],
+      haptic: 'none',
+      reduce: 'Fade in together (200 ms).',
+      build: ['From the latest Reed message’s <code>replies</code> (BE-5 envelope). The server already caps and sanitises.'],
+    },
+    {
+      t: 'Swipe the row', u: 'You swipe the chips sideways.',
+      async run(c) {
+        const box = c.$('.presence .chips');
+        const to = box.scrollWidth - box.clientWidth;
+        const k = REED.k;
+        if (!k) { box.scrollLeft = to; return; }
+        const t0 = performance.now();
+        await new Promise(r => { const f = now => { const t = Math.min(1, (now - t0) / (700 * k)); box.scrollLeft = to * (1 - Math.pow(1 - t, 3)); t < 1 ? requestAnimationFrame(f) : r(); }; requestAnimationFrame(f); });
+        await c.wait(700);
+      },
+      when: [['finger', 'Native horizontal scroll, no paging. The right-edge fade disappears at the end.']],
+      spec: ['The row never wraps in chat mode (it would push the thread). In today mode chips wrap, centred, max 2 rows.'],
+      haptic: 'none',
+      build: ['Horizontal <code>ScrollView</code> inside <code>presence-row.tsx</code> with a mask/gradient on the right.'],
+    },
+    {
+      t: 'They step aside while you type', u: 'You start typing your own message.',
+      async run(c) {
+        await chat.focus(c);
+        c.face.mood('listening');
+        await Promise.all([chat.type(c, 'actually', { tick: true }), setChipsAside(c, true)]);
+        await c.wait(600);
+      },
+      when: [
+        ['1st char', 'Chips fade out and sink 6 px (160 ms, ease-in). They are not removed, just set aside.'],
+        ['—', 'The presence row shows Reed alone, listening.'],
+      ],
+      spec: ['Focusing the composer alone does not hide them; only text does. You might focus, then decide to tap one.'],
+      haptic: 'none',
+      reduce: 'Fade only.',
+      build: ['<code>chipsVisible = !hasText</code>, animated opacity/translate; pointer events off while hidden.'],
+    },
+    {
+      t: 'Clear the text, they return', u: 'You delete what you typed.',
+      async run(c) {
+        const field = c.$('.field');
+        let t = field.dataset.text || '';
+        while (t.length) { t = t.slice(0, -1); field.dataset.text = t; field.innerHTML = `${t}<span class="caret"></span>`; await c.wait(45); }
+        field.classList.remove('has-text'); field.innerHTML = `<span class="caret"></span>${field.dataset.ph}`;
+        c.$('.send').classList.remove('armed'); c.$('.composer').classList.remove('typing');
+        await setChipsAside(c, false);
+        await c.wait(500);
+      },
+      when: [['empty', 'Chips come back with <code>pop</code> (scale .96 → 1, 6 px up). Send morphs back to mic.']],
+      spec: ['Same chips, same order, same scroll position.'],
+      haptic: 'none',
+      reduce: 'Fade only.',
+      build: ['Same shared value as above.'],
+    },
+    {
+      t: 'Tap one', u: 'You tap “How was my week?”.',
+      async run(c) {
+        await chat.blur(c);
+        const box = c.$('.presence .chips');
+        box.scrollLeft = 0;
+        const chip = box.children[0];
+        c.haptic('selection');
+        await c.anim(chip, [{ transform: 'scale(1)' }, { transform: 'scale(.97)' }], { dur: 90 });
+        const bubble = document.createElement('div');
+        bubble.className = 'you';
+        bubble.textContent = chip.textContent;
+        c.$('.tscroll').appendChild(bubble);
+        c.glow.wave();
+        c.face.act('hop');
+        await Promise.all([
+          chat.makeRoom(c, bubble, () => c.fly(chip, bubble, { spring: 'lift' })),
+          ...[...box.children].slice(1).map(o => c.anim(o, [{ opacity: 1 }, { opacity: 0 }], { dur: 120 })),
+        ]);
+        box.innerHTML = '';
+        await chat.thinking(c);
+        await c.wait(900);
+      },
+      when: [
+        ['0', 'Press .97, haptic selection.'],
+        ['0–480', 'The chip lifts into the thread and becomes your bubble (<code>lift</code>). Thread makes room (<code>smooth</code>).'],
+        ['0–120', 'The other chips fade out. They are spent.'],
+        ['300', 'Reed thinking; “Thinking” where the chips were.'],
+      ],
+      spec: ['Sends with <code>source: \'quick-action\'</code>. Same path as typing.'],
+      haptic: 'selection',
+      reduce: 'Bubble fades in; chips fade.',
+      build: ['Chip lift = same overlay as composer lift (page 02).'],
+    },
+    {
+      t: 'Old chips never come back', u: 'Reed replies with new ones.',
+      async run(c) {
+        await chat.reply(c, 'Good week. <strong>2 of 3</strong> days, bench up 2.5 kg, and you slept better than last week.');
+        await chat.chipsIn(c, ['Plan Friday']);
+      },
+      when: [
+        ['reply', 'Only the newest Reed message can have chips. History never shows chips.'],
+        ['—', 'If a reply has no suggestions, the presence row is just Reed. No filler chips.'],
+      ],
+      spec: ['Sending anything (typed, voice, chip, photo) retires the current chips for good.'],
+      haptic: 'none',
+      reduce: 'Fade.',
+      build: ['<code>presence-row.tsx</code>: chips = <code>latestMessage.role === \'reed\' ? latestMessage.replies : []</code>.'],
+    },
+  ],
+  after: `<section class="rules-box"><h2>Chip rules</h2><table>
+    <tr><td>Where</td><td>Today mode: under the content, centred, wraps to at most 2 rows. Chat mode: in the presence row beside Reed, one row, scrolls sideways. During a session: in the Reed sheet above its composer (page 08).</td></tr>
+    <tr><td>How many</td><td>At most 3. Never pad to 3.</td></tr>
+    <tr><td>Copy</td><td>≤ 24 characters, sentence case, written as the user would say it (“Plan Friday”, not “Planning”). No emoji.</td></tr>
+    <tr><td>Source</td><td>Chat: the latest Reed message’s <code>replies</code>. Today mode: the coach note’s replies, else <code>reed.listQuickActions</code>. Session: session chips (page 08).</td></tr>
+    <tr><td>Tap</td><td>Sends immediately as a message. No confirmation, no editing step.</td></tr>
+    <tr><td>Long-press</td><td>Nothing in v1 (decision 4: no hidden primary gestures).</td></tr>
+    <tr><td>While typing</td><td>Set aside (hidden) while the composer has text; back when it’s empty.</td></tr>
+    <tr><td>Lifetime</td><td>Until anything is sent. Never shown on older messages.</td></tr>
+  </table></section>`,
+});
+</script>
+</body>
+</html>

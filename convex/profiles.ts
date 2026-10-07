@@ -1,13 +1,11 @@
+import { onboardingComplete } from '../domains/profile/onboarding';
 import { internalMutation, mutation, query } from './_generated/server';
 import { internal } from './_generated/api';
 import { ConvexError, v } from 'convex/values';
-import {
-  completeOnboardingArgsFields,
-  type CompleteOnboardingPayload,
-} from './profileValidators';
 import type { Id } from './_generated/dataModel';
 import type { QueryCtx, MutationCtx } from './_generated/server';
 import type { UserIdentity } from 'convex/server';
+import { updateProfileTimeZone } from './profileTimeZone';
 
 const profileValidator = v.object({
   _creationTime: v.number(),
@@ -17,23 +15,10 @@ const profileValidator = v.object({
   displayName: v.optional(v.string()),
   email: v.string(),
   onboardingCompletedAt: v.optional(v.number()),
+  onboardingVersion: v.optional(v.literal(2)),
+  timeZone: v.optional(v.string()),
   updatedAt: v.number(),
 });
-
-type StrengthAnchorKey = 'squat' | 'bench_press' | 'deadlift' | 'overhead_press' | 'pull_up' | 'push_up' | 'dip';
-const strengthAnchorKeys = new Set<StrengthAnchorKey>([
-  'squat',
-  'bench_press',
-  'deadlift',
-  'overhead_press',
-  'pull_up',
-  'push_up',
-  'dip',
-]);
-
-function isStrengthAnchorKey(value: string): value is StrengthAnchorKey {
-  return strengthAnchorKeys.has(value as StrengthAnchorKey);
-}
 
 function profilePatchFromAuthUser(user: {
   email: string;
@@ -134,6 +119,16 @@ export const viewer = query({
 
     const authUser = authUserFromIdentity(identity);
     return await getProfileForAuthUser(ctx, authUser);
+  },
+});
+
+export const updateTimeZone = mutation({
+  args: { timeZone: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const profile = await requireViewerProfile(ctx);
+    await updateProfileTimeZone(ctx, profile, args.timeZone);
+    return null;
   },
 });
 
@@ -314,7 +309,7 @@ export const ensureViewerProfile = mutation({
         throw new ConvexError('Profile disappeared during sync');
       }
 
-      if (updatedProfile.onboardingCompletedAt) {
+      if (onboardingComplete(updatedProfile)) {
         await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: updatedProfile._id });
       }
       return updatedProfile;
@@ -331,418 +326,6 @@ export const ensureViewerProfile = mutation({
     return createdProfile;
   },
 });
-
-export const completeOnboarding = mutation({
-  args: completeOnboardingArgsFields,
-  returns: profileValidator,
-  handler: async (ctx, args) => {
-    const profile = await requireViewerProfile(ctx);
-    validateOnboardingPayload(args);
-
-    const now = Date.now();
-    const trainingProfile = {
-      baseline: args.baseline,
-      constraints: args.constraints,
-      goalDetails: args.goalDetails,
-      profileId: profile._id,
-      profilingConsent: true as const,
-      rankedGoals: args.rankedGoals,
-      source: 'onboarding' as const,
-      lifestyle: args.lifestyle,
-      startingPoint: args.startingPoint,
-      trainingReality: args.trainingReality,
-      updatedAt: now,
-      userNotes: args.userNotes,
-      version: 1,
-    };
-
-    const existingTrainingProfile = await ctx.db
-      .query('trainingProfiles')
-      .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
-      .unique();
-
-    if (existingTrainingProfile) {
-      await ctx.db.patch(existingTrainingProfile._id, {
-        ...trainingProfile,
-        source: existingTrainingProfile.source,
-        version: existingTrainingProfile.version,
-      });
-    } else {
-      await ctx.db.insert('trainingProfiles', trainingProfile);
-    }
-
-    await persistDynamicMetrics(ctx, profile._id, args, now, 'onboarding');
-
-    await ctx.db.patch(profile._id, {
-      displayName: args.displayName.trim(),
-      onboardingCompletedAt: now,
-      updatedAt: now,
-    });
-
-    const updatedProfile = await ctx.db.get(profile._id);
-    const updatedTrainingProfile = await ctx.db
-      .query('trainingProfiles')
-      .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
-      .unique();
-
-    if (!updatedProfile || !updatedTrainingProfile) {
-      throw new ConvexError('Profile was not saved.');
-    }
-
-    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
-      profileId: profile._id,
-      trigger: 'onboarding_updated',
-    });
-    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
-      profileId: profile._id,
-      reason: 'profile_updated',
-    });
-    await ctx.scheduler.runAfter(0, internal.outreachState.ensureScheduled, { profileId: profile._id });
-
-    return updatedProfile;
-  },
-});
-
-export const updateTrainingProfile = mutation({
-  args: completeOnboardingArgsFields,
-  returns: profileValidator,
-  handler: async (ctx, args) => {
-    const profile = await requireViewerProfile(ctx);
-    validateOnboardingPayload(args);
-
-    const existingTrainingProfile = await ctx.db
-      .query('trainingProfiles')
-      .withIndex('by_profile_id', q => q.eq('profileId', profile._id))
-      .unique();
-
-    if (!existingTrainingProfile) {
-      throw new ConvexError('Training profile is missing. Complete onboarding first.');
-    }
-
-    const now = Date.now();
-    await ctx.db.patch(existingTrainingProfile._id, {
-      baseline: args.baseline,
-      constraints: args.constraints,
-      goalDetails: args.goalDetails,
-      profilingConsent: true,
-      rankedGoals: args.rankedGoals,
-      source: 'manual',
-      lifestyle: args.lifestyle,
-      startingPoint: args.startingPoint,
-      trainingReality: args.trainingReality,
-      updatedAt: now,
-      userNotes: args.userNotes,
-      version: existingTrainingProfile.version + 1,
-    });
-
-    await persistDynamicMetrics(ctx, profile._id, args, now, 'manual');
-
-    await ctx.db.patch(profile._id, {
-      displayName: args.displayName.trim(),
-      updatedAt: now,
-    });
-
-    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, {
-      profileId: profile._id,
-      trigger: 'onboarding_updated',
-    });
-    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, {
-      profileId: profile._id,
-      reason: 'profile_updated',
-    });
-
-    const updatedProfile = await ctx.db.get(profile._id);
-    if (!updatedProfile) {
-      throw new ConvexError('Profile was not saved.');
-    }
-
-    return updatedProfile;
-  },
-});
-
-function validateOnboardingPayload(payload: CompleteOnboardingPayload) {
-  const { baseline, bodyMetrics, constraints, displayName, goalDetails, performanceAnchors, rankedGoals, trainingReality, userNotes } = payload;
-
-  if (displayName.trim().length < 2 || displayName.trim().length > 60) {
-    throw new ConvexError('Name must be between 2 and 60 characters.');
-  }
-
-  if (!isValidBirthDate(baseline.birthYear, baseline.birthMonth, baseline.birthDay)) {
-    throw new ConvexError('Enter a valid date of birth.');
-  }
-
-  const age = getAge(baseline.birthYear, baseline.birthMonth, baseline.birthDay);
-  if (age < 13 || age > 90) {
-    throw new ConvexError('Date of birth is outside the supported range.');
-  }
-
-  if (!isInRange(baseline.heightCm, 100, 250)) {
-    throw new ConvexError('Height must be between 100 and 250 cm.');
-  }
-
-  if (trainingReality.trainingStyles.length < 1 || trainingReality.trainingStyles.length > 3) {
-    throw new ConvexError('Choose between 1 and 3 training styles.');
-  }
-
-  if (hasDuplicates(trainingReality.trainingStyles)) {
-    throw new ConvexError('Training styles must be unique.');
-  }
-
-  if (trainingReality.equipmentAccess.length < 1) {
-    throw new ConvexError('Choose at least one training environment.');
-  }
-
-  if (hasDuplicates(trainingReality.equipmentAccess)) {
-    throw new ConvexError('Training environments must be unique.');
-  }
-
-  if (rankedGoals.length < 1 || rankedGoals.length > 3) {
-    throw new ConvexError('Rank between 1 and 3 goals.');
-  }
-
-  if (hasDuplicates(rankedGoals)) {
-    throw new ConvexError('Ranked goals must be unique.');
-  }
-
-  for (const [goal, detail] of Object.entries(goalDetails)) {
-    if (!rankedGoals.includes(goal)) {
-      throw new ConvexError('Goal details must match ranked goals.');
-    }
-    validateBoundedText(detail.customDetail, 'Goal detail');
-    validateStringList(detail.focusAreas, 'Goal focus areas', 12);
-  }
-
-  validateBoundedText(userNotes, 'User note', 1200);
-
-  for (const [area, detail] of Object.entries(constraints.details)) {
-    if (!constraints.areas.includes(area)) {
-      throw new ConvexError('Constraint details must match selected constraints.');
-    }
-    validateBoundedText(detail.customDetail, 'Constraint detail');
-  }
-
-  if (hasDuplicates(constraints.areas)) {
-    throw new ConvexError('Constraints must be unique.');
-  }
-
-  validateOptionalRange(bodyMetrics.weightKg, 25, 300, 'Weight');
-  validateOptionalRange(bodyMetrics.bodyFatPercent, 1, 80, 'Body fat percentage');
-  validateOptionalRange(bodyMetrics.skeletalMuscleMassKg, 5, 100, 'Skeletal muscle mass');
-  validateOptionalRange(bodyMetrics.restingHeartRate, 30, 220, 'Resting heart rate');
-
-  for (const [anchorKey, anchor] of Object.entries(performanceAnchors.loaded)) {
-    if (anchor.loadKg === null || anchor.reps === null) {
-      throw new ConvexError(`Loaded strength anchor ${anchorKey} must include load and reps.`);
-    }
-    validateOptionalRange(anchor.loadKg, 0, 1000, `${anchorKey} load`);
-    validateOptionalRange(anchor.reps, 1, 100, `${anchorKey} reps`);
-  }
-
-  for (const [anchorKey, reps] of Object.entries(performanceAnchors.bodyweight)) {
-    validateOptionalRange(reps, 1, 500, `${anchorKey} reps`);
-  }
-
-  validateOptionalRange(performanceAnchors.cardio.run1KmSeconds, 60, 7200, '1 km run time');
-  validateOptionalRange(performanceAnchors.cardio.run5KmSeconds, 180, 21600, '5 km run time');
-  validateOptionalRange(performanceAnchors.cardio.stairFloors, 1, 500, 'Stair test floors');
-  validateOptionalRange(performanceAnchors.cardio.stairMinutes, 1, 240, 'Stair test minutes');
-}
-
-function isValidBirthDate(year: number, month: number, day: number) {
-  const date = new Date(year, month - 1, day);
-  return (
-    date.getFullYear() === year &&
-    date.getMonth() === month - 1 &&
-    date.getDate() === day &&
-    year >= 1900 &&
-    year <= new Date().getFullYear()
-  );
-}
-
-function getAge(year: number, month: number, day: number) {
-  const today = new Date();
-  let age = today.getFullYear() - year;
-  const monthDiff = today.getMonth() + 1 - month;
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < day)) {
-    age -= 1;
-  }
-  return age;
-}
-
-function isInRange(value: number, min: number, max: number) {
-  return Number.isFinite(value) && value >= min && value <= max;
-}
-
-function hasDuplicates(values: string[]) {
-  return new Set(values).size !== values.length;
-}
-
-function validateBoundedText(value: string | null, label: string, maxLength = 160) {
-  if (value !== null && value.trim().length > maxLength) {
-    throw new ConvexError(`${label} must be ${maxLength} characters or fewer.`);
-  }
-}
-
-function validateStringList(values: string[], label: string, maxLength: number) {
-  if (values.length > maxLength) {
-    throw new ConvexError(`${label} has too many values.`);
-  }
-  if (hasDuplicates(values)) {
-    throw new ConvexError(`${label} must be unique.`);
-  }
-  for (const value of values) {
-    validateBoundedText(value, label);
-  }
-}
-
-function validateOptionalRange(value: number | null, min: number, max: number, label: string) {
-  if (value !== null && !isInRange(value, min, max)) {
-    throw new ConvexError(`${label} is outside the supported range.`);
-  }
-}
-
-async function persistDynamicMetrics(
-  ctx: MutationCtx,
-  profileId: Id<'profiles'>,
-  payload: CompleteOnboardingPayload,
-  observedAt: number,
-  source: 'onboarding' | 'manual',
-) {
-  await upsertBodyMetricIfChanged(ctx, profileId, 'body_weight', payload.bodyMetrics.weightKg, 'kg', observedAt, source);
-  await upsertBodyMetricIfChanged(ctx, profileId, 'body_fat_percent', payload.bodyMetrics.bodyFatPercent, 'percent', observedAt, source);
-  await upsertBodyMetricIfChanged(ctx, profileId, 'skeletal_muscle_mass', payload.bodyMetrics.skeletalMuscleMassKg, 'kg', observedAt, source);
-  await upsertBodyMetricIfChanged(ctx, profileId, 'resting_heart_rate', payload.bodyMetrics.restingHeartRate, 'bpm', observedAt, source);
-
-  for (const [anchorKey, anchor] of Object.entries(payload.performanceAnchors.loaded)) {
-    if (isStrengthAnchorKey(anchorKey) && anchor.loadKg !== null && anchor.reps !== null) {
-      await upsertStrengthBenchmarkIfChanged(ctx, profileId, anchorKey, 'loaded_reps', anchor.loadKg, anchor.reps, observedAt, source);
-    }
-  }
-
-  for (const [anchorKey, reps] of Object.entries(payload.performanceAnchors.bodyweight)) {
-    if (isStrengthAnchorKey(anchorKey)) {
-      await upsertStrengthBenchmarkIfChanged(ctx, profileId, anchorKey, 'bodyweight_reps', null, reps, observedAt, source);
-    }
-  }
-
-  if (payload.performanceAnchors.cardio.run1KmSeconds !== null) {
-    await upsertCardioBenchmarkIfChanged(ctx, profileId, 'run_1km', 'running', payload.performanceAnchors.cardio.run1KmSeconds, 1000, null, observedAt, source);
-  }
-  if (payload.performanceAnchors.cardio.run5KmSeconds !== null) {
-    await upsertCardioBenchmarkIfChanged(ctx, profileId, 'run_5km', 'running', payload.performanceAnchors.cardio.run5KmSeconds, 5000, null, observedAt, source);
-  }
-  if (payload.performanceAnchors.cardio.stairFloors !== null && payload.performanceAnchors.cardio.stairMinutes !== null) {
-    await upsertCardioBenchmarkIfChanged(
-      ctx,
-      profileId,
-      'stair_test',
-      'stairs',
-      Math.round(payload.performanceAnchors.cardio.stairMinutes * 60),
-      null,
-      payload.performanceAnchors.cardio.stairFloors,
-      observedAt,
-      source,
-    );
-  }
-}
-
-async function upsertBodyMetricIfChanged(
-  ctx: MutationCtx,
-  profileId: Id<'profiles'>,
-  metricKey: 'body_weight' | 'body_fat_percent' | 'skeletal_muscle_mass' | 'resting_heart_rate',
-  value: number | null,
-  unit: 'kg' | 'percent' | 'bpm',
-  observedAt: number,
-  source: 'onboarding' | 'manual',
-) {
-  if (value === null) return;
-  const latest = await ctx.db
-    .query('bodyMeasurements')
-    .withIndex('by_profile_id_and_metric_key_and_observed_at', q =>
-      q.eq('profileId', profileId).eq('metricKey', metricKey),
-    )
-    .order('desc')
-    .take(1);
-  if (latest[0] && latest[0].value === value) return;
-  await ctx.db.insert('bodyMeasurements', {
-    metricKey,
-    observedAt,
-    profileId,
-    source,
-    unit,
-    value,
-  });
-}
-
-async function upsertStrengthBenchmarkIfChanged(
-  ctx: MutationCtx,
-  profileId: Id<'profiles'>,
-  anchorKey: StrengthAnchorKey,
-  kind: 'loaded_reps' | 'bodyweight_reps',
-  loadKg: number | null,
-  reps: number,
-  observedAt: number,
-  source: 'onboarding' | 'manual',
-) {
-  const latest = await ctx.db
-    .query('strengthAssessments')
-    .withIndex('by_profile_id_and_anchor_key_and_observed_at', q =>
-      q.eq('profileId', profileId).eq('anchorKey', anchorKey),
-    )
-    .order('desc')
-    .take(1);
-  if (latest[0] && latest[0].loadKg === loadKg && latest[0].reps === reps) return;
-  const estimatedOneRepMaxKg =
-    kind === 'loaded_reps' && loadKg !== null && reps <= 12
-      ? roundMetric(loadKg * (1 + reps / 30))
-      : null;
-  await ctx.db.insert('strengthAssessments', {
-    anchorKey,
-    estimatedOneRepMaxKg,
-    kind,
-    loadKg,
-    observedAt,
-    profileId,
-    reps,
-    source,
-  });
-}
-
-async function upsertCardioBenchmarkIfChanged(
-  ctx: MutationCtx,
-  profileId: Id<'profiles'>,
-  anchorKey: 'run_1km' | 'run_5km' | 'stair_test',
-  modality: 'running' | 'stairs',
-  durationSeconds: number | null,
-  distanceMeters: number | null,
-  floors: number | null,
-  observedAt: number,
-  source: 'onboarding' | 'manual',
-) {
-  const latest = await ctx.db
-    .query('cardioAssessments')
-    .withIndex('by_profile_id_and_anchor_key_and_observed_at', q =>
-      q.eq('profileId', profileId).eq('anchorKey', anchorKey),
-    )
-    .order('desc')
-    .take(1);
-  if (
-    latest[0] &&
-    latest[0].durationSeconds === durationSeconds &&
-    latest[0].distanceMeters === distanceMeters &&
-    latest[0].floors === floors
-  ) return;
-  await ctx.db.insert('cardioAssessments', {
-    anchorKey,
-    distanceMeters,
-    durationSeconds,
-    floors,
-    modality,
-    observedAt,
-    profileId,
-    source,
-  });
-}
 
 async function loadLatestBodyMetrics(ctx: QueryCtx, profileId: Id<'profiles'>) {
   // Current body state is derived from bodyMeasurements only. In particular,
@@ -894,3 +477,5 @@ async function deleteAllCardioAssessmentsForProfile(ctx: MutationCtx, profileId:
     cursor = page.continueCursor;
   }
 }
+
+function isInRange(value: number, min: number, max: number) { return Number.isFinite(value) && value >= min && value <= max; }

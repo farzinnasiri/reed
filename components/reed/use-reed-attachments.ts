@@ -1,7 +1,8 @@
+import { z } from 'zod';
 import * as DocumentPicker from 'expo-document-picker';
 import { fetch as expoFetch } from 'expo/fetch';
 import { File as ExpoFile } from 'expo-file-system';
-import * as Haptics from 'expo-haptics';
+import * as haptics from '@/design/haptics';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useMemo, useState } from 'react';
@@ -60,7 +61,7 @@ async function compressToJpeg(image: PendingImage) {
 function logAttachmentStepError(step: string, error: unknown, details?: Record<string, unknown>) {
   console.warn(`${ATTACHMENT_LOG_PREFIX}:${step}`, {
     ...details,
-    error: error instanceof Error ? error.message : String(error),
+    error: error instanceof Error ? 'attachment_step_failed' : 'unknown_failure',
   });
 }
 
@@ -112,7 +113,8 @@ async function uploadJpeg(uploadUrl: string, file: UploadableJpeg) {
     method: 'POST',
   });
   if (!uploadResponse.ok) throw new Error('Could not upload the selected image.');
-  return await uploadResponse.json() as { storageId: Id<'_storage'> };
+  const payload: unknown = await uploadResponse.json();
+  return z.object({ storageId: z.string().min(1).transform(value => value as Id<'_storage'>) }).parse(payload);
 }
 
 export function useReedAttachments() {
@@ -183,7 +185,6 @@ export function useReedAttachments() {
       } catch (error) {
         logAttachmentStepError('manipulation', error, {
           sourceMimeType: image.mimeType ?? 'unknown',
-          sourceName: image.name ?? 'unknown',
           sourceUriScheme: image.uri.split(':')[0],
         });
         throw new Error(toUserAttachmentError('manipulation'));
@@ -232,7 +233,7 @@ export function useReedAttachments() {
         ? { ...attachment, status: 'ready', storageId: uploaded.storageId }
         : attachment));
       event.end({ 'upload.step': 'ready' });
-      if (Platform.OS === 'ios') void Haptics.selectionAsync();
+      if (Platform.OS === 'ios') haptics.selection();
     } catch (error) {
       event.fail(error, `reed-image-upload-${uploadStep.replace(/_/g, '-')}-failed`);
       setAttachments(current => current.map(attachment => attachment.id === id
@@ -344,7 +345,7 @@ export function useReedAttachments() {
     setLastError(null);
   }, []);
 
-  return {
+  return useMemo(() => ({
     attachFromCamera,
     attachFromFiles,
     attachFromLibrary,
@@ -358,5 +359,7 @@ export function useReedAttachments() {
     readyAttachmentIds,
     removeAttachment,
     uploadEditedImage,
-  };
+  }), [attachFromCamera, attachFromFiles, attachFromLibrary, attachments, cancelImageEditor,
+    canAttachMore, clearAttachments, editingImage, isPreparingAttachments, lastError,
+    readyAttachmentIds, removeAttachment, uploadEditedImage]);
 }

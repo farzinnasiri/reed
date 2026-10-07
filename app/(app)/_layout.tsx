@@ -1,3 +1,5 @@
+import { onboardingComplete } from '@/domains/profile/onboarding';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { Stack } from 'expo-router';
 import { useAuth, useUser } from '@clerk/expo';
 import { Platform } from 'react-native';
@@ -6,6 +8,10 @@ import { AppShell } from '@/components/home/app-shell';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { api } from '@/convex/_generated/api';
 import { useReedTheme } from '@/design/provider';
+import { MessageActionsHost } from '@/components/reed/message-actions';
+import { SessionMascotHost } from '@/components/reed/session/session-mascot';
+import { ReedConversationProvider } from '@/components/reed/reed-conversation-context';
+import { WorkoutSessionRuntimeProvider } from '@/components/workout/workout-session-runtime';
 
 export default function AuthenticatedAppLayout() {
   const { theme } = useReedTheme();
@@ -26,27 +32,37 @@ export default function AuthenticatedAppLayout() {
     return null;
   }
 
-  if (!viewer.onboardingCompletedAt) {
+  if (!onboardingComplete(viewer)) {
     return null;
   }
 
   return (
     <ScreenBackdrop>
-      <AppShell displayName={viewer.displayName ?? user?.fullName ?? 'there'}>
-        <Stack
-          screenOptions={{
-            animation: Platform.OS === 'web' ? 'none' : 'fade',
-            contentStyle: { backgroundColor: theme.colors.canvas },
-            fullScreenGestureEnabled: false,
-            fullScreenGestureShadowEnabled: false,
-            gestureEnabled: false,
-            headerShown: false,
-          }}
-        >
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="goals" />
-        </Stack>
-      </AppShell>
+      <WorkoutSessionRuntimeProvider>
+        <ReedConversationProvider>
+          <AppShell displayName={viewer.displayName ?? user?.fullName ?? 'there'}>
+            <BottomSheetModalProvider>
+              <Stack
+                screenOptions={{
+                  animation: Platform.OS === 'web' ? 'none' : 'fade',
+                  contentStyle: { backgroundColor: theme.colors.canvas },
+                  fullScreenGestureEnabled: false,
+                  fullScreenGestureShadowEnabled: false,
+                  gestureEnabled: false,
+                  headerShown: false,
+                }}
+              >
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="progress" />
+                <Stack.Screen name="you" />
+                <Stack.Screen name="goals" />
+              </Stack>
+              <SessionMascotHost />
+              <MessageActionsHost />
+            </BottomSheetModalProvider>
+          </AppShell>
+        </ReedConversationProvider>
+      </WorkoutSessionRuntimeProvider>
     </ScreenBackdrop>
   );
 }
