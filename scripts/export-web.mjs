@@ -13,7 +13,7 @@ if (!process.env.CI && !process.env.VERCEL) {
 const required = ['EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY', 'EXPO_PUBLIC_CONVEX_URL', 'EXPO_PUBLIC_CONVEX_SITE_URL'];
 const missing = required.filter(key => !process.env[key]);
 if (missing.length) throw new Error(`Missing web build variables: ${missing.join(', ')}`);
-if (process.env.VERCEL_ENV === 'production' && !process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith('pk_live_')) {
+if (process.env.REED_APP_VARIANT === 'production' && !process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY.startsWith('pk_live_')) {
   throw new Error('Production web deployments require the production Clerk instance.');
 }
 const result = spawnSync('npx', ['expo', 'export', '--platform', 'web'], {

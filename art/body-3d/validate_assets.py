@@ -7,7 +7,7 @@ from mathutils.kdtree import KDTree
 from mathutils.bvhtree import BVHTree
 ROOT=pathlib.Path(__file__).resolve().parents[2];sys.path.insert(0,str(pathlib.Path(__file__).parent))
 from export_assets import read_glb,accessor,gltf_coords,synchronize_patches
-parser=argparse.ArgumentParser();parser.add_argument('--input',type=pathlib.Path,default=ROOT/'assets/body-3d');parser.add_argument('--source',type=pathlib.Path,default=ROOT/'art/body-3d/reed-bodies.blend');args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
+parser=argparse.ArgumentParser();parser.add_argument('--input',type=pathlib.Path,default=ROOT/'assets/body-3d/v3.4');parser.add_argument('--source',type=pathlib.Path,default=ROOT/'art/body-3d/reed-bodies-v3.4.blend');args=parser.parse_args(sys.argv[sys.argv.index('--')+1:] if '--' in sys.argv else [])
 P=args.input.resolve();manifest=json.loads((P/'manifest.json').read_text());results={}
 for variant,entry in manifest['variants'].items():
  path=P/entry['filename'];doc,bin=read_glb(path);assert hashlib.sha256(path.read_bytes()).hexdigest()==entry['sha256']

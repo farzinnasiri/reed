@@ -2,14 +2,13 @@
 
 Two independent, self-contained GLBs for discomfort selection, exercise muscle highlights, and approximate body appearance. Load one variant at a time. Application integration is intentionally outside this asset package.
 
-Lossless smaller delivery alternatives are available in [`compressed/`](compressed/README.md). The original GLBs and their hashes remain unchanged. That handoff compares Meshopt GLBs with gzip copies and explains the loader requirements and APK-size caveat.
+The running app loads `v3.4/compressed/`. The editable source is `../../art/body-3d/reed-bodies-v3.4.blend`. Older GLBs, previews, and Blender files have been removed.
 
 ## Files
 
-- `male.glb`, `female.glb`: runtime assets.
-- `manifest.json`: exact exported node names, final triangle-to-region mappings, labels, aliases, morph contract, bounds, counts, byte sizes, and SHA-256 hashes.
-- `previews/`: front, back, side, oblique, pain, exercise, morph, and phone-size renders of the exported GLBs. Contact sheets provide a quick review.
-- `../../art/body-3d/reed-bodies.blend`: editable source with packed textures. The preview camera and lights are not exported.
+- `v3.4/`: the shipped male and female GLBs, gzip delivery, and manifest.
+- `manifest.json`: the earlier export record kept beside this note.
+- `../../art/body-3d/reed-bodies-v3.4.blend`: editable source with packed textures. The preview camera and lights are not exported.
 - `../../art/body-3d/export_assets.py`: export, patch synchronization, normal transfer, final triangle mapping, and manifest generation.
 - `../../art/body-3d/build_bodies.py`: reproducible rebuild from pinned source assets.
 - `../../art/body-3d/contract.json`: semantic and runtime contract used by the exporter.
