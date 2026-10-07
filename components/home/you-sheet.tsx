@@ -3,7 +3,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
 import { router } from 'expo-router';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, Image, Platform, Pressable, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery } from 'convex/react';
@@ -160,7 +160,11 @@ export function YouSheet({ onClose, visible }: YouSheetProps) {
     <View style={{ flex: 1, minHeight: 0, width: '100%', maxWidth: metrics.maxWidth, alignSelf: 'center' }}>
       <Animated.View key={`header-${editor ? `editor-${editor.id}` : section}`} entering={FadeIn.duration(reedMotion.durations.standard)} style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm, paddingHorizontal: theme.spacing.gutter, paddingVertical: theme.spacing.sm }}>
         {isOverview ? <>
-          <View style={{ width: metrics.avatar, height: metrics.avatar, borderRadius: theme.radii.pill, backgroundColor: theme.colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' }}><ReedText variant="title">{Array.from(displayName.trim())[0]?.toUpperCase() ?? 'Y'}</ReedText></View>
+          {user?.hasImage ? (
+            <Image accessibilityIgnoresInvertColors source={{ uri: user.imageUrl }} style={{ width: metrics.avatar, height: metrics.avatar, borderRadius: theme.radii.pill }} />
+          ) : (
+            <View style={{ width: metrics.avatar, height: metrics.avatar, borderRadius: theme.radii.pill, backgroundColor: theme.colors.surfaceRaised, alignItems: 'center', justifyContent: 'center' }}><ReedText variant="title">{Array.from(displayName.trim())[0]?.toUpperCase() ?? 'Y'}</ReedText></View>
+          )}
           <View style={{ flex: 1, minWidth: 0 }}><ReedText numberOfLines={1} variant="title">{displayName}</ReedText><ReedText numberOfLines={1} tone="secondary" variant="caption">{user?.primaryEmailAddress?.emailAddress ?? 'Signed in'}</ReedText></View>
         </> : <>
           {editor ? <Pressable accessibilityRole="button" accessibilityLabel="Cancel editing" disabled={isWorking} onPress={goBack} style={({ pressed }) => [{ minHeight: metrics.hit, justifyContent: 'center', paddingRight: theme.spacing.xs }, getTapScaleStyle(pressed)]}><ReedText tone="secondary" variant="body">Cancel</ReedText></Pressable> : <ReedIconButton accessibilityLabel="Back to profile" variant="ghost" disabled={isWorking} onPress={goBack}><Ionicons name="chevron-back" color={String(theme.colors.inkSecondary)} size={22} /></ReedIconButton>}

@@ -62,6 +62,7 @@ function ReedThreadComponent({ layout, history, interaction, messages, scrollRef
   const scrollOffsetRef = useRef(0);
   const olderAnchorRef = useRef<{ id: string; y: number } | null>(null);
   const shouldFollowLatestRef = useRef(true);
+  const userScrollRef = useRef(false);
   const olderRequestRef = useRef(false);
   useEffect(() => { olderRequestRef.current = isLoadingOlder; }, [isLoadingOlder, messages.length]);
 
@@ -107,6 +108,17 @@ function ReedThreadComponent({ layout, history, interaction, messages, scrollRef
     shouldFollowLatestRef.current = false;
     olderAnchorRef.current = null;
   }, []);
+
+  const settleFollowing = useCallback(() => {
+    userScrollRef.current = false;
+    const distance = Math.max(0, contentHeightRef.current - viewportHeightRef.current - scrollOffsetRef.current);
+    shouldFollowLatestRef.current = distance < 80;
+    const reading = distance > 180;
+    if (reading !== readingHistoryRef.current) {
+      readingHistoryRef.current = reading;
+      onReadingHistoryChange(reading);
+    }
+  }, [onReadingHistoryChange]);
 
   const returnToLatest = useCallback((animated: boolean) => {
     olderAnchorRef.current = null;
@@ -204,16 +216,18 @@ function ReedThreadComponent({ layout, history, interaction, messages, scrollRef
             return;
           }
           if (!isReady || !hasPositionedRef.current || !moved) return;
-          // Only an explicit drag/wheel/touch/key gesture opts out of following. Browser focus,
-          // scroll anchoring and viewport changes can also produce onScroll before measurement.
-          if (shouldFollowLatestRef.current) {
+          // Web emits scrolls for focus and anchoring with no drag, and those must return to the
+          // latest turn. On a phone the same correction runs before the drag begins once the list
+          // is pinned to the bottom, and that programmatic jump cancels the gesture, so the user
+          // cannot scroll up again after reaching the end.
+          if (Platform.OS === 'web' && shouldFollowLatestRef.current) {
             followLatest(false);
             return;
           }
           const distanceFromBottom = Math.max(0, event.nativeEvent.contentSize.height
             - event.nativeEvent.layoutMeasurement.height
             - event.nativeEvent.contentOffset.y);
-          shouldFollowLatestRef.current = distanceFromBottom < 80;
+          if (!userScrollRef.current) shouldFollowLatestRef.current = distanceFromBottom < 80;
           if (towardEarlier && offset < reedThreadMetrics.historyPrefetch && hasMoreMessages && !isLoadingOlder) requestEarlier();
           const reading = distanceFromBottom > 180;
           if (reading !== readingHistoryRef.current) {
@@ -221,7 +235,13 @@ function ReedThreadComponent({ layout, history, interaction, messages, scrollRef
             onReadingHistoryChange(reading);
           }
         }}
-        onScrollBeginDrag={interruptFollowing}
+        onMomentumScrollBegin={() => { userScrollRef.current = true; shouldFollowLatestRef.current = false; }}
+        onMomentumScrollEnd={settleFollowing}
+        onScrollBeginDrag={() => { userScrollRef.current = true; interruptFollowing(); }}
+        onScrollEndDrag={event => {
+          const velocity = event.nativeEvent.velocity?.y ?? 0;
+          if (Math.abs(velocity) < 0.01) settleFollowing();
+        }}
         scrollEventThrottle={16}
         ref={attachList}
         renderItem={({ item: message, index }) => {

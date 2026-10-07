@@ -1,8 +1,8 @@
 import { useComposerVoiceLevel } from './reed-composer-context';
 import { ReedSheetTextInput } from '@/components/ui/reed-sheet-input';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useEffect, useRef, useState, type RefObject } from 'react';
-import { Image, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
+import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import { Image, InputAccessoryView, Platform, Pressable, ScrollView, TextInput, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
@@ -34,6 +34,9 @@ export function retainComposerFocus(event: GestureResponderEvent) {
 export function ReedComposer({ attachments, draft, interaction, inputRef, waiting, voice }: ReedComposerProps) {
   const { theme } = useReedTheme();
   const Input = interaction.sheet ? ReedSheetTextInput : TextInput;
+  // iOS 26 adds previous/next/dismiss above the keyboard for a multiline field with no accessory.
+  // WhatsApp-style fields stay multiline and supply their own accessory so that bar never appears.
+  const accessoryId = useId();
   const reduced = useReedReducedMotion();
   const { fontScale } = useWindowDimensions();
   const lineHeight = metrics.inputLineHeight * fontScale;
@@ -117,6 +120,7 @@ export function ReedComposer({ attachments, draft, interaction, inputRef, waitin
               accessibilityState={{ disabled: recording }}
               editable={!recording}
               multiline
+              inputAccessoryViewID={Platform.OS === 'ios' ? accessoryId : undefined}
               onBlur={blur}
               onChangeText={next => { if (!next) setContentHeight(lineHeight); draft.change(next); }}
               onContentSizeChange={event => setContentHeight(Math.ceil(event.nativeEvent.contentSize.height))}
@@ -142,7 +146,13 @@ export function ReedComposer({ attachments, draft, interaction, inputRef, waitin
           onSend={() => { if (draft.send(text)) inputRef.current?.focus(); }}
         />
       </View>
-    </Animated.View></View>
+    </Animated.View>
+    {Platform.OS === 'ios' ? (
+      <InputAccessoryView nativeID={accessoryId}>
+        <View style={{ height: 0, width: '100%' }} />
+      </InputAccessoryView>
+    ) : null}
+    </View>
   );
 }
 

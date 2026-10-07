@@ -130,3 +130,76 @@ test('reply commits and layout scrolls follow without animation frames, while ge
   assert.equal(frames.size, 0, 'essential positioning never schedules an animation frame');
   await act(async () => root.unmount());
 });
+
+test('a phone can leave the bottom after scrolling back to the latest turn', async () => {
+  const dom = new JSDOM('<div id="root"></div>');
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true,
+    requestAnimationFrame: () => 0, cancelAnimationFrame: () => {} });
+  type ListProps = {
+    data: ReedMessage[];
+    renderItem: (item: { item: ReedMessage; index: number }) => ReactElement<{ children?: ReactNode }>;
+    ref: (node: unknown) => void;
+    onLayout: (event: { nativeEvent: { layout: { height: number } } }) => void;
+    onContentSizeChange: (width: number, height: number) => void;
+    onScroll: (event: { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } }) => void;
+    onScrollBeginDrag?: () => void;
+    onScrollEndDrag?: (event: { nativeEvent: { velocity?: { y: number } } }) => void;
+  };
+  let list!: ListProps;
+  const scrolls: number[] = [];
+  const nativeList = { scrollToOffset: (options: { offset: number }) => scrolls.push(options.offset), scrollToEnd: () => {}, getScrollableNode: () => null };
+  function List(props: ListProps) {
+    list = props;
+    const { ref } = props;
+    useLayoutEffect(() => { ref(nativeList); return () => ref(null); }, [ref]);
+    const index = props.data.length - 1;
+    return cloneElement(props.renderItem({ item: props.data[index], index }), { children: null });
+  }
+  const Empty = () => null;
+  const { ReedThread } = platformModule<typeof import('../components/reed/reed-thread')>('components/reed/reed-thread.tsx', {
+    'react-native': { FlatList: List, View: ({ children }: { children: ReactNode }) => createElement('div', null, children), Image: Empty, Pressable: Empty, Platform: { OS: 'ios' }, StyleSheet: { create: (x: unknown) => x, flatten: (x: unknown) => x } },
+    'react-native-reanimated': { __esModule: true, default: { FlatList: List, View: Empty } },
+    '@gorhom/bottom-sheet': { BottomSheetFlatList: List },
+    '@expo/vector-icons/Ionicons': { default: Empty },
+    '@/design/haptics': {},
+    '@/design/system': { reedThreadMetrics: { historyPrefetch: 160 } },
+    '@/design/motion': {},
+    '@/design/provider': {},
+    '@/design/use-entry-animation': {},
+    '@/design/use-reed-reduced-motion': { useReedReducedMotion: () => false },
+    '@/components/ui/reed-text': { ReedText: Empty },
+    './message-actions': {},
+    './reed.styles': { styles: {} },
+    './thread/reply-reveal': {},
+    './presence/use-presence-activity': { usePresenceActivity: () => false },
+  });
+  const messages: ReedMessage[] = [
+    { id: 'user', createdAt: 1, role: 'user', status: 'sent', source: 'typed', text: 'Question' },
+    { id: 'reply', createdAt: 2, role: 'assistant', status: 'sent', source: 'typed', text: 'Reply' },
+  ];
+  const root = createRoot(document.getElementById('root')!);
+  await act(async () => root.render(createElement(ReedThread, {
+    layout: { bottom: 120, top: 100 }, messages, scrollRef: { current: null },
+    history: { hasMore: false, loading: false, load: () => {}, timeZone: 'UTC' },
+    interaction: { ready: true, onReady: () => {}, reading: () => {}, openSession: () => {}, retryAssistant: () => {}, retryUser: () => {}, offline: false },
+  })));
+  const scroll = (offset: number) => list.onScroll({ nativeEvent: {
+    contentOffset: { y: offset }, contentSize: { height: 1700 }, layoutMeasurement: { height: 600 },
+  } });
+  list.onLayout({ nativeEvent: { layout: { height: 600 } } });
+  list.onContentSizeChange(400, 1700);
+  scroll(1100);
+  scrolls.length = 0;
+  // Reaching the latest turn pins following. The next upward drag must not be pulled back.
+  list.onScrollBeginDrag?.();
+  scroll(700);
+  list.onScrollEndDrag?.({ nativeEvent: { velocity: { y: 0 } } });
+  list.onScrollBeginDrag?.();
+  scroll(1100);
+  list.onScrollEndDrag?.({ nativeEvent: { velocity: { y: 0 } } });
+  scrolls.length = 0;
+  list.onScrollBeginDrag?.();
+  scroll(800);
+  assert.deepEqual(scrolls, [], 'leaving the bottom is a finger gesture, not a position to correct');
+  await act(async () => root.unmount());
+});
