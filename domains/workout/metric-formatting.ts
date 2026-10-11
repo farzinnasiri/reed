@@ -37,7 +37,7 @@ export function formatMetricLabel(field: RecipeFieldDefinition) {
     return 'Reps';
   }
   if (field.key === 'rpe') {
-    return 'Target RPE';
+    return 'Effort · RPE';
   }
   return field.label;
 }

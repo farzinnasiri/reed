@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { soundPolicy } from '@/design/sounds';
 import { useAuth } from '@clerk/expo';
 import { RecordingPresets, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import {
@@ -36,6 +37,7 @@ export function useSpeechDraft(
   const generation = useRef(0);
   const status = useRef<SpeechDraftStatus | 'resetting'>('idle');
   const pendingStart = useRef<Promise<number> | null>(null);
+  const [soundOwner] = useState(() => Symbol('speech-sounds'));
   const [state, setState] = useState<Omit<SpeechDraftState, 'voiceLevel'>>({ error: null, status: 'idle' });
 
   useEffect(() => () => {
@@ -44,17 +46,19 @@ export function useSpeechDraft(
     void (async () => {
       await start?.catch(() => undefined);
       if (start || status.current === 'listening' || recordingStartedAtRef.current > 0) await recorder.stop().catch(() => undefined);
+      soundPolicy.setRecording(soundOwner, false);
       await clearLocalSpeechRecording(cachedRecordingRef.current);
     })();
-  }, [recorder]);
+  }, [recorder, soundOwner]);
 
   const fail = useCallback((error: unknown, operation: number) => {
     if (generation.current !== operation) return;
+    soundPolicy.setRecording(soundOwner, false);
     const message = toSpeechDraftError(error);
     status.current = onError ? 'idle' : 'failed';
     onError?.(message);
     setState({ error: onError ? null : message, status: status.current });
-  }, [onError]);
+  }, [onError, soundOwner]);
 
   const transcribeRecording = useCallback(async (recording: LocalSpeechRecording, operation: number) => {
     if (generation.current !== operation) return;
@@ -79,6 +83,7 @@ export function useSpeechDraft(
     if (status.current !== 'idle' && status.current !== 'failed') return;
     const operation = ++generation.current;
     status.current = 'listening';
+    soundPolicy.setRecording(soundOwner, true);
     setState({ error: null, status: 'listening' });
     const previous = cachedRecordingRef.current;
     cachedRecordingRef.current = null;
@@ -93,7 +98,7 @@ export function useSpeechDraft(
     } finally {
       if (pendingStart.current === starting) pendingStart.current = null;
     }
-  }, [fail, recorder]);
+  }, [fail, recorder, soundOwner]);
 
   const stop = useCallback(async () => {
     if (status.current !== 'listening') return;
@@ -104,6 +109,7 @@ export function useSpeechDraft(
       await pendingStart.current;
       if (generation.current !== operation) return;
       const recording = await stopLocalSpeechRecording(recorder, recordingStartedAtRef.current);
+      soundPolicy.setRecording(soundOwner, false);
       if (generation.current !== operation) {
         await clearLocalSpeechRecording(recording);
         return;
@@ -115,7 +121,7 @@ export function useSpeechDraft(
     } finally {
       if (generation.current === operation) recordingStartedAtRef.current = 0;
     }
-  }, [fail, recorder, transcribeRecording]);
+  }, [fail, recorder, transcribeRecording, soundOwner]);
 
   const retry = useCallback(async () => {
     const recording = cachedRecordingRef.current;
@@ -131,12 +137,13 @@ export function useSpeechDraft(
     cachedRecordingRef.current = null;
     await pendingStart.current?.catch(() => undefined);
     if (hadRecording) await recorder.stop().catch(() => undefined);
+    soundPolicy.setRecording(soundOwner, false);
     await clearLocalSpeechRecording(cached);
     if (generation.current !== operation) return;
     recordingStartedAtRef.current = 0;
     status.current = 'idle';
     setState({ error: null, status: 'idle' });
-  }, [recorder]);
+  }, [recorder, soundOwner]);
 
   return {
     retry,

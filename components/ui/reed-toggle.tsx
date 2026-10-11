@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { Pressable } from 'react-native';
+import { HapticPressable } from './haptic-pressable';
 import Animated, { ReduceMotion, interpolate, interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import { reedProfileMetrics } from '@/design/system';
 import { reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 
@@ -39,14 +40,15 @@ export function ReedToggle({ accessibilityLabel, disabled = false, onValueChange
   }));
 
   return (
-    <Pressable
+    <HapticPressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="switch"
       accessibilityState={{ checked: value, disabled }}
+      hapticValue={value}
       disabled={disabled}
       hitSlop={8}
       onPress={() => onValueChange(!value)}
-      style={{ opacity: disabled ? reedMotion.opacity.disabled : 1 }}
+      style={{ minHeight: reedProfileMetrics.hit, justifyContent: 'center', opacity: disabled ? reedMotion.opacity.disabled : 1 }}
     >
       <Animated.View style={[{ borderRadius: TOGGLE_HEIGHT / 2, height: TOGGLE_HEIGHT, width: TOGGLE_WIDTH }, trackStyle]}>
         <Animated.View
@@ -64,6 +66,6 @@ export function ReedToggle({ accessibilityLabel, disabled = false, onValueChange
           ]}
         />
       </Animated.View>
-    </Pressable>
+    </HapticPressable>
   );
 }

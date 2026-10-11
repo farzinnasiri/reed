@@ -79,6 +79,7 @@ export function SessionChangeCard({ actionId, onApplied }: { actionId: Id<'reedS
     try {
       await run();
     } catch (caught) {
+      haptics.warning();
       setError(getErrorMessage(caught));
     } finally {
       setIsBusy(false);
@@ -126,7 +127,7 @@ export function SessionChangeCard({ actionId, onApplied }: { actionId: Id<'reedS
           label="Apply swap"
           onPress={() => void resolve(async () => {
             const result = await confirmSessionAction({ actionId });
-            if (result.status === 'applied') { haptics.success(); onApplied?.(result.sessionId, result.sessionExerciseId); }
+            if (result.status === 'applied') { haptics.saved(); onApplied?.(result.sessionId, result.sessionExerciseId); }
           })}
           variant="soft"
         />

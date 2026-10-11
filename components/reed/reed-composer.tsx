@@ -1,3 +1,4 @@
+import { HapticPressable } from '@/components/ui/haptic-pressable';
 import { useComposerVoiceLevel } from './reed-composer-context';
 import { ReedSheetTextInput } from '@/components/ui/reed-sheet-input';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -187,7 +188,7 @@ function ComposerAction({ onSend, preparing, showSend, voice, waiting }: {
   function press() {
     if (showSend) {
       if (waiting || preparing) {
-        haptics.selection();
+
         if (!reduced) {
           const timing = { duration: reedMotion.composer.refusedMs / 4, easing: reedReanimatedEasing.easeOut };
           shake.set(withSequence(withTiming(reedMotion.composer.refusedX, timing), withTiming(-reedMotion.composer.refusedX, timing), withTiming(reedMotion.composer.refusedX, timing), withTiming(0, timing)));
@@ -199,7 +200,7 @@ function ComposerAction({ onSend, preparing, showSend, voice, waiting }: {
   }
   return (
     <Animated.View style={[styles.composerControl, buttonStyle]}>
-      <Pressable
+      <HapticPressable feedback={showSend && waiting ? false : 'direct'}
         accessibilityHint={showSend && waiting ? 'Reed is answering. Your draft stays here until you send it.' : showSend ? 'Sends your message to Reed.' : 'Record a message, then review its transcript before sending.'}
         accessibilityLabel={showSend ? 'Send message' : recording ? 'Stop voice mode' : transcribing ? 'Transcribing voice' : failed ? 'Retry voice transcription' : 'Start voice mode'}
         accessibilityRole="button"
@@ -217,7 +218,7 @@ function ComposerAction({ onSend, preparing, showSend, voice, waiting }: {
           </View>
         </Animated.View>
         <Animated.View style={[{ position: 'absolute' }, sendStyle]}><Ionicons color={String(theme.colors.accentText)} name="arrow-up" size={20} /></Animated.View>
-      </Pressable>
+      </HapticPressable>
     </Animated.View>
   );
 }

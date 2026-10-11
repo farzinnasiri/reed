@@ -103,6 +103,7 @@ export const styles = StyleSheet.create({
   catalogRowPressable: {
     alignItems: 'center',
     flex: 1,
+    minWidth: 0,
     flexDirection: 'row',
     gap: 12,
     minHeight: 56,
@@ -110,6 +111,7 @@ export const styles = StyleSheet.create({
   },
   catalogRowCopy: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   catalogActionButton: {

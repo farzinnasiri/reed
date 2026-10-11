@@ -36,12 +36,25 @@ export function getNextSessionSetNumber(loggedSets: readonly Pick<Doc<'activityL
   return loggedSets.length + 1;
 }
 
+function sessionSummary(session: ActiveSession) {
+  return {
+    fromPlan: session.sourcePlannedSessionId !== undefined,
+    manualDurationSeconds: session.manualDurationSeconds,
+    sessionId: session._id,
+    startedAt: session.startedAt,
+    status: session.status,
+    userNotes: session.userNotes ?? '',
+    userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
+  };
+}
+
 export function buildCurrentLiveSessionState(args: {
+  imageUrls?: ReadonlyMap<Id<'exerciseCatalog'>, string | null>;
   logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>;
   session: ActiveSession;
   sessionExercises: SessionExerciseWithRecipe[];
 }) {
-  const { logsByExercise, session, sessionExercises } = args;
+  const { imageUrls, logsByExercise, session, sessionExercises } = args;
   const restProcess = session.activeProcess?.kind === 'rest' ? session.activeProcess : null;
   const liveCardioProcess = session.activeProcess?.kind === 'live_cardio' ? session.activeProcess : null;
   const requestedActiveSessionExerciseId = getRequestedActiveSessionExerciseId(session, sessionExercises[0]?._id ?? null);
@@ -62,6 +75,7 @@ export function buildCurrentLiveSessionState(args: {
               : 'idle';
 
     return {
+      imageUrl: imageUrls?.get(sessionExercise.exerciseCatalogId) ?? null,
       exerciseName: sessionExercise.exerciseName,
       exerciseSetupModifiers: sessionExercise.setupModifiers ?? {},
       lastLoggedSummary: lastLog ? summarizeActivityLog(lastLog) : null,
@@ -69,6 +83,7 @@ export function buildCurrentLiveSessionState(args: {
       sets: logs.map(log => ({
         derivedBodyweightKg: log.derivedBodyweightKg ?? null,
         derivedEffectiveLoadKg: log.derivedEffectiveLoadKg ?? null,
+        loggedAt: log.loggedAt,
         metrics: log.metrics,
         restSeconds: log.restSeconds ?? null,
         setLogId: log._id,
@@ -89,14 +104,7 @@ export function buildCurrentLiveSessionState(args: {
       activeCard: { capture: null, liveCardio: null, rest: null },
       cardMode: 'capture',
       restRuntime: null,
-      session: {
-        sessionId: session._id,
-        startedAt: session.startedAt,
-        manualDurationSeconds: session.manualDurationSeconds,
-        status: session.status,
-        userNotes: session.userNotes ?? '',
-        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
-      },
+      session: sessionSummary(session),
       timeline,
     };
   }
@@ -104,7 +112,7 @@ export function buildCurrentLiveSessionState(args: {
   const activeLogs = logsByExercise.get(activeSessionExercise._id) ?? [];
   const previousSet = activeLogs.at(-1);
   const activeRecipeDefinition = getRecipeDefinition(activeSessionExercise.recipeKey);
-  const restRuntime = restProcess ? buildRestCard(restProcess, sessionExercises, logsByExercise) : null;
+  const restRuntime = restProcess ? buildRestCard(restProcess, sessionExercises, logsByExercise, imageUrls) : null;
 
   if (liveCardioProcess && liveCardioProcess.sessionExerciseId === activeSessionExercise._id) {
     const liveCardioSnapshot = getLiveCardioSnapshot(liveCardioProcess);
@@ -112,6 +120,7 @@ export function buildCurrentLiveSessionState(args: {
       activeCard: {
         capture: null,
         liveCardio: {
+          imageUrl: imageUrls?.get(activeSessionExercise.exerciseCatalogId) ?? null,
           elapsedSeconds: liveCardioSnapshot.elapsedSeconds,
           exerciseName: activeSessionExercise.exerciseName,
           isRunning: liveCardioSnapshot.isRunning,
@@ -130,14 +139,7 @@ export function buildCurrentLiveSessionState(args: {
       },
       cardMode: 'live_cardio',
       restRuntime,
-      session: {
-        sessionId: session._id,
-        startedAt: session.startedAt,
-        manualDurationSeconds: session.manualDurationSeconds,
-        status: session.status,
-        userNotes: session.userNotes ?? '',
-        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
-      },
+      session: sessionSummary(session),
       timeline,
     };
   }
@@ -152,6 +154,7 @@ export function buildCurrentLiveSessionState(args: {
   );
   const targetMetrics = activeSessionExercise.targetDefaults?.[activeLogs.length]?.metrics;
   const captureCard = {
+    imageUrl: imageUrls?.get(activeSessionExercise.exerciseCatalogId) ?? null,
     exerciseCatalogId: activeSessionExercise.exerciseCatalogId,
     currentSetNumber: getNextSessionSetNumber(activeLogs),
     exerciseName: activeSessionExercise.exerciseName,
@@ -165,6 +168,7 @@ export function buildCurrentLiveSessionState(args: {
       activeSessionExercise.modifierCapabilities ?? emptyExerciseModifierCapabilities,
     ),
     previousMetrics: captureInput.previousMetrics,
+    initialSetOutcomeDetails: previousSet?.setOutcomeDetails?.inclineAngleDegrees === undefined ? {} : { inclineAngleDegrees: previousSet.setOutcomeDetails.inclineAngleDegrees },
     previousSetSummary: previousSet ? summarizeActivityLog(previousSet) : null,
     processKind: captureInput.processKind,
     recipeKey: captureInput.recipeKey,
@@ -180,14 +184,7 @@ export function buildCurrentLiveSessionState(args: {
       },
       cardMode: 'capture',
       restRuntime,
-      session: {
-        sessionId: session._id,
-        startedAt: session.startedAt,
-        manualDurationSeconds: session.manualDurationSeconds,
-        status: session.status,
-        userNotes: session.userNotes ?? '',
-        userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
-      },
+      session: sessionSummary(session),
       timeline,
     };
   }
@@ -200,14 +197,7 @@ export function buildCurrentLiveSessionState(args: {
     },
     cardMode: 'rest',
     restRuntime,
-    session: {
-      sessionId: session._id,
-      startedAt: session.startedAt,
-        manualDurationSeconds: session.manualDurationSeconds,
-      status: session.status,
-      userNotes: session.userNotes ?? '',
-      userNotesUpdatedAt: session.userNotesUpdatedAt ?? null,
-    },
+    session: sessionSummary(session),
     timeline,
   };
 }
@@ -216,6 +206,7 @@ function buildRestCard(
   restProcess: RestProcess,
   sessionExercises: SessionExerciseWithRecipe[],
   logsByExercise: Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>,
+  imageUrls?: ReadonlyMap<Id<'exerciseCatalog'>, string | null>,
 ) {
   const restExercise = sessionExercises.find(entry => entry._id === restProcess.sessionExerciseId);
   if (!restExercise) {
@@ -228,6 +219,7 @@ function buildRestCard(
   const restSnapshot = getRestSnapshot(restProcess);
 
   return {
+    imageUrl: imageUrls?.get(restExercise.exerciseCatalogId) ?? null,
     durationSeconds: restSnapshot.durationSeconds,
     exerciseName: restExercise.exerciseName,
     isComplete: restSnapshot.isComplete,

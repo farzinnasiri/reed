@@ -43,7 +43,7 @@ export function BodyViewer({ variant, appearance = BASE_APPEARANCE, highlights =
       dom={{ style: { height, width: '100%', backgroundColor: 'transparent' }, scrollEnabled: false, contentInsetAdjustmentBehavior: 'never' }} />
     {status.state !== 'ready' ? <View style={[StyleSheet.absoluteFill, styles.status, { pointerEvents: 'box-none' }]}>
       {status.state === 'loading' ? <ReedText tone="muted" variant="caption">Loading figure…</ReedText> : <>
-        <ReedText tone="muted" variant="caption">Use the area list while the figure is unavailable.</ReedText>
+        <ReedText tone="muted" variant="caption">Figure unavailable.</ReedText>
         <Pressable accessibilityRole="button" onPress={() => { setStatus({ state: 'loading' }); setRetry(value => value + 1); }} style={styles.retry}><ReedText tone="accent">Try again</ReedText></Pressable>
       </>}
     </View> : null}

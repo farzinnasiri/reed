@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { getRestDeadline } from '@/domains/workout/rest';
-import { restCompleteAlert } from '@/lib/rest-alert-definition';
+import { restCompleteAlert, silentRestCompleteAlert } from '@/lib/rest-alert-definition';
+import { useSoundPreference } from '@/design/sound-feedback';
 import { ensureRestTimerAlertPermissionsAsync } from '@/lib/rest-timer-alerts';
 import { useScheduledAlert } from '@/lib/use-scheduled-alert';
 import { startClientWideEvent } from '@/lib/client-observability';
@@ -18,6 +19,7 @@ export function useRestBackgroundAlerts({
   restCard,
 }: UseRestBackgroundAlertsParams) {
   const hasCheckedPermissionRef = useRef(false);
+  const soundPreference = useSoundPreference();
   const loggedAlertKeyRef = useRef<string | null>(null);
   const isRestRunning = cardMode === 'rest' && Boolean(restCard?.isRunning);
   const fireAt = restCard ? getRestDeadline(restCard) : null;
@@ -39,8 +41,8 @@ export function useRestBackgroundAlerts({
 
   useScheduledAlert({
     alertKey,
-    definition: restCompleteAlert,
-    enabled: isRestRunning,
+    definition: soundPreference.enabled ? restCompleteAlert : silentRestCompleteAlert,
+    enabled: isRestRunning && soundPreference.ready,
     fireAt,
     onPermissionDenied,
     payload,

@@ -84,31 +84,48 @@ export const listPresets = query({
   },
 });
 
+const recentQuickLogValidator = v.object({
+  _id: v.id('activityLogs'),
+  exerciseName: v.string(),
+  loggedAt: v.number(),
+  summary: v.string(),
+});
+
 export const listRecentActivity = query({
-  args: { limit: v.optional(v.number()) },
+  args: { limit: v.optional(v.number()), sinceLoggedAt: v.optional(v.number()), beforeLoggedAt: v.optional(v.number()) },
+  returns: v.object({
+    logs: v.array(recentQuickLogValidator),
+    nextBeforeLoggedAt: v.union(v.number(), v.null()),
+  }),
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const limit = Math.max(1, Math.min(args.limit ?? 40, 80));
     const logs = await ctx.db
       .query('activityLogs')
-      .withIndex('by_profile_id_and_source_and_logged_at', q =>
-        q.eq('profileId', profile._id).eq('source', 'quick_log'),
-      )
+      .withIndex('by_profile_id_and_source_and_logged_at', q => {
+        const owned = q.eq('profileId', profile._id).eq('source', 'quick_log');
+        const lower = args.sinceLoggedAt === undefined ? owned : owned.gte('loggedAt', args.sinceLoggedAt);
+        return args.beforeLoggedAt === undefined ? lower : lower.lt('loggedAt', args.beforeLoggedAt);
+      })
       .order('desc')
-      .take(limit);
+      .take(limit + 1);
+    const page = logs.slice(0, limit);
 
-    return await Promise.all(
-      logs.map(async logEntry => {
-        const exercise = await ctx.db.get(logEntry.exerciseCatalogId);
+    return {
+      logs: await Promise.all(
+        page.map(async logEntry => {
+          const exercise = await ctx.db.get(logEntry.exerciseCatalogId);
 
-        return {
-          _id: logEntry._id,
-          exerciseName: exercise?.name ?? 'Quick log',
-          loggedAt: logEntry.loggedAt,
-          summary: summarizeMetrics(logEntry.recipeKey, logEntry.metrics),
-        };
-      }),
-    );
+          return {
+            _id: logEntry._id,
+            exerciseName: exercise?.name ?? 'Quick log',
+            loggedAt: logEntry.loggedAt,
+            summary: summarizeMetrics(logEntry.recipeKey, logEntry.metrics),
+          };
+        }),
+      ),
+      nextBeforeLoggedAt: logs.length > limit ? page.at(-1)?.loggedAt ?? null : null,
+    };
   },
 });
 

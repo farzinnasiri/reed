@@ -1,3 +1,5 @@
+import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BottomSheetFlatList, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -66,17 +68,19 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
   );
   const exercises = useMemo(() => dedupeExercises(search.results as ExerciseItem[]), [search.results]);
   const { loadMore } = search;
-  const lastSettledResultCountRef = useRef(0);
+  const fillingShortPageRef = useRef(false);
   useEffect(() => {
-    lastSettledResultCountRef.current = 0;
+    fillingShortPageRef.current = false;
   }, [committedExerciseSearchText]);
   useEffect(() => {
-    if (search.status !== 'CanLoadMore') return;
-    if (search.results.length === lastSettledResultCountRef.current) {
-      loadMore(40);
+    if (search.status !== 'CanLoadMore') {
+      fillingShortPageRef.current = false;
       return;
     }
-    lastSettledResultCountRef.current = search.results.length;
+    // A filtered page can add one match and still be short. Keep reading until it fills.
+    if (search.results.length >= 40 || fillingShortPageRef.current) return;
+    fillingShortPageRef.current = true;
+    loadMore(40);
   }, [loadMore, search.results.length, search.status]);
   const [metricKind, setMetricKind] = useState<MetricKind>('exerciseTotalReps');
   const [cadence, setCadence] = useState<Cadence>('once');
@@ -113,7 +117,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
 
   async function save() {
     if (!canSave || submission.isWorking) return;
-    await submission.run(async () => {
+    const result = await submission.run(async () => {
       const now = Date.now();
       const durationDays = Math.max(1, Math.round(Number(days)));
       const periods = Math.max(1, Math.round(Number(periodCount)));
@@ -134,8 +138,11 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
         timeZone,
         title: preview,
       });
+      haptics.saved();
+      sounds.saved();
       closeSheet();
     });
+    if (result.status === 'error') haptics.warning();
   }
 
   function closeSheet() {
@@ -329,7 +336,7 @@ export function CreateGoalSheet({ onClose, visible }: { onClose: () => void; vis
               {submission.errorMessage ? (
                 <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{submission.errorMessage}</ReedText>
               ) : null}
-              <ReedButton
+              <ReedButton hapticTap
                 disabled={!canSave || submission.isWorking}
                 label={submission.isWorking ? 'Saving…' : 'Save goal'}
                 onPress={save}

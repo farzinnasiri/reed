@@ -16,6 +16,7 @@ Object.assign(globalThis, {
 });
 
 const card: CaptureCard = {
+  imageUrl: null,
   sessionExerciseId: 'exercise-a' as Id<'liveSessionExercises'>,
   exerciseCatalogId: 'catalog-a' as Id<'exerciseCatalog'>,
   currentSetNumber: 3,
@@ -29,6 +30,7 @@ const card: CaptureCard = {
   processKind: 'rest_after_log',
   previousMetrics: null,
   previousSetSummary: null,
+  initialSetOutcomeDetails: {},
 };
 const oldSet: EditingSet = {
   sessionExerciseId: card.sessionExerciseId,
@@ -68,9 +70,17 @@ test('mounted set editor restores the new-set draft after leaving a historical e
   await act(async () => editor.setEditingSet(oldSet));
   await act(async () => editor.setEditingSet(null));
   assert.equal(editor.metricValues.load, 70);
-  currentCard = { ...card, currentSetNumber: 4, initialMetrics: { load: 75, reps: 5 } };
+  currentCard = { ...card, sessionExerciseId: 'exercise-b' as Id<'liveSessionExercises'>, exerciseCatalogId: 'catalog-b' as Id<'exerciseCatalog'>, initialMetrics: { load: 15, reps: 10 } };
+  await act(async () => root.render(createElement(Editor)));
+  await act(async () => editor.setMetricValues({ load: 17.5, reps: 9 }));
+  currentCard = card;
+  await act(async () => root.render(createElement(Editor)));
+  assert.deepEqual(editor.metricValues, { load: 70, reps: 6 });
+  currentCard = { ...card, currentSetNumber: 4, initialMetrics: { load: 75, reps: 5 }, initialSetOutcomeDetails: { inclineAngleDegrees: 45 } };
   await act(async () => root.render(createElement(Editor)));
   assert.deepEqual(editor.metricValues, { load: 75, reps: 5 });
+  assert.deepEqual(editor.setOutcomeDetails, { inclineAngleDegrees: 45 });
+  assert.equal('failedReps' in editor.setOutcomeDetails, false);
   await act(async () => root.unmount());
 });
 

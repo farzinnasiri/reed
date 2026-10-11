@@ -22,9 +22,13 @@ type WeightStepperProps = {
 export function WeightStepper({ valueKg, onChange, trailing }: WeightStepperProps) {
   const latest = useRef(valueKg);
   useEffect(() => { latest.current = valueKg; }, [valueKg]);
-  const move = useCallback((direction: -1 | 1, steps = 1) => {
-    latest.current = stepWeight(latest.current, direction, steps);
-    onChange(latest.current);
+  const move = useCallback((direction: -1 | 1, steps = 1, continuous = false) => {
+    const next = stepWeight(latest.current, direction, steps);
+    if (next === latest.current) return false;
+    latest.current = next;
+    if (continuous) haptics.detent(); else haptics.selection();
+    onChange(next);
+    return true;
   }, [onChange]);
 
   return (
@@ -40,10 +44,13 @@ export function WeightStepper({ valueKg, onChange, trailing }: WeightStepperProp
   );
 }
 
-function StepButton({ direction, icon, label, move }: { direction: -1 | 1; icon: 'add' | 'remove'; label: string; move: (direction: -1 | 1, steps?: number) => void }) {
+function StepButton({ direction, icon, label, move }: { direction: -1 | 1; icon: 'add' | 'remove'; label: string; move: (direction: -1 | 1, steps?: number, continuous?: boolean) => boolean }) {
   const { theme } = useReedTheme();
   const repeat = useRef<ReturnType<typeof setInterval> | null>(null);
+  const heldChanged = useRef(false);
   const stop = useCallback(() => {
+    if (heldChanged.current) haptics.settled();
+    heldChanged.current = false;
     if (repeat.current !== null) clearInterval(repeat.current);
     repeat.current = null;
   }, []);
@@ -52,10 +59,10 @@ function StepButton({ direction, icon, label, move }: { direction: -1 | 1; icon:
   function startRepeating() {
     stop();
     let repeats = 0;
-    move(direction);
+    heldChanged.current = move(direction, 1, true);
     repeat.current = setInterval(() => {
       repeats += 1;
-      move(direction, repeats > HOLD_ACCELERATE_AFTER ? HOLD_ACCELERATED_STEPS : 1);
+      heldChanged.current = move(direction, repeats > HOLD_ACCELERATE_AFTER ? HOLD_ACCELERATED_STEPS : 1, true) || heldChanged.current;
     }, HOLD_REPEAT_MS);
   }
 
@@ -65,7 +72,7 @@ function StepButton({ direction, icon, label, move }: { direction: -1 | 1; icon:
       accessibilityRole="button"
       delayLongPress={HOLD_DELAY_MS}
       onLongPress={startRepeating}
-      onPress={() => { haptics.selection(); move(direction); }}
+      onPress={() => move(direction)}
       onPressOut={stop}
       style={({ pressed }) => [styles.step, { backgroundColor: theme.colors.surfaceRaised }, getTapScaleStyle(pressed)]}
     >

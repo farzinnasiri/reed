@@ -208,7 +208,6 @@ export function MessageActions({
       setHighlighted(null);
       setAtEnd(false);
       setAnchor({ x, y });
-      haptics.selection();
     },
     [canReact],
   );
@@ -234,7 +233,7 @@ export function MessageActions({
       if (highlight.current === next) return;
       highlight.current = next;
       setHighlighted(next);
-      if (next !== null) haptics.selection();
+      if (next !== null) haptics.detent();
     },
     [padding],
   );

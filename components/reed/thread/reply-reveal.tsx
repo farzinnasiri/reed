@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -7,7 +7,6 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
-import * as haptics from '@/design/haptics';
 import { reedMotion, reedSprings } from '@/design/motion';
 import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
 import { usePresenceActivity } from '../presence/use-presence-activity';
@@ -38,7 +37,6 @@ export function WidgetEnter({
   const [initial] = useState(fresh && active);
   const progress = useSharedValue(initial ? 0 : 1);
   const fade = useSharedValue(initial ? 0 : 1);
-  const landed = useRef(false);
   useEffect(() => {
     if (!initial) return;
     const delay = reduced ? 0 : replyRevealDuration();
@@ -53,18 +51,6 @@ export function WidgetEnter({
     fade.set(
       withDelay(delay, withTiming(1, { duration: reedMotion.reply.reducedMs })),
     );
-    if (!active || landed.current) return;
-    const timer = setTimeout(
-      () => {
-        landed.current = true;
-        haptics.light();
-      },
-      delay +
-        (reduced
-          ? reedMotion.reply.reducedMs
-          : reedMotion.reply.widgetSettleMs),
-    );
-    return () => clearTimeout(timer);
   }, [active, fade, initial, message.text, progress, reduced]);
   const style = useAnimatedStyle(() => ({
     opacity: fade.get(),

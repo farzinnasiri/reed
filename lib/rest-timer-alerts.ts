@@ -1,40 +1,13 @@
-import { restCompleteAlert, type RestCompleteAlertPayload } from '@/lib/rest-alert-definition';
-import {
-  clearBackgroundAlertDefinitionAsync,
-  clearBackgroundAlertAsync,
-  ensureScheduledAlertPermissionsAsync,
-  showImmediateBackgroundAlertAsync,
-} from '@/lib/background-alerts';
-import { playForegroundSoundAsync } from '@/lib/foreground-audio';
+import { restCompleteAlert } from '@/lib/rest-alert-definition';
+import { ensureScheduledAlertPermissionsAsync } from '@/lib/background-alerts';
+import { restCompleted } from '@/design/sounds';
 
 export type RestTimerAlertPermissionStatus = 'granted' | 'permission_denied' | 'unavailable';
-
-let fallbackNotificationId: string | null = null;
 
 export async function ensureRestTimerAlertPermissionsAsync(): Promise<RestTimerAlertPermissionStatus> {
   return ensureScheduledAlertPermissionsAsync(restCompleteAlert);
 }
 
-export async function cancelRestTimerBackgroundAlertsAsync() {
-  await Promise.all([
-    clearBackgroundAlertDefinitionAsync(restCompleteAlert),
-    clearBackgroundAlertAsync(fallbackNotificationId),
-  ]);
-  fallbackNotificationId = null;
-}
-
-export async function playRestTimerCompletionCueAsync(payload: RestCompleteAlertPayload) {
-  const playedLocalCue = restCompleteAlert.foregroundSound
-    ? await playForegroundSoundAsync(restCompleteAlert.foregroundSound).catch(() => false)
-    : false;
-
-  if (playedLocalCue) {
-    return;
-  }
-
-  await cancelRestTimerBackgroundAlertsAsync();
-  fallbackNotificationId = await showImmediateBackgroundAlertAsync({
-    definition: restCompleteAlert,
-    payload,
-  });
+export async function playRestTimerCompletionCueAsync(key: string) {
+  return await restCompleted(key) ? 'local' as const : 'unavailable' as const;
 }

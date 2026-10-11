@@ -11,6 +11,7 @@ import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import { getErrorMessage } from '@/components/workout/workout-surface.utils';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import { useReedTheme } from '@/design/provider';
 import { formatTargets } from './format-targets';
 import { WidgetCard } from './widget-card';
@@ -59,6 +60,7 @@ export function PlanCard({ onOpenSession, onOpenWorkout, plannedSessionId }: Pla
     try {
       await action();
     } catch (caught) {
+      haptics.warning();
       // The subscription has already refreshed the card, so the new targets are what the person
       // sees next; nothing starts until they press the button again.
       setError(getErrorMessage(caught));
@@ -69,15 +71,16 @@ export function PlanCard({ onOpenSession, onOpenWorkout, plannedSessionId }: Pla
 
   const start = () => {
     void run(async () => {
-      await startPlannedSession({ expectedRevision: plan.revision, plannedSessionId });
-      haptics.success();
+      const result = await startPlannedSession({ expectedRevision: plan.revision, plannedSessionId });
+      haptics.light();
+      if (!activeWorkout && result.state === 'started') sounds.workoutStarted(result.sessionId);
       onOpenWorkout();
     });
   };
   // A started plan opens the session it started: the live one while it is open, else its summary.
   const isLive = plan.liveSessionId !== null && activeWorkout?.sessionId === plan.liveSessionId;
   const openStarted = () => {
-    haptics.selection();
+
     if (isLive) onOpenWorkout();
     else if (plan.liveSessionId) onOpenSession(plan.liveSessionId);
   };

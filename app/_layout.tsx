@@ -33,6 +33,9 @@ import { BootSplash } from '@/components/launch/boot-splash';
 import { ReedText } from '@/components/ui/reed-text';
 import { ScreenBackdrop } from '@/components/ui/screen-backdrop';
 import { ReedThemeProvider, useReedTheme } from '@/design/provider';
+import { HapticFeedbackLifecycle } from '@/design/haptic-feedback';
+import { SoundFeedbackLifecycle } from '@/design/sound-feedback';
+import { TimerPreferenceLifecycle } from '@/design/timer-preference';
 import { ReedSafeArea } from '@/design/safe-area';
 import { reedRadii } from '@/design/system';
 import { appEnv } from '@/lib/env';
@@ -79,6 +82,9 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ReedSafeArea>
         <ReedThemeProvider>
+          <HapticFeedbackLifecycle />
+          <SoundFeedbackLifecycle />
+          <TimerPreferenceLifecycle />
           <GestureHandlerRootView style={styles.gestureRoot}>
             <KeyboardProvider>
               <PostHogProvider

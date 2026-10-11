@@ -6,9 +6,7 @@
 
 import type { MascotExpression, MascotFeel, MascotStep } from '../mascot';
 
-export type HoldHaptic = 'light' | 'medium' | 'selection' | 'soft';
-
-export type HoldEggStep = { at: number; expression: MascotExpression; haptic?: HoldHaptic } & MascotFeel;
+export type HoldEggStep = { at: number; expression: MascotExpression } & MascotFeel;
 
 export type HoldEgg = {
   id: string;
@@ -27,8 +25,8 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'lift',
     during: [
       { at: 0, expression: 'focused' },
-      { at: 700, expression: 'effort', speed: 1.5, transition: 'quick', haptic: 'light' },
-      { at: 1700, expression: 'effort', speed: 2.4, transition: 'instant', haptic: 'medium' },
+      { at: 700, expression: 'effort', speed: 1.5, transition: 'quick' },
+      { at: 1700, expression: 'effort', speed: 2.4, transition: 'instant' },
     ],
     outro: [{ expression: 'excited', ms: 700, transition: 'quick' }, { expression: 'relieved', ms: 1500 }],
   },
@@ -37,7 +35,7 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'nap',
     during: [
       { at: 0, expression: 'happy' },
-      { at: 900, expression: 'sleepy', speed: 0.7, transition: 'slow', haptic: 'soft' },
+      { at: 900, expression: 'sleepy', speed: 0.7, transition: 'slow' },
     ],
     outro: [{ expression: 'surprised', ms: 600, transition: 'quick' }, { expression: 'happy', ms: 1300 }],
   },
@@ -45,7 +43,7 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'wink',
     during: [
       { at: 0, expression: 'happy' },
-      { at: 800, expression: 'wink', transition: 'quick', haptic: 'selection' },
+      { at: 800, expression: 'wink', transition: 'quick' },
     ],
     outro: [{ expression: 'wink', ms: 1000 }, { expression: 'happy', ms: 900 }],
   },
@@ -54,8 +52,8 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'squeeze',
     during: [
       { at: 0, expression: 'surprised', transition: 'quick' },
-      { at: 900, expression: 'concerned', haptic: 'light' },
-      { at: 2200, expression: 'dizzy', transition: 'quick', haptic: 'medium' },
+      { at: 900, expression: 'concerned' },
+      { at: 2200, expression: 'dizzy', transition: 'quick' },
     ],
     outro: [{ expression: 'relieved', ms: 1600 }],
   },
@@ -63,7 +61,7 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'inspect',
     during: [
       { at: 0, expression: 'curious' },
-      { at: 1100, expression: 'surprised', transition: 'quick', haptic: 'selection' },
+      { at: 1100, expression: 'surprised', transition: 'quick' },
       { at: 2000, expression: 'curious' },
     ],
     outro: [{ expression: 'happy', ms: 1500 }],
@@ -72,8 +70,8 @@ export const HOLD_EGGS: HoldEgg[] = [
     id: 'flex',
     during: [
       { at: 0, expression: 'ready' },
-      { at: 900, expression: 'proud', haptic: 'soft' },
-      { at: 2200, expression: 'excited', transition: 'quick', haptic: 'medium' },
+      { at: 900, expression: 'proud' },
+      { at: 2200, expression: 'excited', transition: 'quick' },
     ],
     outro: [{ expression: 'proud', ms: 1600 }],
   },
@@ -85,14 +83,13 @@ export function pickHoldEgg(random: () => number, previousId?: string): HoldEgg 
   return choices[Math.min(choices.length - 1, Math.floor(random() * choices.length))];
 }
 
-/** The egg's timeline as mascot steps, plus the haptic taps to fire along the way. */
-export function holdPlayback(egg: HoldEgg): { steps: MascotStep[]; taps: { at: number; kind: HoldHaptic }[] } {
-  const steps = egg.during.map(({ at: _at, haptic: _haptic, expression, speed, transition }, index): MascotStep => ({
+/** The egg's visual timeline. One threshold cue is owned by MascotTouch. */
+export function holdPlayback(egg: HoldEgg): { steps: MascotStep[] } {
+  const steps = egg.during.map(({ expression, speed, transition }, index): MascotStep => ({
     expression,
     ms: (egg.during[index + 1]?.at ?? egg.during[index].at + HOLD_LAST_STEP_MS) - egg.during[index].at,
     speed,
     transition,
   }));
-  const taps = egg.during.flatMap(step => step.haptic ? [{ at: step.at, kind: step.haptic }] : []);
-  return { steps, taps };
+  return { steps };
 }

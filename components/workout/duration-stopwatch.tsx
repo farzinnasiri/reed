@@ -1,3 +1,6 @@
+import * as haptics from '@/design/haptics';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { HapticPressable } from '@/components/ui/haptic-pressable';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Pressable, View } from 'react-native';
 import {
@@ -8,6 +11,7 @@ import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
 import { useRunningTicker } from './use-running-ticker';
+import { useStartCountdown } from './use-start-countdown';
 
 /** Measures this activity only. It never changes the workout's total duration. */
 export function DurationStopwatch({
@@ -23,6 +27,13 @@ export function DurationStopwatch({
     startedAt: null,
   });
   const [now, setNow] = useState(Date.now);
+  const [hasStarted, setHasStarted] = useState(false);
+  const countdown = useStartCountdown(at => {
+    setNow(at);
+    setHasStarted(true);
+    setState(current => ({ ...current, startedAt: at }));
+  }, () => onRunningChange(false));
+  const preparing = countdown.remaining !== null;
   const running = state.startedAt !== null;
   const seconds = stopwatchSeconds(state, now);
   const tick = useCallback(() => setNow(Date.now()), []);
@@ -34,6 +45,8 @@ export function DurationStopwatch({
     return () => subscription.remove();
   }, [tick]);
   function toggle() {
+    haptics.toggle(!running && !preparing);
+    if (preparing) { countdown.cancel(); return; }
     const at = Date.now();
     setNow(at);
     if (running) {
@@ -42,11 +55,15 @@ export function DurationStopwatch({
       onDuration(elapsed);
       onRunningChange(false);
     } else {
-      setState({ ...state, startedAt: at });
       onRunningChange(true);
+      if (hasStarted) setState({ ...state, startedAt: at });
+      else countdown.start();
     }
   }
   function reset() {
+    if (preparing || running || seconds > 0) haptics.selection();
+    countdown.cancel();
+    setHasStarted(false);
     setState({ accumulatedSeconds: 0, startedAt: null });
     onDuration(0);
     onRunningChange(false);
@@ -61,16 +78,16 @@ export function DurationStopwatch({
         }}
       >
         <ReedText
-          accessibilityLabel={`Activity timer ${seconds} seconds`}
+          accessibilityLabel={preparing ? `Ready, ${countdown.remaining}` : `Activity timer ${seconds} seconds`}
           variant="stat"
-          style={{ minWidth: 90 }}
+          style={{ minWidth: 90, color: preparing ? theme.colors.dataWarm : theme.colors.ink }}
         >
-          {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}
+          {preparing ? String(countdown.remaining) : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`}
         </ReedText>
-        <Pressable
+        <HapticPressable feedback="direct"
           accessibilityRole="button"
           accessibilityLabel={
-            running
+            preparing ? 'Cancel start countdown' : running
               ? 'Pause activity timer'
               : seconds
                 ? 'Resume activity timer'
@@ -79,19 +96,18 @@ export function DurationStopwatch({
           onPress={toggle}
           style={({ pressed }) => [
             {
-              minHeight: 44,
-              paddingHorizontal: theme.spacing.sm,
+              height: 44,
+              width: 44,
+              alignItems: 'center',
               justifyContent: 'center',
               backgroundColor: theme.colors.surfaceRaised,
-              borderRadius: theme.radii.sm,
+              borderRadius: theme.radii.pill,
             },
             getTapScaleStyle(pressed),
           ]}
         >
-          <ReedText variant="bodyStrong">
-            {running ? 'Pause' : seconds ? 'Resume' : 'Start'}
-          </ReedText>
-        </Pressable>
+          <Ionicons name={preparing ? 'stop' : running ? 'pause' : 'play'} size={22} color={String(theme.colors.ink)} />
+        </HapticPressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Reset activity timer"
@@ -99,17 +115,19 @@ export function DurationStopwatch({
           style={({ pressed }) => [
             {
               minHeight: 44,
+              minWidth: 44,
+              alignItems: 'center',
               justifyContent: 'center',
               paddingHorizontal: theme.spacing.xs,
             },
             getTapScaleStyle(pressed),
           ]}
         >
-          <ReedText tone="muted">Reset</ReedText>
+          <Ionicons name="refresh-outline" size={22} color={String(theme.colors.inkMuted)} />
         </Pressable>
       </View>
       <ReedText tone="muted" variant="caption">
-        Pause to use this time.
+        {preparing ? 'Ready' : 'Pause to use this time.'}
       </ReedText>
     </View>
   );

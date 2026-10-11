@@ -5,7 +5,6 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import * as haptics from '@/design/haptics';
 import { useReedTheme } from '@/design/provider';
 import { reedOnboardingMetrics, reedRadii } from '@/design/system';
 import { usePressAnimation } from '@/design/use-press-animation';
@@ -94,7 +93,6 @@ function DayPill({ active, label, onPress, state }: { active: boolean; label: st
       accessibilityState={{ selected: active }}
       accessibilityRole="button"
       onPress={() => {
-        haptics.selection();
         reed?.act('tick');
         onPress();
       }}

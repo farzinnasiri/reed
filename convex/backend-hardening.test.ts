@@ -422,3 +422,44 @@ test('an equipment filter keeps the picker cursor when the page has no matches',
   expect(page.isDone).toBe(false);
   expect(page.continueCursor).toBeTruthy();
 });
+
+test('catalog artwork reaches the picker and owned live/past sessions; absent or deleted storage stays nullable', async () => {
+  const { t, profileId, viewer } = await owner();
+  const { exerciseCatalogId, emptyId, storageId, url, sessionId } = await t.run(async ctx => {
+    const storageId = await ctx.storage.store(new Blob(['artwork'], { type: 'image/webp' }));
+    const exerciseCatalogId = await ctx.db.insert('exerciseCatalog', { ...catalog('Illustrated press', ['dumbbell']), imageStorageId: storageId });
+    const emptyId = await ctx.db.insert('exerciseCatalog', catalog('Unillustrated press', ['dumbbell']));
+    const sessionId = await ctx.db.insert('liveSessions', { profileId, status: 'active', startedAt: 1, activeProcess: null });
+    for (const [position, id] of [exerciseCatalogId, emptyId, exerciseCatalogId].entries()) {
+      await ctx.db.insert('liveSessionExercises', { sessionId, profileId, exerciseCatalogId: id, exerciseName: 'Press', exerciseClass: 'strength', position, addedAt: 1, recipeKey: 'standard_load' });
+    }
+    return { exerciseCatalogId, emptyId, storageId, url: await ctx.storage.getUrl(storageId), sessionId };
+  });
+  const picker = await viewer.query(api.exerciseCatalog.searchForPicker, { paginationOpts: { cursor: null, numItems: 10 } });
+  expect(picker.page.find(row => row._id === exerciseCatalogId)?.imageUrl).toBe(url);
+  expect(picker.page.find(row => row._id === emptyId)?.imageUrl).toBeNull();
+  const live = await viewer.query(api.liveSessions.getCurrent, {});
+  expect(live?.timeline.map(row => row.imageUrl)).toEqual([url, null, url]);
+  expect(live?.activeCard.capture?.imageUrl).toBe(url);
+  await t.run(ctx => ctx.db.patch(sessionId, { status: 'ended', endedAt: 2 }));
+  const ended = await viewer.query(api.liveSessions.getEndedTimeline, { sessionId });
+  expect(ended?.timeline.map(row => row.imageUrl)).toEqual([url, null, url]);
+  await t.run(ctx => ctx.db.insert('profiles', { authUserId: 'test|outsider', email: 'outsider@example.test', updatedAt: 1 }));
+  expect(await t.withIdentity({ tokenIdentifier: 'test|outsider', email: 'outsider@example.test' }).query(api.liveSessions.getEndedTimeline, { sessionId })).toBeNull();
+  await t.run(ctx => ctx.storage.delete(storageId));
+  expect((await viewer.query(api.liveSessions.getEndedTimeline, { sessionId }))?.timeline.map(row => row.imageUrl)).toEqual([null, null, null]);
+});
+
+test('new set defaults carry bench angle but never a failed attempt or partial range', async () => {
+  const { t, profileId, viewer } = await owner();
+  await t.run(async ctx => {
+    const exerciseCatalogId = await ctx.db.insert('exerciseCatalog', catalog('Incline curl', ['dumbbell']));
+    const sessionId = await ctx.db.insert('liveSessions', { profileId, status: 'active', startedAt: 1, activeProcess: null });
+    const sessionExerciseId = await ctx.db.insert('liveSessionExercises', { sessionId, profileId, exerciseCatalogId, exerciseName: 'Incline curl', exerciseClass: 'strength', position: 0, addedAt: 1, recipeKey: 'standard_load', modifierCapabilities: { setup: ['inclineAngle'], setOutcome: ['rangeOfMotion', 'failure'] } });
+    await ctx.db.insert('activityLogs', { profileId, sessionId, sessionExerciseId, exerciseCatalogId, recipeKey: 'standard_load', source: 'live_session', loggedAt: 2, setNumber: 1, warmup: false, metrics: { load: 10, reps: 8, rpe: 10 }, setOutcomeDetails: { inclineAngleDegrees: 45, rangeOfMotion: 'bottom_partial', failedReps: 1 } });
+  });
+  const session = await viewer.query(api.liveSessions.getCurrent, {});
+  expect(session?.activeCard.capture?.initialSetOutcomeDetails).toEqual({ inclineAngleDegrees: 45 });
+  expect(session?.timeline[0].sets[0].setOutcomeDetails).toEqual({ inclineAngleDegrees: 45, rangeOfMotion: 'bottom_partial', failedReps: 1 });
+  expect(session?.timeline[0].mainMuscleGroups).toEqual(['chest']);
+});

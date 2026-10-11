@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
@@ -34,7 +34,7 @@ export function HoldToCommit({ onCommit, progress }: { onCommit: () => void; pro
     doneRef.current = true;
     clearStages();
     setDone(true);
-    haptics.success();
+    haptics.soft();
     reed?.react('proud', 2200);
     reed?.act('bounce');
     onCommit();
@@ -43,11 +43,9 @@ export function HoldToCommit({ onCommit, progress }: { onCommit: () => void; pro
   const begin = () => {
     if (doneRef.current) return;
     const at = (fraction: number, run: () => void) => stages.current.push(setTimeout(run, motion.holdMs * fraction));
-    haptics.light();
     reed?.react('focused', motion.holdMs);
-    at(0.3, () => { haptics.selection(); reed?.play([{ expression: 'effort', ms: motion.holdMs, speed: 1.4, transition: 'quick' }]); });
-    at(0.62, () => { haptics.light(); reed?.react('excited', motion.holdMs); });
-    at(0.88, () => haptics.medium());
+    at(0.3, () => { reed?.play([{ expression: 'effort', ms: motion.holdMs, speed: 1.4, transition: 'quick' }]); });
+    at(0.62, () => { reed?.react('excited', motion.holdMs); });
     progress.set(withTiming(1, { duration: motion.holdMs, easing: Easing.linear }, finished => {
       if (finished) scheduleOnRN(commit);
     }));

@@ -14,6 +14,7 @@ import { TodayGlow } from '@/components/reed/today/today-glow';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import { reedLayoutTransitions, reedMotion, reedSprings } from '@/design/motion';
 import { ReedOnboardingThemeProvider, useReedTheme } from '@/design/provider';
 import { reedOnboardingMetrics, reedRadii, withColorAlpha } from '@/design/system';
@@ -232,7 +233,10 @@ function OnboardingContent({ flow, onComplete, onSignIn, welcomeOnly, replayIntr
     setSaveError(null);
     try {
       await onComplete(draft);
+      haptics.success();
+      sounds.onboardingCompleted();
     } catch {
+      haptics.warning();
       setSaveError("Couldn't save your answers. Please try again.");
     } finally {
       savingRef.current = false;
@@ -244,16 +248,13 @@ function OnboardingContent({ flow, onComplete, onSignIn, welcomeOnly, replayIntr
   const showSkip = isSkippable(step) || step === 'letter';
   const primary = () => {
     if (step === 'welcome' && welcomeOnly) {
-      haptics.light();
       void finish();
       return;
     }
     if (step === 'letter' || (step === 'review' && onCancel)) {
-      haptics.success();
       void finish();
       return;
     }
-    haptics.light();
     beforeNext.current?.();
     next();
   };
@@ -266,7 +267,6 @@ function OnboardingContent({ flow, onComplete, onSignIn, welcomeOnly, replayIntr
     commitTimer.current = setTimeout(() => { void finish(); }, reedMotion.onboarding.commitHoldMs);
   };
   const skip = () => {
-    haptics.selection();
     if (step === 'letter') void finish();
     else {
       if (step === 'notes') update({ notes: '' });
@@ -405,8 +405,7 @@ function TopBar({ onBack, showBack, step, steps }: { onBack: () => void; showBac
         disabled={!showBack}
         hitSlop={8}
         onPress={() => {
-          haptics.selection();
-          onBack();
+                onBack();
         }}
         style={[styles.side, { opacity: showBack ? 1 : 0 }]}
       >

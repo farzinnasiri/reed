@@ -1,8 +1,8 @@
+import { usePickerHaptics } from '@/design/haptic-feedback';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
-import * as haptics from '@/design/haptics';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { BODY_SHAPES, BODY_SHAPE_IMAGES, type BodyShape, type Sex } from './content';
@@ -12,6 +12,7 @@ const PAGE_IMAGE_HEIGHT = 292;
 /** Swipe through body shapes with their approximate body fat; the one you stop on is the answer. */
 export function ShapeCarousel({ onChange, sex, value }: { onChange: (shape: BodyShape) => void; sex: Sex | null; value: BodyShape | null }) {
   const { theme } = useReedTheme();
+  const pickerFeedback = usePickerHaptics();
   const scroll = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const startIndex = Math.max(0, BODY_SHAPES.findIndex(shape => shape.value === (value ?? 'average_lean')));
@@ -39,7 +40,7 @@ export function ShapeCarousel({ onChange, sex, value }: { onChange: (shape: Body
     last.current = index;
     setActive(index);
     if (!ready.current) return;
-    haptics.selection();
+    pickerFeedback.preview();
     onChange(BODY_SHAPES[index].value);
   };
 

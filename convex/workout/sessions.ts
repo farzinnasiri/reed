@@ -1,3 +1,4 @@
+import { presentSession } from '../../domains/workout/session-presentation';
 import { validateManualWorkoutDuration } from '../../domains/workout/session-duration';
 import { saveSessionWhisper } from '../reedSessionWhispers';
 import { patchSessionStructure } from './structure';
@@ -73,6 +74,7 @@ export const getCurrent = query({
     }
 
     const catalogRows = await Promise.all(sessionExercises.map(entry => ctx.db.get(entry.exerciseCatalogId)));
+    const imageUrls = await resolveExerciseImageUrls(ctx, catalogRows);
     const statusStrip = buildLiveSessionStatusStrip({
       logs: allLogs.flatMap(log => log.sessionExerciseId ? [{
         derivedBodyweightKg: log.derivedBodyweightKg ?? null,
@@ -108,11 +110,15 @@ export const getCurrent = query({
       durationMs: session.manualDurationSeconds === undefined ? undefined : session.manualDurationSeconds * 1000,
     });
     const state = buildCurrentLiveSessionState({
+      imageUrls,
       logsByExercise,
       session,
       sessionExercises,
     });
-    return { ...state, statusStrip };
+    return { ...state, statusStrip, timeline: state.timeline.map((row, index) => {
+      const catalog = catalogRows[index];
+      return { ...row, mainMuscleGroups: catalog?.mainMuscleGroups ?? [], secondaryMuscleGroups: catalog?.secondaryMuscleGroups ?? [] };
+    }) };
   },
 });
 
@@ -231,13 +237,25 @@ export const getEndedTimeline = query({
     const logsByExercise = new Map<Id<'liveSessionExercises'>, Doc<'activityLogs'>[]>(
       sessionExercises.map((sessionExercise, index) => [sessionExercise._id, allLogs[index]]),
     );
+    const [catalogRows, plan] = await Promise.all([
+      Promise.all(sessionExercises.map(exercise => ctx.db.get(exercise.exerciseCatalogId))),
+      session.sourcePlannedSessionId ? ctx.db.get(session.sourcePlannedSessionId) : null,
+    ]);
+    const imageUrls = await resolveExerciseImageUrls(ctx, catalogRows);
     const state = buildCurrentLiveSessionState({
+      imageUrls,
       logsByExercise,
       session: { ...session, activeProcess: null, activeSessionExerciseId: undefined, status: 'active' },
       sessionExercises,
     });
-
+    const presentation = presentSession(sessionExercises.map((exercise, index) => ({
+      exerciseName: exercise.exerciseName,
+      setCount: allLogs[index].length,
+      isCardio: catalogRows[index]?.isCardio ?? false,
+      mainMuscleGroups: catalogRows[index]?.mainMuscleGroups ?? [],
+    })), plan?.title);
     return {
+      presentation,
       endedAt: session.endedAt ?? session.startedAt,
       exerciseCount: state.timeline.length,
       startedAt: session.startedAt,
@@ -255,6 +273,7 @@ export const getEndedTimeline = query({
 export const listEndedSummaries = query({
   args: {
     beforeStartedAt: v.optional(v.number()),
+    sinceStartedAt: v.optional(v.number()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -263,12 +282,12 @@ export const listEndedSummaries = query({
     const beforeStartedAt = args.beforeStartedAt ?? Date.now() + 1;
     const endedSessions = await ctx.db
       .query('liveSessions')
-      .withIndex('by_profile_id_and_status_and_started_at', q =>
-        q
-          .eq('profileId', profile._id)
-          .eq('status', 'ended')
-          .lt('startedAt', beforeStartedAt),
-      )
+      .withIndex('by_profile_id_and_status_and_started_at', q => {
+        const owned = q.eq('profileId', profile._id).eq('status', 'ended');
+        return args.sinceStartedAt === undefined
+          ? owned.lt('startedAt', beforeStartedAt)
+          : owned.gte('startedAt', args.sinceStartedAt).lt('startedAt', beforeStartedAt);
+      })
       .order('desc')
       .take(limit + 1);
     const pageSessions = endedSessions.slice(0, limit);
@@ -294,6 +313,38 @@ export const listEndedSummaries = query({
       nextBeforeStartedAt: endedSessions.length > limit ? pageSessions.at(-1)?.startedAt ?? null : null,
       summaries,
     };
+  },
+});
+
+/** Removes an owned historical workout; coach messages remain a historical conversation. */
+export const deleteEndedSession = mutation({
+  args: { sessionId: v.id('liveSessions') },
+  returns: v.null(),
+  handler: async (ctx, { sessionId }) => {
+    const profile = await requireViewerProfile(ctx);
+    const session = await ctx.db.get(sessionId);
+    if (!session || session.profileId !== profile._id) throw new ConvexError('Session not found.');
+    if (session.status !== 'ended') throw new ConvexError('Finish this session before deleting it.');
+    const [logs, exercises] = await Promise.all([
+      ctx.db.query('activityLogs').withIndex('by_session_id_and_set_number', q => q.eq('sessionId', sessionId)).take(2001),
+      ctx.db.query('liveSessionExercises').withIndex('by_session_id_and_position', q => q.eq('sessionId', sessionId)).take(201),
+    ]);
+    if (logs.length > 2000 || exercises.length > 200) throw new ConvexError('This session is too large to delete here.');
+    for (const log of logs) await ctx.db.delete(log._id);
+    for (const exercise of exercises) await ctx.db.delete(exercise._id);
+    if (session.sourcePlannedSessionId) {
+      const plan = await ctx.db.get(session.sourcePlannedSessionId);
+      if (plan?.profileId === profile._id && plan.liveSessionId === sessionId) {
+        // A deleted workout must not reopen its plan or leave a link to a missing session.
+        await ctx.db.patch(plan._id, { liveSessionId: undefined, status: 'dismissed', updatedAt: Date.now() });
+      }
+    }
+    await ctx.db.delete(sessionId);
+    // Goal evidence reads every log in each goal window. That stays out of this delete.
+    await ctx.scheduler.runAfter(0, internal.trainingTargets.refreshAfterSessionDeleted, { profileId: profile._id });
+    await ctx.scheduler.runAfter(0, internal.reedJourney.rebuildLatest, { profileId: profile._id, trigger: 'session_ended' });
+    await ctx.scheduler.runAfter(0, internal.profileInsight.markStale, { profileId: profile._id, reason: 'session_ended' });
+    return null;
   },
 });
 
@@ -664,11 +715,20 @@ export const selectExercise = mutation({
 
 export const logSet = mutation({
   args: {
+    afterSet: v.optional(v.union(v.literal('rest'), v.literal('nextExercise'))),
     metrics: setMetricsValidator,
     setOutcomeDetails: v.optional(setOutcomeDetailsValidator),
     sessionExerciseId: v.id('liveSessionExercises'),
     warmup: v.boolean(),
   },
+  returns: v.object({
+    setLogId: v.id('activityLogs'),
+    loggedAt: v.number(),
+    enteredRest: v.boolean(),
+    nextSetNumber: v.number(),
+    nextSessionExerciseId: v.union(v.id('liveSessionExercises'), v.null()),
+    summary: v.string(),
+  }),
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
     const session = await requireActiveSession(ctx, profile._id);
@@ -691,7 +751,15 @@ export const logSet = mutation({
       .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
       .collect();
     const setNumber = existingLogs.length + 1;
-    const shouldOpenRest = recipeDefinition.processKind === 'rest_after_log';
+    const nextExercise = args.afterSet === 'nextExercise'
+      ? await ctx.db.query('liveSessionExercises')
+        .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id).gt('position', sessionExercise.position))
+        .first()
+      : null;
+    if (nextExercise && nextExercise.profileId !== profile._id) {
+      throw new ConvexError('That exercise is not part of the current session.');
+    }
+    const shouldOpenRest = args.afterSet !== 'nextExercise' && recipeDefinition.processKind === 'rest_after_log';
     const loggedAt = Date.now();
     const restSeconds = sessionExercise.targetDefaults?.[existingLogs.length]?.restSeconds ?? DEFAULT_REST_SECONDS;
 
@@ -721,10 +789,10 @@ export const logSet = mutation({
             nextSetNumber: setNumber + 1,
             remainingSeconds: restSeconds,
             sessionExerciseId: sessionExercise._id,
-            startedAt: Date.now(),
+            startedAt: loggedAt,
           }
         : null,
-      activeSessionExerciseId: sessionExercise._id,
+      activeSessionExerciseId: nextExercise?._id ?? sessionExercise._id,
     });
 
     return {
@@ -732,6 +800,7 @@ export const logSet = mutation({
       loggedAt,
       enteredRest: shouldOpenRest,
       nextSetNumber: setNumber + 1,
+      nextSessionExerciseId: nextExercise?._id ?? null,
       summary: summarizeSetMetrics(sessionExercise.recipeKey, normalizedMetrics),
     };
   },
@@ -1172,20 +1241,32 @@ async function patchAssistanceSetupFromMetrics(
   });
 }
 
+/** Session thumbnails and movement guides preserve the original illustration's white canvas. */
+async function resolveExerciseImageUrls(ctx: QueryCtx, catalogRows: (Doc<'exerciseCatalog'> | null)[]) {
+  const unique = new Map(catalogRows.filter((row): row is Doc<'exerciseCatalog'> => row !== null).map(row => [row._id, row]));
+  return new Map(await Promise.all([...unique.values()].map(async row => [
+    row._id,
+    row.imageStorageId ? await ctx.storage.getUrl(row.imageStorageId) : null,
+  ] as const)));
+}
+
 async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessions'>) {
   const sessionExercises = (await ctx.db
     .query('liveSessionExercises')
     .withIndex('by_session_id_and_position', q => q.eq('sessionId', sessionId))
     .collect()) as Doc<'liveSessionExercises'>[];
 
-  const allLogs = await Promise.all(
-    sessionExercises.map(sessionExercise =>
-      ctx.db
-        .query('activityLogs')
-        .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
-        .collect(),
+  const [allLogs, catalogRows] = await Promise.all([
+    Promise.all(
+      sessionExercises.map(sessionExercise =>
+        ctx.db
+          .query('activityLogs')
+          .withIndex('by_session_exercise_id_and_set_number', q => q.eq('sessionExerciseId', sessionExercise._id))
+          .collect(),
+      ),
     ),
-  );
+    Promise.all(sessionExercises.map(sessionExercise => ctx.db.get(sessionExercise.exerciseCatalogId))),
+  ]);
 
   const exercises = sessionExercises.map((sessionExercise, index) => {
     const logs = allLogs[index];
@@ -1197,8 +1278,12 @@ async function buildEndedSessionSummary(ctx: QueryCtx, sessionId: Id<'liveSessio
     };
   });
 
-  return {
-    exerciseCount: exercises.length,
-    exercises,
-  };
+  const session = await ctx.db.get(sessionId);
+  const plan = session?.sourcePlannedSessionId ? await ctx.db.get(session.sourcePlannedSessionId) : null;
+  const presentation = presentSession(exercises.map((exercise, index) => ({
+    ...exercise,
+    isCardio: catalogRows[index]?.isCardio ?? false,
+    mainMuscleGroups: catalogRows[index]?.mainMuscleGroups ?? [],
+  })), plan?.title);
+  return { exerciseCount: exercises.length, exercises, presentation };
 }

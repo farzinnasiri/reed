@@ -7,6 +7,7 @@ import type { AddExerciseSheetData } from './workout-surface.types';
 export type AddExerciseFilterSectionKey = 'muscles' | 'equipment';
 
 const SEARCH_QUERY_DEBOUNCE_MS = 180;
+const PICKER_PAGE_SIZE = 40;
 
 export function useAddExerciseSearchSession(isOpen: boolean) {
   const [searchText, setSearchText] = useState('');
@@ -31,26 +32,28 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
           query: debouncedSearchText || undefined,
         }
       : 'skip',
-    { initialNumItems: 40 },
+    { initialNumItems: PICKER_PAGE_SIZE },
   );
   const [stableResults, setStableResults] = useState<AddExerciseSheetData['results']>([]);
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const { loadMore } = search;
-  const lastSettledResultCountRef = useRef(0);
+  const fillingShortPageRef = useRef(false);
   const searchSignature = `${debouncedSearchText}|${selectedFocusAreas.join(',')}|${selectedTargetAreas.join(',')}|${selectedEquipment.join(',')}`;
   const [previousSearchSignature, setPreviousSearchSignature] = useState(searchSignature);
   if (previousSearchSignature !== searchSignature) {
     setPreviousSearchSignature(searchSignature);
     setHasCompletedSearch(false);
   }
-  useEffect(() => { lastSettledResultCountRef.current = 0; }, [searchSignature]);
+  useEffect(() => { fillingShortPageRef.current = false; }, [searchSignature]);
   useEffect(() => {
-    if (search.status !== 'CanLoadMore') return;
-    if (search.results.length === lastSettledResultCountRef.current) {
-      loadMore(40);
+    if (search.status !== 'CanLoadMore') {
+      fillingShortPageRef.current = false;
       return;
     }
-    lastSettledResultCountRef.current = search.results.length;
+    // A filtered page can add one match and still be short. Keep reading until it fills.
+    if (search.results.length >= PICKER_PAGE_SIZE || fillingShortPageRef.current) return;
+    fillingShortPageRef.current = true;
+    loadMore(PICKER_PAGE_SIZE);
   }, [loadMore, search.results.length, search.status]);
   if (search.status !== 'LoadingFirstPage' && stableResults !== search.results) {
     setStableResults(search.results);
@@ -109,7 +112,7 @@ export function useAddExerciseSearchSession(isOpen: boolean) {
     isLoadingMoreResults: search.status === 'LoadingMore',
     loadMoreResults: () => {
       if (search.status === 'CanLoadMore') {
-        loadMore(40);
+        loadMore(PICKER_PAGE_SIZE);
       }
     },
     muscleSearchText,

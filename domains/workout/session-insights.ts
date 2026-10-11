@@ -62,7 +62,7 @@ type HistoricalPerformanceEntry = {
 
 type MeasurableModality = 'cardio' | 'holds' | 'load';
 type SetModality = MeasurableModality | 'unmeasured';
-type WorkSplit = 'legs' | 'other' | 'pull' | 'push';
+export type WorkSplit = 'legs' | 'other' | 'pull' | 'push';
 
 type MetricChip = {
   label: string;
@@ -936,7 +936,7 @@ function isHoldRecipe(recipeKey: RecipeKey) {
   return recipeKey === 'hold' || recipeKey === 'weighted_hold' || recipeKey === 'unilateral_duration_rpe_pair';
 }
 
-function resolveWorkSplit(exercise: SessionInsightsExercise): WorkSplit {
+export function resolveWorkSplit(exercise: Pick<SessionInsightsExercise, 'mainMuscleGroups' | 'movementPatterns'>): WorkSplit {
   const movementPatterns = exercise.movementPatterns.map(item => item.trim().toLowerCase());
   const muscleGroups = exercise.mainMuscleGroups.map(item => item.trim().toLowerCase());
 

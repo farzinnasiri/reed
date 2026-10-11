@@ -1,3 +1,4 @@
+import { effortLabel } from '../domains/workout/effort';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { getLiveCardioElapsedSeconds } from '../domains/workout/liveCardio';
@@ -22,4 +23,13 @@ test('live cardio derives elapsed time without a React root ticker', () => {
     getLiveCardioElapsedSeconds({ elapsedSeconds: 30, isRunning: true, lastResumedAt: 10_000 }, 25_000),
     45,
   );
+});
+
+// Timed work must never imply a measurable number of repetitions remaining.
+test('effort describes repetition estimates separately from timed and cardio work', () => {
+  assert.equal(effortLabel(8, 'strength'), '2 reps left');
+  assert.equal(effortLabel(8.5, 'strength'), '1–2 reps left');
+  assert.equal(effortLabel(10, 'strength'), '0 reps left');
+  assert.equal(effortLabel(8, 'hold'), 'Hard');
+  assert.equal(effortLabel(10, 'cardio'), 'Max effort');
 });

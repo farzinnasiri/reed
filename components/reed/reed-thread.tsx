@@ -2,7 +2,6 @@ import { sessionDurationSeconds } from '@/domains/workout/session-duration';
 import { MessageActions } from './message-actions';
 import { BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import * as haptics from '@/design/haptics';
 import { SCREEN_CONTENT_HORIZONTAL_MARGIN, reedThreadMetrics } from '@/design/system';
 import { memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { FlatList, Image, Platform, Pressable, StyleSheet, View } from 'react-native';
@@ -305,7 +304,7 @@ function MessageRow({ fresh, message, onOpenSession, onRetryAssistantMessage, on
       onOpenSession={onOpenSession}
       onRetry={() => {
         onRetryAssistantMessage(message);
-        haptics.selection();
+
       }}
     />
   );
@@ -317,7 +316,7 @@ function UserMessage({ fresh, message, offline, onRetry }: { fresh: boolean; mes
   return (
     <Animated.View style={[styles.messageRowRight, entry]}>
       <View style={styles.userMessageGroup}>
-        <Pressable accessibilityRole={message.status === 'failed' ? 'button' : undefined} accessibilityLabel={message.status === 'failed' ? 'Retry unsent message' : undefined} disabled={message.status !== 'failed'} onPress={() => { haptics.selection(); onRetry(); }}>
+        <Pressable accessibilityRole={message.status === 'failed' ? 'button' : undefined} accessibilityLabel={message.status === 'failed' ? 'Retry unsent message' : undefined} disabled={message.status !== 'failed'} onPress={() => {  onRetry(); }}>
           <View style={[styles.messageBubble, { backgroundColor: theme.colors.surfaceRaised, opacity: message.status === 'failed' ? 0.6 : 1 }]}>
             <MessageAttachments attachments={message.attachments} />
             {message.text.trim().length > 0 ? <ReedText variant="body">{message.text}</ReedText> : null}

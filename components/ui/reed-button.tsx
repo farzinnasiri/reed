@@ -1,5 +1,6 @@
+import { HapticPressable } from './haptic-pressable';
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type ColorValue, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ColorValue, type PressableProps, type StyleProp, type ViewStyle } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
@@ -11,6 +12,8 @@ type ReedButtonVariant = 'primary' | 'secondary' | 'ghost' | 'soft' | 'quiet';
 
 type ReedButtonProps = Omit<PressableProps, 'style'> & {
   label: string;
+  /** iPhone PWA tap acknowledgement; results are emitted by the action handler. */
+  hapticTap?: boolean;
   leading?: ReactNode;
   style?: StyleProp<ViewStyle>;
   variant?: ReedButtonVariant;
@@ -18,6 +21,7 @@ type ReedButtonProps = Omit<PressableProps, 'style'> & {
 
 export function ReedButton({
   disabled,
+  hapticTap = false,
   label,
   leading,
   style,
@@ -58,7 +62,9 @@ export function ReedButton({
   const isCompact = variant === 'soft' || variant === 'quiet';
 
   return (
-    <Pressable
+    <HapticPressable
+      feedback={hapticTap ? 'direct' : false}
+      accessibilityLabel={props.accessibilityLabel ?? label}
       accessibilityRole="button"
       disabled={disabled}
       onPressIn={onPressIn}
@@ -87,7 +93,7 @@ export function ReedButton({
           </ReedText>
         </View>
       </Animated.View>
-    </Pressable>
+    </HapticPressable>
   );
 }
 

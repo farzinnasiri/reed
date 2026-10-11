@@ -20,12 +20,15 @@ export type SessionWhisperValue = {
 export function SessionWhisper({
   value,
   allowed,
-  top,
+  bottom,
+  left,
   onOpen,
 }: {
   value: SessionWhisperValue | null;
   allowed: boolean;
-  top: number;
+  /** Where it sits: beside Reed, in the dock's row. */
+  bottom: number;
+  left: number;
   onOpen: () => void;
 }) {
   const { theme } = useReedTheme();
@@ -90,11 +93,11 @@ export function SessionWhisper({
       style={[
         {
           position: "absolute",
-          top,
-          left: theme.spacing.chromeGutter,
+          bottom,
+          left,
           right: theme.spacing.chromeGutter,
           zIndex: 22,
-          transformOrigin: "88% 0%",
+          transformOrigin: "0% 100%",
           pointerEvents: visible ? "auto" : "none",
         },
         style,

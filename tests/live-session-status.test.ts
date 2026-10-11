@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { Doc, Id } from '../convex/_generated/dataModel';
 import { buildCurrentLiveSessionState, getNextSessionSetNumber, resolveCurrentSessionExercise } from '../convex/workout/sessionState';
+import { addExercise, addExercises, selectExercise } from '../convex/workout/sessions';
+import { getRestDeadline } from '../domains/workout/rest';
+import { fixture, handler } from './helpers/session-fixture';
 
 const first = { _id: 'first' as Id<'liveSessionExercises'> };
 const selected = { _id: 'selected' as Id<'liveSessionExercises'> };
@@ -67,4 +70,59 @@ test('server rest projection and client countdown subtract elapsed time only onc
   assert.ok(state.restRuntime);
   assert.equal(getRestSnapshot(state.restRuntime, now).remainingSeconds, 40);
   assert.equal(getRestDeadline(state.restRuntime), now + 40_000);
+});
+
+test('moving to queued or newly added exercises preserves rest and returning restores its card', async () => {
+  for (const destination of ['queued', 'single', 'bulk'] as const) {
+    const exercise = {
+      ...first, _creationTime: 0, sessionId: session._id, profileId: session.profileId,
+      exerciseCatalogId: 'catalog' as Id<'exerciseCatalog'>, position: 0, addedAt: 0,
+      exerciseName: 'Squat', exerciseClass: 'strength', recipeKey: 'standard_load' as const,
+    } satisfies Doc<'liveSessionExercises'>;
+    const rest = { kind: 'rest' as const, sessionExerciseId: first._id, durationSeconds: 90,
+      remainingSeconds: 90, startedAt: Date.now(), isRunning: true, nextSetNumber: 4 };
+    const f = fixture({
+      liveSessions: [{ ...session, activeSessionExerciseId: first._id, activeProcess: rest }],
+      liveSessionExercises: [exercise, ...(destination === 'queued' ? [{ ...exercise,
+        _id: selected._id, position: 1, exerciseName: 'Bench' }] : [])],
+      exerciseCatalog: ['bench', 'row'].map(id => ({ _id: id, name: id,
+        exerciseClass: 'strength', recipeKey: 'standard_load', rawMetricRecipe: '', isCardio: false,
+        isHold: false, supportsLiveTracking: false, equipment: [], mainMuscleGroups: [] })),
+    });
+    let nextId = selected._id;
+    if (destination === 'single') {
+      nextId = (await handler(addExercise)(f.ctx, {
+        exerciseCatalogId: 'bench' as Id<'exerciseCatalog'>,
+      })).sessionExerciseId;
+    } else if (destination === 'bulk') {
+      const added = await handler(addExercises)(f.ctx, {
+        exerciseCatalogIds: ['bench', 'row'] as Id<'exerciseCatalog'>[],
+      });
+      nextId = added.sessionExerciseIds[0];
+      assert.equal(added.sessionExerciseIds.length, 2);
+    }
+    await handler(selectExercise)(f.ctx, { sessionExerciseId: nextId });
+    const current = await f.ctx.db.get(session._id);
+    assert.ok(current);
+    assert.ok(current.status === 'active');
+    assert.deepEqual(current.activeProcess, rest);
+    const rows = await f.ctx.db.query('liveSessionExercises')
+      .withIndex('by_session_id_and_position', q => q.eq('sessionId', session._id)).collect();
+    const exercises = rows.map(row => {
+      assert.ok(row.recipeKey);
+      return { ...row, recipeKey: row.recipeKey };
+    });
+    const state = buildCurrentLiveSessionState({ session: { ...current, status: current.status }, sessionExercises: exercises, logsByExercise: new Map() });
+    assert.equal(state.activeCard.capture?.sessionExerciseId, nextId);
+    assert.equal(state.activeCard.capture?.currentSetNumber, 1);
+    assert.equal(getRestDeadline(state.restRuntime!), getRestDeadline(rest));
+    await handler(selectExercise)(f.ctx, { sessionExerciseId: first._id });
+    const returned = await f.ctx.db.get(session._id);
+    assert.ok(returned);
+    assert.ok(returned.status === 'active');
+    const back = buildCurrentLiveSessionState({ session: { ...returned, status: returned.status }, sessionExercises: exercises, logsByExercise: new Map() });
+    assert.equal(back.cardMode, 'rest');
+    assert.equal(back.activeCard.rest?.sessionExerciseId, first._id);
+    assert.equal(getRestDeadline(back.restRuntime!), getRestDeadline(rest));
+  }
 });

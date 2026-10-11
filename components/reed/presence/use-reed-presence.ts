@@ -1,3 +1,4 @@
+import { setConversationFeedbackVisible } from '../reed-feedback';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSharedValue } from 'react-native-reanimated';
 import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
@@ -26,6 +27,11 @@ type PresenceInput = {
 
 export function useReedPresence(input: PresenceInput) {
   const active = usePresenceActivity();
+  const [feedbackOwner] = useState(() => Symbol('conversation'));
+  useLayoutEffect(() => {
+    setConversationFeedbackVisible(feedbackOwner, active);
+    return () => setConversationFeedbackVisible(feedbackOwner, false);
+  }, [active, feedbackOwner]);
   const reduced = useReedReducedMotion();
   const lowPower = useLowPower();
   const [beat, setBeat] = useState<PresenceBeat>(null);
@@ -64,22 +70,22 @@ export function useReedPresence(input: PresenceInput) {
   // Baseline the initial history, then acknowledge only a newer completed reply.
   const lastReply = input.messages.findLast(message => message.role === 'assistant'
     && message.status === 'sent' && !message.isAgentThinkingMessage);
-  const seenReply = useRef<{ id: string | null; createdAt: number } | null>(null);
+  const seenReply = useRef<{ id: string | null; createdAt: number; active: boolean } | null>(null);
   const lastReplyId = lastReply?.id ?? null;
   const lastReplyAt = lastReply?.createdAt ?? 0;
   const hasReplies = Boolean(lastReply?.replies?.length);
   useLayoutEffect(() => {
     if (!input.isReady) return;
     const previous = seenReply.current;
-    seenReply.current = { id: lastReplyId, createdAt: lastReplyAt };
-    if (!active || !previous || !lastReplyId || previous.id === lastReplyId || lastReplyAt <= previous.createdAt) return;
+    seenReply.current = { id: lastReplyId, createdAt: lastReplyAt, active };
+    if (!active || !previous?.active || !lastReplyId || previous.id === lastReplyId || lastReplyAt <= previous.createdAt) return;
     if (timer.current) clearTimeout(timer.current);
     setBeat('speaking');
     timer.current = setTimeout(() => {
       setBeat(hasReplies ? 'waitingOnYou' : null);
       timer.current = hasReplies ? setTimeout(clearBeat, reedMotion.presence.waitingMs) : null;
     }, reduced ? reedMotion.reply.reducedMs : replyRevealDuration() + (lastReply?.widget ? reedMotion.reply.widgetSettleMs : 0));
-  }, [active, clearBeat, hasReplies, input.isReady, lastReplyAt, lastReplyId, lastReply?.text, lastReply?.widget, reduced]);
+  }, [active, clearBeat, hasReplies, input.isReady, lastReplyAt, lastReplyId, lastReply?.serverId, lastReply?.text, lastReply?.widget, reduced]);
 
   const previousAttachments = useRef(input.attachmentCount);
   useEffect(() => {

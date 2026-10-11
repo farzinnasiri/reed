@@ -13,6 +13,7 @@ export type CatalogItem = {
   discoveryTags: string[];
   equipment: string[];
   exerciseClass: string;
+  imageUrl: string | null;
   isFavorite: boolean;
   mainMuscleGroups: string[];
   name: string;
@@ -40,7 +41,7 @@ type SessionInsights = NonNullable<FunctionReturnType<typeof api.liveSessionInsi
 
 export type TimelineSet = CurrentSession['timeline'][number]['sets'][number];
 
-export type TimelineRow = CurrentSession['timeline'][number];
+export type TimelineRow = Omit<CurrentSession['timeline'][number], 'mainMuscleGroups' | 'secondaryMuscleGroups'> & { mainMuscleGroups?: string[]; secondaryMuscleGroups?: string[] };
 
 export type EditingSet = {
   metrics: MetricValues;
@@ -69,6 +70,7 @@ export type RestCard = NonNullable<CurrentSession['restRuntime']>;
 export type LiveCardioCard = NonNullable<CurrentSession['activeCard']['liveCardio']>;
 
 export type LiveCardioFinishSummary = {
+  imageUrl?: string | null;
   elapsedSeconds: number;
   exerciseName: string;
   nextExerciseId: Id<'liveSessionExercises'> | null;

@@ -14,6 +14,7 @@ import { ReedButton } from '@/components/ui/reed-button';
 import { ReedInput } from '@/components/ui/reed-input';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
@@ -181,9 +182,11 @@ export function QuickLogSheet({ onClose, presetKey = null, visible }: QuickLogSh
         exerciseGroup: selectedPreset.group,
         inputKind: selectedPreset.inputKind,
       });
-      haptics.success();
+      haptics.saved();
+      sounds.saved();
       onClose();
     } catch (error) {
+      haptics.warning();
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSaving(false);
@@ -297,7 +300,7 @@ export function QuickLogSheet({ onClose, presetKey = null, visible }: QuickLogSh
 
             <View style={[styles.formFooter, { paddingBottom: insets.bottom + theme.spacing.md, paddingHorizontal: theme.spacing.gutter }]}>
               {errorMessage ? <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{errorMessage}</ReedText> : null}
-              <ReedButton disabled={!canSave || isSaving} label={isSaving ? 'Saving...' : 'Save'} onPress={() => void handleSave()} />
+              <ReedButton hapticTap disabled={!canSave || isSaving} label={isSaving ? 'Saving...' : 'Save'} onPress={() => void handleSave()} />
             </View>
           </>
         ) : presets === undefined ? (

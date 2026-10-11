@@ -52,6 +52,7 @@ export async function stopLocalSpeechRecording(
 
   await setAudioModeAsync({
     allowsRecording: false,
+    playsInSilentMode: false,
   }).catch(() => {});
 
   if (!uri || durationMs < MIN_RECORDING_MS) {

@@ -1,3 +1,5 @@
+import { usePickerHaptics } from '@/design/haptic-feedback';
+import { HapticPressable } from '@/components/ui/haptic-pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react';
@@ -145,9 +147,9 @@ function SelectedMark({ selected }: { selected: boolean }) {
 /** A world tile for the first, broad question. */
 export function WorldTile({ icon, label, onPress, selected, tagline }: { icon: IconName; label: string; onPress: () => void; selected: boolean; tagline: string }) {
   const { theme } = useReedTheme();
-  const { animatedStyle, handlers } = useTap(onPress);
+  const { animatedStyle, handlers } = useTap(onPress, { haptic: false });
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected }} style={styles.fill} {...handlers}>
+    <HapticPressable accessibilityLabel={label} accessibilityRole="checkbox" accessibilityState={{ checked: selected }} hapticValue={selected} style={styles.fill} {...handlers}>
       <Animated.View
         style={[
           styles.world,
@@ -165,7 +167,7 @@ export function WorldTile({ icon, label, onPress, selected, tagline }: { icon: I
         <ReedText numberOfLines={1} tone="muted" variant="micro">{tagline}</ReedText>
         <View style={styles.worldMark}><SelectedMark selected={selected} /></View>
       </Animated.View>
-    </Pressable>
+    </HapticPressable>
   );
 }
 
@@ -201,11 +203,7 @@ export function LevelTile({ hint, label, level, onChange, onOpen }: { hint?: str
 
   const change = (next: number) => {
     if (next === level) return;
-    if (next === 0) haptics.soft();
-    else if (next === 1) haptics.selection();
-    else if (next === 2) haptics.light();
-    else if (next === 3) haptics.medium();
-    else haptics.success();
+    haptics.selection();
     reed?.act(next >= 3 ? 'hop' : 'tick');
     onChange?.(next);
   };
@@ -246,7 +244,7 @@ export function LevelTile({ hint, label, level, onChange, onOpen }: { hint?: str
 /** A full-width choice with a title and a line under it. Used for single-choice questions. */
 export function OptionCard({ children, icon, iconColor, onPress, selected, subtitle, title }: { children?: ReactNode; icon?: IconName; iconColor?: string; onPress: () => void; selected: boolean; subtitle?: string; title: string }) {
   const { theme } = useReedTheme();
-  const { animatedStyle, handlers } = useTap(onPress);
+  const { animatedStyle, handlers } = useTap(() => { if (!selected) onPress(); }, { haptic: !selected });
   return (
     <Animated.View
       style={[
@@ -286,7 +284,7 @@ export function NumberTiles({ onChange, options, value }: { onChange: (index: nu
 }
 
 function NumberTile({ big, label, onPress, selected, theme }: { big: string; label: string; onPress: () => void; selected: boolean; theme: ReturnType<typeof useReedTheme>['theme'] }) {
-  const { animatedStyle, handlers } = useTap(onPress);
+  const { animatedStyle, handlers } = useTap(() => { if (!selected) onPress(); }, { haptic: !selected });
   return (
     <Pressable accessibilityLabel={label} accessibilityRole="radio" accessibilityState={{ checked: selected }} style={styles.grow} {...handlers}>
       <Animated.View
@@ -362,6 +360,7 @@ type RulerProps = {
  */
 export function Ruler({ caption, fallback, format, labelEvery, labelFormat, max, min, onChange, tickEvery, tickGap = 12, value }: RulerProps) {
   const { theme } = useReedTheme();
+  const pickerFeedback = usePickerHaptics();
   const scroll = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const count = max - min + 1;
@@ -388,13 +387,15 @@ export function Ruler({ caption, fallback, format, labelEvery, labelFormat, max,
     last.current = index;
     setActive(index);
     if (!ready.current) return;
-    haptics.selection();
+    pickerFeedback.preview();
     onChange(min + index);
   };
 
   const shown = min + active;
   const nudge = (direction: number) => {
     const index = clampIndex(active + direction);
+    if (index === active) return;
+    pickerFeedback.cancel();
     ready.current = true;
     last.current = index;
     setActive(index);

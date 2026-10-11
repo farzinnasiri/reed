@@ -5,8 +5,6 @@ import { Animated, PanResponder, Pressable, ScrollView, View } from 'react-nativ
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Id } from '@/convex/_generated/dataModel';
 import { formatExerciseSetupLabel } from '@/domains/workout/modifier-formatting';
-import { ReedButton } from '@/components/ui/reed-button';
-import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedText } from '@/components/ui/reed-text';
 import {
   createTiming,
@@ -22,7 +20,8 @@ import { styles } from './workout-timeline-page.styles';
 import type { RestCard, TimelineRow, TimelineSet } from './workout-surface.types';
 import { formatClock } from './workout-surface.utils';
 import { useRestCountdown } from './use-rest-countdown';
-import { useCompactElapsedLabel } from './use-compact-elapsed-label';
+import { ExerciseImage } from './exercise-image';
+import { DOCK_HEIGHT } from './session-dock.styles';
 
 type ExerciseCommands = {
   onDeleteSet: (setLogId: Id<'activityLogs'>) => void;
@@ -31,26 +30,14 @@ type ExerciseCommands = {
   onReorderTimeline: (orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) => Promise<boolean>;
   onRemoveExercise: (sessionExerciseId: Id<'liveSessionExercises'>) => void;
 };
-type TimelineEditor = {
-  isWorking: boolean;
-  isConfirmingFinishSession: boolean;
-  onAddExercise: () => void;
-  onClearFinishSessionConfirm: () => void;
-  onFinishSession: () => void;
-  onToggleFinishSessionConfirm: () => void;
-} & ({ kind: 'draft'; exercises?: never } | { kind: 'active'; exercises: ExerciseCommands });
-
 type TimelinePageProps = {
   activeRestCard: RestCard | null;
-  elapsedLabel: string | null;
-  sessionStartedAt?: number;
   errorMessage: string | null;
-  hasNotes?: boolean;
-  onOpenNotes?: () => void;
   contentTopInset?: number;
+  isWorking: boolean;
   timeline: TimelineRow[];
-  /** Absence means read-only. Drafts cannot expose commands for persisted exercises. */
-  editor?: TimelineEditor;
+  /** Null for a draft, which has no exercises to open yet. */
+  exercises: ExerciseCommands | null;
 };
 
 const TIMELINE_ROW_GAP = 10;
@@ -71,12 +58,7 @@ function getTimelineSetupLabel(item: TimelineRow) {
   return formatExerciseSetupLabel(item.exerciseSetupModifiers);
 }
 
-export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNotes = false,
-  onOpenNotes, sessionStartedAt, contentTopInset, timeline, editor }: TimelinePageProps) {
-  const isReadOnly = !editor;
-  const isWorking = editor?.isWorking ?? false;
-  const isConfirmingFinishSession = editor?.isConfirmingFinishSession ?? false;
-  const exercises = editor?.kind === 'active' ? editor.exercises : null;
+export function TimelinePage({ activeRestCard, contentTopInset, errorMessage, exercises, isWorking, timeline }: TimelinePageProps) {
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const [expandedExercises, setExpandedExercises] = useState<Record<string, boolean>>({});
@@ -88,13 +70,16 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
   const [highlightedSetIds, setHighlightedSetIds] = useState<Record<string, boolean>>({});
   const [insertedExerciseIds, setInsertedExerciseIds] = useState<Record<string, boolean>>({});
   const [pendingOrder, setPendingOrder] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
+  const followLatest = useRef(true);
+  useEffect(() => {
+    const timeout = setTimeout(() => { followLatest.current = false; }, 1200);
+    return () => clearTimeout(timeout);
+  }, []);
   const rowLayoutsRef = useRef<Record<string, { height: number; y: number }>>({});
   const [dragTranslationY] = useState(() => new Animated.Value(0));
   const previousExerciseIdsRef = useRef<string[]>([]);
   const previousSetCountsRef = useRef<Record<string, number>>({});
-  const isEmptySession = displayTimeline.length === 0;
-  const isFinishActionDisabled = isWorking || Boolean(draggingExerciseId);
-  const hasLoggedSets = displayTimeline.some(item => item.setCount > 0);
   const [draggingRowHeight, setDraggingRowHeight] = useState(0);
   const draggingRowSize = draggingRowHeight > 0 ? draggingRowHeight + TIMELINE_ROW_GAP : 0;
 
@@ -272,8 +257,16 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
   return (
     <View style={styles.timelinePage}>
       <ScrollView
+        ref={scrollRef}
+        // Coming back to the session lands on the latest exercise, not the top of the list. Rows measure in
+        // passes, so keep following the end until the user touches the list.
+        onContentSizeChange={() => {
+          if (followLatest.current) scrollRef.current?.scrollToEnd({ animated: false });
+        }}
+        onScrollBeginDrag={() => { followLatest.current = false; }}
         contentContainerStyle={[
           styles.timelineRailContentDocked,
+          { paddingBottom: insets.bottom + DOCK_HEIGHT + theme.spacing.md },
           contentTopInset !== undefined ? { paddingTop: contentTopInset } : undefined,
         ]}
         scrollEnabled={!draggingExerciseId}
@@ -282,7 +275,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
       >
         {displayTimeline.length === 0 ? (
           <View style={styles.timelineEmpty}>
-            <ReedText tone="muted">{editor ? 'Add your first exercise to begin.' : 'Nothing was logged in this session.'}</ReedText>
+            <ReedText tone="muted">Add your first exercise to begin.</ReedText>
           </View>
         ) : (
           displayTimeline.map((item, index) => {
@@ -297,8 +290,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
               activeRestCard?.sessionExerciseId === item.sessionExerciseId;
             const hasTimelineStem = !isLast || isExpanded;
             const isDraggingRow = draggingExerciseId === item.sessionExerciseId;
-            // A finished session has no live state: an exercise with sets in it simply reads as done.
-            const markerState = isReadOnly && item.setCount > 0 ? 'logged' : item.state;
+            const markerState = item.state;
             const dragOffsetY = getTimelineRowShift({
               draggedRowSize: draggingRowSize,
               draggingExerciseId,
@@ -400,7 +392,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
                     >
                       <Pressable
                         accessibilityLabel={`Open ${item.exerciseName}`}
-                        disabled={isWorking || isReadOnly}
+                        disabled={isWorking}
                         onPress={() => {
                           setConfirmExerciseDeleteId(null);
                           exercises?.onOpenExercise(item.sessionExerciseId);
@@ -408,6 +400,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
                         style={({ pressed }) => [getTapScaleStyle(pressed)]}
                       >
                         <View style={styles.timelineLineHeader}>
+                          <ExerciseImage imageUrl={item.imageUrl} variant="timeline" />
                           <View style={styles.timelineLineTitleStack}>
                             <ReedText numberOfLines={2} style={styles.timelineLineTitle} variant="headline">
                               {item.exerciseName}
@@ -439,7 +432,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
                                 size={18}
                               />
                             </Pressable>
-                            {isReadOnly ? null : <TimelineDragHandle
+                            <TimelineDragHandle
                               disabled={isWorking || Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
                               dimWhenDisabled={Boolean(draggingExerciseId && draggingExerciseId !== item.sessionExerciseId)}
                               isDragging={isDraggingRow}
@@ -448,8 +441,8 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
                               }}
                               onDragMove={handleDragMove}
                               onDragStart={() => handleDragStart(item.sessionExerciseId)}
-                            />}
-                            {isReadOnly ? null : <Pressable
+                            />
+                            <Pressable
                               accessibilityLabel={
                                 confirmExerciseDeleteId === item.sessionExerciseId
                                   ? `Confirm remove ${item.exerciseName}`
@@ -479,7 +472,7 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
                                 name={confirmExerciseDeleteId === item.sessionExerciseId ? 'checkmark' : 'trash-outline'}
                                 size={18}
                               />
-                            </Pressable>}
+                            </Pressable>
                           </View>
                         </View>
                       </Pressable>
@@ -516,8 +509,8 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
 
                               return (
                                 <TimelineSetRow
-                                  canDelete={!isReadOnly}
-                                  canOpen={!isReadOnly}
+                                  canDelete
+                                  canOpen
                                   deleteLocked={isWorking}
                                   highlightOnChange={Boolean(highlightedSetIds[setEntry.setLogId as string])}
                                   key={`${item.sessionExerciseId}-${setEntry.setLogId}`}
@@ -541,80 +534,6 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
         )}
       </ScrollView>
 
-      {!isReadOnly || onOpenNotes ? (
-        <View style={[styles.dock, { backgroundColor: theme.colors.canvas, paddingBottom: insets.bottom + theme.spacing.xs }]}>
-          <View style={styles.dockRow}>
-            {onOpenNotes ? (
-              <Pressable
-                accessibilityLabel={hasNotes ? 'Edit session notes' : 'Add session notes'}
-                accessibilityRole="button"
-                disabled={isWorking || Boolean(draggingExerciseId)}
-                onPress={() => {
-                  editor?.onClearFinishSessionConfirm();
-                  onOpenNotes();
-                }}
-                style={({ pressed }) => [
-                  isReadOnly ? styles.dockWide : styles.dockIcon,
-                  { backgroundColor: theme.colors.surfaceRaised },
-                  getTapScaleStyle(pressed, Boolean(draggingExerciseId)),
-                ]}
-              >
-                <Ionicons
-                  color={String(hasNotes ? theme.colors.accentInk : theme.colors.inkSecondary)}
-                  name={hasNotes ? 'document-text' : 'document-text-outline'}
-                  size={20}
-                />
-                {isReadOnly ? <ReedText variant="bodyStrong">{hasNotes ? 'Session notes' : 'Add notes'}</ReedText> : null}
-              </Pressable>
-            ) : null}
-
-            {isReadOnly ? null : (
-              <>
-                {/* The primary action is the next sensible step: add an exercise until something is logged, then finish. */}
-                <View style={styles.dockFill}>
-                  <ReedButton
-                    disabled={isFinishActionDisabled}
-                    label={isEmptySession ? 'Close session' : 'Finish workout'}
-                    leading={<Ionicons color={String(hasLoggedSets ? theme.colors.accentText : theme.colors.ink)} name="flag-outline" size={16} />}
-                    onPress={editor?.onToggleFinishSessionConfirm}
-                    variant={hasLoggedSets ? 'primary' : 'secondary'}
-                  />
-                </View>
-                <View style={styles.dockFill}>
-                  <ReedButton
-                    disabled={isWorking || Boolean(draggingExerciseId)}
-                    label="Add exercise"
-                    leading={<Ionicons color={String(hasLoggedSets ? theme.colors.ink : theme.colors.accentText)} name="add" size={18} />}
-                    onPress={() => {
-                      editor?.onClearFinishSessionConfirm();
-                      editor?.onAddExercise();
-                    }}
-                    variant={hasLoggedSets ? 'secondary' : 'primary'}
-                  />
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      ) : null}
-
-      {!isReadOnly ? (
-        <ReedSheet onDismiss={editor?.onClearFinishSessionConfirm} open={isConfirmingFinishSession}>
-          <View style={styles.finishSheet}>
-            <View style={styles.finishCopy}>
-              <ReedText variant="title">{isEmptySession ? 'Close session?' : 'Finish workout?'}</ReedText>
-              {isEmptySession ? (
-                <ReedText tone="muted">No exercises logged. Nothing will be saved.</ReedText>
-              ) : (
-                <FinishSummary exerciseCount={displayTimeline.length} fixedElapsedLabel={elapsedLabel} startedAt={sessionStartedAt} />
-              )}
-            </View>
-            <ReedButton disabled={isWorking} label={isEmptySession ? 'Close session' : 'Finish workout'} onPress={editor?.onFinishSession} />
-            <ReedButton label="Keep going" onPress={editor?.onClearFinishSessionConfirm} variant="quiet" />
-          </View>
-        </ReedSheet>
-      ) : null}
-
       {errorMessage ? (
         <ReedText style={styles.inlineError} tone="danger">
           {errorMessage}
@@ -622,29 +541,6 @@ export function TimelinePage({ activeRestCard, elapsedLabel, errorMessage, hasNo
       ) : null}
     </View>
   );
-}
-
-function getFinishSummaryLabel(exerciseCount: number, elapsedLabel: string | null) {
-  const exercisesPart = `${exerciseCount} ${exerciseCount === 1 ? 'exercise' : 'exercises'}`;
-  const minutesPart = formatElapsedAsMinutes(elapsedLabel);
-  return `${exercisesPart} • ${minutesPart}`;
-}
-
-function formatElapsedAsMinutes(elapsedLabel: string | null) {
-  if (!elapsedLabel) {
-    return '0 min';
-  }
-
-  const hoursMatch = elapsedLabel.match(/(\d+)h/);
-  const minutesMatch = elapsedLabel.match(/(\d+)m/);
-  const secondsMatch = elapsedLabel.match(/(\d+)s/);
-
-  const hours = hoursMatch ? Number.parseInt(hoursMatch[1], 10) : 0;
-  const minutes = minutesMatch ? Number.parseInt(minutesMatch[1], 10) : 0;
-  const seconds = secondsMatch ? Number.parseInt(secondsMatch[1], 10) : 0;
-  const totalMinutes = hours * 60 + minutes + (seconds >= 30 ? 1 : 0);
-
-  return `${totalMinutes} min`;
 }
 
 function AnimatedSetList({
@@ -1009,13 +905,4 @@ function TimelineSetRow({
 function RestCountdownText({ card, tone }: { card: RestCard; tone: 'danger' | 'muted' }) {
   const remaining = useRestCountdown(card)?.remainingSeconds ?? 0;
   return <ReedText tone={tone} variant="caption">Rest {formatClock(remaining)}</ReedText>;
-}
-
-function FinishSummary({ exerciseCount, fixedElapsedLabel, startedAt }: { exerciseCount: number; fixedElapsedLabel: string | null; startedAt?: number }) {
-  const liveElapsedLabel = useCompactElapsedLabel(startedAt);
-  return (
-    <ReedText tone="muted">
-      {getFinishSummaryLabel(exerciseCount, liveElapsedLabel ?? fixedElapsedLabel)}
-    </ReedText>
-  );
 }

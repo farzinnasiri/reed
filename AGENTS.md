@@ -63,7 +63,7 @@ Essential thread positioning must not wait for `requestAnimationFrame`: T3 previ
 
 21. Personal-record selection uses timestamps to choose evidence for equal values. Record detection must separately require a strict value improvement; timestamp tie-breaking must not turn an equal set into a new PR.
 
-22. Convex allows only one `paginate()` call in each query/mutation invocation. Picker filters can produce short pages; return the cursor and let the client load the next page. Do not refill a filtered page with a server-side pagination loop.
+22. Convex allows only one `paginate()` call in each query/mutation invocation. Picker filters can produce short pages; return the cursor and let the client load the next page. Do not refill a filtered page with a server-side pagination loop. The add-exercise and goal pickers keep requesting pages until the visible list reaches a page or the cursor is done. One match must not stop that fill.
 
 23. The Add exercise sheet's closing animation can finish after it has reopened. Check the current open state before unmounting in that callback; otherwise the sheet can have `isOpen=true` while no modal is mounted.
 
@@ -115,6 +115,32 @@ Essential thread positioning must not wait for `requestAnimationFrame`: T3 previ
 
 47. Nested Reanimated `layout` transitions on the Today stack and widget disclosure can scale text and icons severely on web during expansion. `ExpandableWidget` measures and clips the panel height instead; keep its ancestor layouts free of scaling transitions. Collapsed panels stay mounted and inert on web to preserve drafts without exposing hidden controls.
 
+48. The session strip and the home Pulse share one morph (`design/use-strip-morph.ts`). It writes the stage recede from the same `progress` value, so anything else that opens over a live session (the notes sheet, the duration sheet) fights it for the stage: the panel closes first and the notes sheet opens `reedSprings.morph.duration` later. The duration editor is mounted beside the panel in WorkoutSurface; its opening timestamp is captured after the panel closes. Do not mount the open editor inside the panel, which unmounts after closing.
+
+49. Reed's slot in the session (`SessionMascotSlot`) is owned by whichever screen mounted last. A new slot lays out before the old one's cleanup runs, so a plain "clear on unmount" erased the new screen's place and Reed vanished after Finish and Back. Slots release only the placement they made (`owner`). Keep that when adding a slot.
+
+50. Finishing an ad-hoc session that has exercises but no logged sets saves it as an ended session with 0 sets. A session with no exercises is deleted. Finishing a planned session that logged nothing deletes it and puts the plan back to `ready`; it does not dismiss the plan. QA that finishes an ad-hoc unlogged session leaves a row in history. Sessions offers confirmed deletion through the swipe action or native assistive action; only delete disposable QA records.
+
+51. The Reed dock is taller than its buttons. On Android a child outside its parent's bounds gets no touches, so the dock container is as tall as Reed (88) with `pointerEvents: 'box-none'`, and only a band at its bottom is canvas. A page keeps `DOCK_HEIGHT` clear, not the container's height; Reed overlaps the page by design.
+
+52. `listEndedSummaries` pages by `startedAt` cursor and the Sessions list accumulates pages. Only the newest page is a live query, so the list starts over when you come back from a session (edits to durations show). Sessions can repeat across pages when one ended in between; `useWorkoutHistory` dedupes by id and filters successfully deleted IDs from every cached page.
+
+53. The timeline's sets carry `loggedAt` (the finish sheet and recap judge a forgotten session by the last set). History rows use `presentation` (upper, lower, full, cardio). Push/pull/legs `workSplit` stays on session insights (`summary.distribution.workSplit`); do not put it back on the ended-session summary until a screen reads it. `loggedAt` needs `npm run convex:dev -- --once --env-file .env.dev` on a deployment before the app can use it.
+
+54. React Native Web does not map `accessibilityState` into checked/selected DOM attributes; the web `HapticPressable` supplies explicit ARIA state. Web haptics must bypass Expo’s imperative web fallback: iPhone feedback requires the actual user to tap a native `input[type=checkbox][switch]` (iOS 18+), never a programmatic hidden-input click. The shared `HapticPressable` limits that enhancement to compatible controls and guards dragged/canceled actions. Browser automation verifies mechanics, not physical haptics; validate feel and scroll behavior on real iPhones and Androids. Native Android uses the installed Expo haptics view-feedback API and requires a binary with that module version.
+
+55. Expo audio mode is global and voice recording changes it. iOS forbids `playsInSilentMode: false` while `allowsRecording` remains true. Sound effects must restore `allowsRecording: false`, `playsInSilentMode: false` and `mixWithOthers` for each cue, and the shared sound policy suppresses cues while recording. Do not reuse the rest alert for everyday saves or add a notification fallback when browser audio is locked. Android rest notification channels are versioned because installed channel sounds cannot be changed in place; replacement notification assets need a rebuilt native binary.
+
+56. A dock mascot slot can move when the viewport changes without changing its own dimensions, so its `onLayout` alone does not refresh the portal anchor. Keep viewport dimensions in the slot's measurement effect and retain the owner-scoped release guard.
+
+57. Convex's full-text index returns candidates; the picker then requires every query token to match across names and metadata. Do not restore whole-phrase filtering, which drops reordered, abbreviated and mixed muscle/name queries. Derived body-area names may be missing from imported `searchText`, so body-area-only searches use the supported catalog index. `convex-test` supports prefixes on every search term, while deployed Convex enables prefixes only on the final term; verify actual picker queries in the browser too.
+
+58. React Native Web number inputs retain a wide intrinsic size even inside a flex column. Workout metric editors explicitly constrain their width and preserve the value height; otherwise focusing an input scrolls the card horizontally and makes all its labels appear misaligned. Keep the column's `minWidth: 0`, bounded editors and shared bare-input focus style.
+
+59. Exercise catalog `imageUrl` uses the original optimized Storage asset (`imageStorageId`), with its authored white canvas. Compact previews fit the full pose and equipment inside a white circle; the enlarged guide retains the original canvas. Do not remove image backgrounds or prefer cutouts. Session projections reuse catalog reads to resolve URLs; do not copy image storage IDs onto session records or add one client query per row.
+
+60. The mascot-only exercise dock must stay within the mascot's width plus its gutters. Its empty full-width row intercepts lower card actions on web even when the dock style says `pointerEvents: 'box-none'`. Keep its bounds narrow rather than placing invisible hit areas over rest choices.
+
 ## Keep These Invariants
 
 Portal context note: gorhom's portal renders content at its host. Keep the shared Reed conversation/draft provider above `BottomSheetModalProvider`. Pass workout visibility and the mascot controller bridge explicitly into session-sheet content; feature contexts beneath the navigator do not automatically survive that portal.
@@ -127,9 +153,9 @@ Portal context note: gorhom's portal renders content at its host. Keep the share
 6. Do not move legacy prototype code back into the active Expo app by accident.
 7. Design philosophy: less is more, always elegant, every element intentional. Avoid repetitive page-chrome formulas such as eyebrow + oversized title + subtitle unless the user explicitly asks for them.
 8. Do not wrap every control or list row in pills/cards by default; use minimal chrome and add containers only when they carry clear UX meaning.
-9. Do not persist empty workout sessions: if a session is finished with zero exercises, delete it instead of storing it.
+9. Do not persist an empty workout. Zero exercises is deleted. A planned session with no activity logs is deleted and its plan returns to `ready`. An ad-hoc session with exercises and no sets is saved.
 10. Colour, type, radius and spacing tokens are single-source-of-truth in `design/system.ts`, documented in `DESIGN.md` (add a token there first). Do not hardcode per-screen colours, radii or font names. Surfaces are solid and dark only: no glass, blur, shadows or light theme.
-11. Motion tokens and interaction primitives are single-source-of-truth in `design/motion.ts` (haptics in `design/haptics.ts`). Do not add per-screen springs, custom easing curves, raw `LayoutAnimation.configureNext`, direct `expo-haptics` calls in UI, or ad hoc press-feedback patterns.
+11. Motion tokens and interaction primitives are single-source-of-truth in `design/motion.ts` (haptics in `design/haptics.ts`, sound cues in `design/sounds.ts`). Do not add per-screen springs, custom easing curves, raw `LayoutAnimation.configureNext`, direct `expo-haptics` calls or sound playback in UI, or ad hoc press-feedback patterns. Voice recording retains its dedicated `expo-audio` path.
 12. Do not hand-roll overlapping full-screen scene transitions in `SignedInShell` or `WorkoutSurface`. Keep one visible scene per level unless a real navigator/scene system replaces it.
 
 ## 20/80 Guardrails

@@ -1,3 +1,4 @@
+import * as haptics from '@/design/haptics';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { BodyMap } from '@/components/onboarding/pain-map';
@@ -78,7 +79,7 @@ export function ProfileEditor({ editor, initialDraft, bodyHeight, onSave, render
     setWorking(true);
     setError(null);
     try { await onSave(profileChangeFromDraft(editor, draft)); }
-    catch (failure) { setError(failure instanceof Error ? failure.message : 'Could not save. Try again.'); }
+    catch (failure) { haptics.warning(); setError(failure instanceof Error ? failure.message : 'Could not save. Try again.'); }
     finally { inFlight.current = false; setWorking(false); }
   }
   const props = { editing: true, draft, update, practices, next: () => { void save(); }, edit: noop };
@@ -93,7 +94,7 @@ export function ProfileEditor({ editor, initialDraft, bodyHeight, onSave, render
   </View>;
   const footer = <View style={{ gap: theme.spacing.xs }}>
     {error ? <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{error}</ReedText> : null}
-    <ReedButton label={working ? 'Saving…' : 'Save changes'} disabled={working || pending || !valid || !changed} onPress={() => { void save(); }} />
+    <ReedButton hapticTap label={working ? 'Saving…' : 'Save changes'} disabled={working || pending || !valid || !changed} onPress={() => { void save(); }} />
   </View>;
   return <OnboardingReedContext.Provider value={context}>
     <View style={[styles.fill, { pointerEvents: working ? 'none' : 'auto' }]}>{render(content, footer)}</View>

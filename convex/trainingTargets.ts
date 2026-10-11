@@ -1,7 +1,7 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { requireViewerProfile } from './profiles';
 import { loadProfileTimeZone } from './profileTimeZone';
 import { normalizeTimeZone } from './localCalendar';
@@ -109,6 +109,18 @@ export const refreshActive = mutation({
   },
 });
 
+/** Logs are the source of truth. Recompute active goals, and verified completions whose cited sets are gone. */
+export const refreshAfterSessionDeleted = internalMutation({
+  args: { profileId: v.id('profiles') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    await evaluateActiveTargetsForProfile(ctx, args.profileId, now);
+    await recomputeVerifiedTargetsWithRemovedEvidence(ctx, args.profileId, now);
+    return null;
+  },
+});
+
 export async function evaluateActiveTargetsForProfile(ctx: MutationCtx, profileId: Id<'profiles'>, now = Date.now()) {
   const targets = await ctx.db
     .query('trainingTargets')
@@ -140,16 +152,40 @@ async function evaluateTargetById(ctx: MutationCtx, targetId: Id<'trainingTarget
   return await evaluateTarget(ctx, target, now);
 }
 
+async function recomputeVerifiedTargetsWithRemovedEvidence(ctx: MutationCtx, profileId: Id<'profiles'>, now: number) {
+  const completed = await ctx.db
+    .query('trainingTargets')
+    .withIndex('by_profile_id_and_status', q => q.eq('profileId', profileId).eq('status', 'completed'))
+    .collect();
+  for (const target of completed) {
+    if (target.completionSource === 'manual') continue;
+    if (!(await verifiedEvidenceIsMissing(ctx, target))) continue;
+    await evaluateTarget(ctx, target, now);
+  }
+}
+
+async function verifiedEvidenceIsMissing(ctx: MutationCtx, target: TargetDoc) {
+  const evidenceIds = target.verifiedSnapshot?.evidenceActivityLogIds ?? [];
+  if (evidenceIds.length === 0) return true;
+  for (const evidenceId of evidenceIds) {
+    if (!(await ctx.db.get(evidenceId))) return true;
+  }
+  return false;
+}
+
 async function evaluateTarget(ctx: MutationCtx, target: TargetDoc, now: number) {
-  if (target.status !== 'active') return target;
+  // A manual completion is a decision. Every other completion follows the logs that remain.
+  if (target.status !== 'active' && !(target.status === 'completed' && target.completionSource !== 'manual')) return target;
   const logs = await queryEvidenceLogs(ctx, target);
   const effectiveEndsAt = getEffectiveEndsAt(target);
   const result = evaluateTargetProgress({ ...target, endsAt: effectiveEndsAt }, logs, now);
   const patch: Partial<TargetDoc> = { lastEvaluatedAt: now, progressSummary: result.progressSummary, updatedAt: now };
   if (result.completed) {
-    patch.completedAt = now;
-    patch.completionSource = 'verified';
-    patch.status = 'completed';
+    if (target.status !== 'completed') {
+      patch.completedAt = now;
+      patch.completionSource = 'verified';
+      patch.status = 'completed';
+    }
     patch.verifiedSnapshot = result.verifiedSnapshot
       ? {
           ...result.verifiedSnapshot,
@@ -157,7 +193,18 @@ async function evaluateTarget(ctx: MutationCtx, target: TargetDoc, now: number) 
         }
       : undefined;
   } else if (now > effectiveEndsAt) {
-    patch.missedAt = now; patch.status = 'missed';
+    patch.missedAt = now;
+    patch.status = 'missed';
+    patch.completedAt = undefined;
+    patch.completionSource = undefined;
+    patch.completionNote = undefined;
+    patch.verifiedSnapshot = undefined;
+  } else if (target.status === 'completed') {
+    patch.status = 'active';
+    patch.completedAt = undefined;
+    patch.completionSource = undefined;
+    patch.completionNote = undefined;
+    patch.verifiedSnapshot = undefined;
   }
   await ctx.db.patch(target._id, patch);
   return await ctx.db.get(target._id);

@@ -15,7 +15,6 @@ import { ReedMascot } from '@/components/reed/mascot';
 import { AnalyticsDonut } from '@/components/ui/analytics-donut';
 import { ReedText } from '@/components/ui/reed-text';
 import { SegmentedControl } from '@/components/ui/segmented-control';
-import * as haptics from '@/design/haptics';
 import { getTapScaleStyle } from '@/design/motion';
 import { useBreakpoint } from '@/design/use-breakpoint';
 import { useReedTheme } from '@/design/provider';
@@ -108,7 +107,7 @@ function CoachNote({ note }: { note: { body: string; lead: string } }) {
             accessibilityLabel={isExpanded ? 'Show less from Reed' : 'Read more from Reed'}
             accessibilityState={{ expanded: isExpanded }}
             hitSlop={8}
-            onPress={() => { haptics.selection(); setIsExpanded(value => !value); }}
+            onPress={() => {  setIsExpanded(value => !value); }}
             style={({ pressed }) => [styles.coachNoteMore, getTapScaleStyle(pressed)]}
           >
             <ReedText tone="accent" variant="caption">{isExpanded ? 'Less' : 'More'}</ReedText>
@@ -354,7 +353,7 @@ function PeriodControl({ onChange, value }: { onChange: (period: ProfilePeriod) 
       compact
       onChange={period => {
         if (period !== value) {
-          haptics.selection();
+
         }
         onChange(period);
       }}

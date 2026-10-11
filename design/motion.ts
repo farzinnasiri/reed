@@ -36,7 +36,7 @@ export const reedMotion = {
     introduction: { wordMs: 48, pauseMs: 180 }, explanation: { wordMs: 60, pauseMs: 260 }, promise: { wordMs: 75, pauseMs: 380 }, reflection: { wordMs: 90, pauseMs: 420 }, closing: { wordMs: 125, pauseMs: 600 }, question: { wordMs: 180, pauseMs: 650 },
   }, letterFollowMs: 550, signatureDegrees: 8, signatureMs: 1500, signatureHoldMs: 500, holdMs: 1400, holdReleaseMs: 260, holdPressScale: 0.03, holdSwell: 0.3, commitHoldMs: 1100, retreatScale: 0.95, perspective: 700 },
   today: { heroMs: 240, heroScale: 0.9, titleDelayMs: 80, bodyDelayMs: 140, widgetsDelayMs: 200, chipsDelayMs: 260, nodDelayMs: 700, exitMs: 240, threadDelayMs: 120, threadMs: 220, exitY: -24 },
-  session: { whisperDelayMs: 600, whisperHoldMs: 6000, whisperFadeMs: 200, whisperY: -10, whisperScale: 0.92, appliedHoldMs: 700, swapRollMs: 250, swapRollY: 14 },
+  session: { whisperDelayMs: 600, whisperHoldMs: 6000, whisperFadeMs: 200, whisperY: 10, whisperScale: 0.92, appliedHoldMs: 700, swapRollMs: 250, swapRollY: 14 },
   touch: { pressMs: 90, pressScale: 0.92, holdMs: 500, squishX: 1.1, squishY: 0.84, squishYpx: 8, jumpY: 22, shakeDegrees: 7, shakeMs: 520, dizzyMs: 1200, rapidMs: 1600, cooldownMs: 60000, dragMax: 22, dragActivation: 8, idleMs: 45000, glanceMinMs: 20000, glanceMaxMs: 40000, sleepyMs: 180000 },
   glow: { smoothingMs: 350, breathMs: 2400, breathAmount: 0.32, pulseEnergy: 0.06, pulseMs: 400, waveMs: 900, sensorMs: 1000 / 30 },
   suggestions: { pressMs: 90, asideMs: 160, asideY: 6, enterX: 8, enterScale: 0.94, returnScale: 0.96, chatStaggerMs: 60, todayStaggerMs: 40 },
@@ -85,6 +85,10 @@ export const reedMotion = {
     standard: 180,
     mode: 240,
   },
+  timer: { tickMs: 1000 },
+  workoutSwipe: {
+    activation: 8, failY: 8, commit: 96,
+  },
   distances: {
     expandContentY: 8,
     listInsertY: 12,
@@ -120,6 +124,7 @@ export const reedEasing = {
 } as const;
 
 export const reedReanimatedEasing = {
+  linear: ReanimatedEasing.linear,
   easeInOut: ReanimatedEasing.inOut(ReanimatedEasing.quad),
   easeOut: ReanimatedEasing.out(ReanimatedEasing.quad),
 } as const;

@@ -325,7 +325,7 @@ function ReedHome({ displayName, onPulseOpened, onYouOpened, openPulse, openYou 
 
   function openMenu(anchor: ComposerMenuAnchor) {
     setMenuAnchor(anchor);
-    if (!isMenuOpen) haptics.selection();
+
     setIsMenuOpen(current => !current);
   }
 
@@ -413,7 +413,7 @@ function ReedHome({ displayName, onPulseOpened, onYouOpened, openPulse, openYou 
           ) : null}
 
           {!isTodayMode && mode ? <Animated.View style={[threadStyle, { position: 'absolute', top: topChromeHeight, left: theme.spacing.gutter, zIndex: 2 }]}>
-            <Pressable accessibilityRole="button" accessibilityLabel="Back to Today" onPress={() => { haptics.selection(); presence.touch(); enterToday(); }} style={({ pressed }) => [{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xxs }, getTapScaleStyle(pressed)]}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Back to Today" onPress={() => {  presence.touch(); enterToday(); }} style={({ pressed }) => [{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: theme.spacing.xxs }, getTapScaleStyle(pressed)]}>
               <Ionicons name="chevron-back" size={16} color={String(theme.colors.inkSecondary)} /><ReedText variant="caption" tone="secondary">Today</ReedText>
             </Pressable>
           </Animated.View> : null}
@@ -435,7 +435,7 @@ function ReedHome({ displayName, onPulseOpened, onYouOpened, openPulse, openYou 
                 hint={presence.hint}
                 aside={draftLevel !== 'none' || voiceState.status !== 'idle' || Boolean(pendingRunId) || presence.state === 'speaking'}
                 reading={isReadingHistory}
-                onLatest={() => { haptics.selection(); setIsReadingHistory(false); scrollRef.current?.scrollToEnd({ animated: !reduceMotion }); }}
+                onLatest={() => {  setIsReadingHistory(false); scrollRef.current?.scrollToEnd({ animated: !reduceMotion }); }}
               />
             )}
           </Animated.View>
@@ -465,7 +465,7 @@ function ReedHome({ displayName, onPulseOpened, onYouOpened, openPulse, openYou 
             }}
             onOpenSession={() => {
               Keyboard.dismiss();
-              haptics.selection();
+
               setIsWorkoutMenuOpen(true);
             }}
           >

@@ -81,13 +81,14 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       {
         microphonePermission: 'Allow Reed to record voice notes you choose to transcribe.',
         recordAudioAndroid: true,
+        enableBackgroundPlayback: false,
       },
     ],
     [
       'expo-notifications',
       {
         color: '#3d66f2',
-        defaultChannel: 'rest-timer-alerts-v3',
+        defaultChannel: 'rest-timer-alerts-v4',
         icon: './assets/images/notification-icon.png',
         sounds: ['./assets/sounds/rest_timer_complete.wav'],
       },

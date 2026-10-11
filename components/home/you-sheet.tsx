@@ -1,3 +1,8 @@
+import * as haptics from '@/design/haptics';
+import { useHapticPreference } from '@/design/haptic-feedback';
+import { useSoundPreference } from '@/design/sound-feedback';
+import { useStartCountdownPreference } from '@/design/timer-preference';
+import { previewSound, saved } from '@/design/sounds';
 import { useClerk, useUser } from '@clerk/expo';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BottomSheetScrollView, type BottomSheetModal } from '@gorhom/bottom-sheet';
@@ -15,6 +20,7 @@ import { ReedIconButton } from '@/components/ui/reed-icon-button';
 import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedText } from '@/components/ui/reed-text';
 import { ReedToggle } from '@/components/ui/reed-toggle';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedAccentPalettes, reedProfileMetrics as metrics } from '@/design/system';
@@ -36,6 +42,9 @@ const titles: Record<ProfileSection, string> = { body: 'Body', practices: 'Pract
 /** One sheet, with a compact menu, section views and focused answer editors. */
 export function YouSheet({ onClose, visible }: YouSheetProps) {
   const { theme, accentChoice, automaticAccent, setAutomaticAccent } = useReedTheme();
+  const hapticPreference = useHapticPreference();
+  const soundPreference = useSoundPreference();
+  const startCountdown = useStartCountdownPreference();
   const { displayName } = useAppShell();
   const { signOut } = useClerk();
   const { user } = useUser();
@@ -89,7 +98,7 @@ export function YouSheet({ onClose, visible }: YouSheetProps) {
   function openGoals() { pendingActionRef.current = () => router.push(appViewRoutes.goals); sheetRef.current?.dismiss(); }
   async function save(change: ProfileChange) {
     setIsWorking(true);
-    try { await updateField({ change }); setEditor(null); }
+    try { await updateField({ change }); haptics.saved(); saved(); setEditor(null); }
     finally { setIsWorking(false); }
   }
   async function runAction(action: () => Promise<void>) {
@@ -97,7 +106,7 @@ export function YouSheet({ onClose, visible }: YouSheetProps) {
     setIsWorking(true);
     setError(null);
     try { await action(); }
-    catch (failure) { setError(getErrorMessage(failure)); }
+    catch (failure) { haptics.warning(); setError(getErrorMessage(failure)); }
     finally { setIsWorking(false); }
   }
   function handleSignOut() {
@@ -142,6 +151,29 @@ export function YouSheet({ onClose, visible }: YouSheetProps) {
     <View style={{ flexDirection: 'row', gap: theme.spacing.md, alignItems: 'center', minHeight: metrics.metricHeight }}>
       <View style={{ flex: 1, gap: theme.spacing.xxs }}><ReedText variant="bodyStrong">Coach updates</ReedText><ReedText tone="secondary" variant="caption">{Platform.OS === 'web' ? 'Available in the mobile app.' : notificationStatusText(notificationPreferences, notificationDeviceStatus)}</ReedText></View>
       <ReedToggle accessibilityLabel="Coach updates" disabled={Platform.OS === 'web' || isWorking || notificationPreferences === undefined || notificationDeviceStatus === undefined} onValueChange={handleNotificationToggle} value={Boolean(notificationPreferences?.enabled && notificationDeviceStatus?.hasEnabledDevice)} />
+    </View>
+    <View style={{ flexDirection: 'row', gap: theme.spacing.md, alignItems: 'center', minHeight: metrics.metricHeight }}>
+      <View style={{ flex: 1, gap: theme.spacing.xxs }}><ReedText variant="bodyStrong">Haptic feedback</ReedText><ReedText tone="secondary" variant="caption">Gentle feedback, where supported.</ReedText></View>
+      <ReedToggle accessibilityLabel="Haptic feedback" disabled={!hapticPreference.ready} onValueChange={hapticPreference.setEnabled} value={hapticPreference.enabled} />
+    </View>
+    <View style={{ gap: theme.spacing.sm }}>
+      <View style={{ flexDirection: 'row', gap: theme.spacing.md, alignItems: 'center', minHeight: metrics.metricHeight }}>
+        <View style={{ flex: 1, gap: theme.spacing.xxs }}><ReedText variant="bodyStrong">Sound effects</ReedText><ReedText tone="secondary" variant="caption">Gentle cues for Reed. More energy during workouts.</ReedText></View>
+        <ReedToggle accessibilityLabel="Sound effects" disabled={!soundPreference.ready} onValueChange={soundPreference.setEnabled} value={soundPreference.enabled} />
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: theme.spacing.sm }}>
+        <ReedButton label="Hear Reed" variant="secondary" disabled={!soundPreference.ready || !soundPreference.enabled} onPress={() => previewSound('saved')} />
+        <ReedButton label="Hear workout" variant="secondary" disabled={!soundPreference.ready || !soundPreference.enabled} onPress={() => previewSound('workoutComplete')} />
+      </View>
+    </View>
+    <View style={{ gap: theme.spacing.sm }}>
+      <ReedText variant="bodyStrong">Start countdown</ReedText>
+      <ReedText tone="secondary" variant="caption">Get ready before a timed activity starts.</ReedText>
+      <SegmentedControl haptic value={String(startCountdown.seconds)} options={[
+        { value: '0', label: 'Off', accessibilityLabel: 'Start countdown off' },
+        { value: '3', label: '3 seconds', accessibilityLabel: 'Start countdown 3 seconds' },
+        { value: '5', label: '5 seconds', accessibilityLabel: 'Start countdown 5 seconds' },
+      ]} onChange={value => startCountdown.setSeconds(value === '0' ? 0 : value === '5' ? 5 : 3)} />
     </View>
     <AccentPreferences />
   </View>;

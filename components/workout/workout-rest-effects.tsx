@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { AppState } from 'react-native';
+import * as haptics from '@/design/haptics';
+import { getRestDeadline } from '@/domains/workout/rest';
+import { AppState, Platform } from 'react-native';
 import { startClientWideEvent } from '@/lib/client-observability';
 import { playRestTimerCompletionCueAsync } from '@/lib/rest-timer-alerts';
 import type { RestCard } from './workout-surface.types';
@@ -14,24 +16,41 @@ export function WorkoutRestEffects({
   restCard: RestCard | null;
 }) {
   const remaining = useRestCountdown(restCard)?.remainingSeconds ?? 0;
-  const previousRemainingRef = useRef<number | null>(null);
+  const previousRemainingRef = useRef<{ key: string | null; remaining: number; visible: boolean } | null>(null);
+
+  useEffect(() => {
+    // Inactive apps can suspend JS: clear the baseline at the event, before the resumed clock ticks.
+    const subscription = AppState.addEventListener('change', state => {
+      if (state !== 'active') previousRemainingRef.current = null;
+    });
+    const visibility = () => { if (document.hidden) previousRemainingRef.current = null; };
+    if (Platform.OS === 'web') document.addEventListener('visibilitychange', visibility);
+    return () => {
+      subscription.remove();
+      if (Platform.OS === 'web') document.removeEventListener('visibilitychange', visibility);
+    };
+  }, []);
 
   useEffect(() => {
     const previous = previousRemainingRef.current;
-    previousRemainingRef.current = remaining;
+    const key = restCard ? `${restCard.sessionExerciseId}:${restCard.nextSetNumber}:${getRestDeadline(restCard)}` : null;
+    const visible = AppState.currentState === 'active' && (Platform.OS !== 'web' || !document.hidden);
+    previousRemainingRef.current = { key, remaining, visible };
     if (
       restCard &&
       previous !== null &&
-      previous > 0 &&
+      previous.key === key &&
+      previous.visible &&
+      previous.remaining > 0 &&
       remaining === 0 &&
-      AppState.currentState === 'active'
+      visible && key
     ) {
       const event = startClientWideEvent('alert.foreground');
-      void playRestTimerCompletionCueAsync({
-        exerciseName: restCard.exerciseName,
-        nextSetNumber: restCard.nextSetNumber,
-      })
-        .then(() => event.end())
+      haptics.attention(key);
+      void playRestTimerCompletionCueAsync(key)
+        .then(() => {
+          event.end();
+        })
         .catch((error) => event.fail(error, 'alert_foreground_failed'));
     }
   }, [remaining, restCard]);

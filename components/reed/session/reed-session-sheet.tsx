@@ -51,11 +51,14 @@ const STARTERS = [
 export function ReedSessionSheet({
   open,
   onClose,
+  onClosing,
   context,
   onApplied,
 }: {
   open: boolean;
   onClose: () => void;
+  /** The sheet has started to close (Reed can head back to her place while it does). */
+  onClosing?: () => void;
   context: SessionAskContext | null;
   onApplied: (exerciseId: string) => void;
 }) {
@@ -71,6 +74,7 @@ export function ReedSessionSheet({
       ref={sheet}
       conversation
       position={sheetPosition}
+      onClosing={onClosing}
       onDismiss={() => {
         Keyboard.dismiss();
         onClose();
@@ -366,7 +370,7 @@ function SessionConversation({
                   setMenu(null);
                   return;
                 }
-                haptics.selection();
+
                 root.current?.measureInWindow((x, y) =>
                   setMenu({ ...anchor, x: anchor.x - x, y: anchor.y - y }),
                 );

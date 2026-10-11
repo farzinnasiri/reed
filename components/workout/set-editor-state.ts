@@ -4,6 +4,7 @@ export type SetDraft = { metrics: MetricValues; outcome: SetOutcomeDetails; warm
 export type SetEditorState = {
   captureKey: string | null;
   draft: SetDraft;
+  drafts: Record<string, SetDraft>;
   editing: { target: EditingSet; draft: SetDraft } | null;
 };
 export type SetEditorAction =
@@ -20,22 +21,30 @@ export function captureIdentity(card: CaptureCard | null) {
 export function initialSetEditor(card: CaptureCard | null): SetEditorState {
   return {
     captureKey: captureIdentity(card),
-    draft: { metrics: card?.initialMetrics ?? {}, outcome: {}, warmup: false },
+    draft: { metrics: card?.initialMetrics ?? {}, outcome: card?.initialSetOutcomeDetails ?? {}, warmup: false },
+    drafts: {},
     editing: null,
   };
 }
 
 export function reduceSetEditor(state: SetEditorState, action: SetEditorAction): SetEditorState {
   switch (action.type) {
-    case 'capture':
+    case 'capture': {
       if (state.captureKey === captureIdentity(action.card)) return state;
+      const next = initialSetEditor(action.card);
+      const drafts = action.card
+        ? { ...state.drafts, ...(state.captureKey ? { [state.captureKey]: state.draft } : {}) }
+        : {};
       return {
-        ...initialSetEditor(action.card),
+        ...next,
+        drafts,
+        draft: next.captureKey ? drafts[next.captureKey] ?? next.draft : next.draft,
         editing:
           action.card && state.editing?.target.sessionExerciseId === action.card.sessionExerciseId
             ? state.editing
             : null,
       };
+    }
     case 'edit':
       return {
         ...state,

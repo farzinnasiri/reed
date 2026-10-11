@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { reedRadii, SCREEN_CHROME_HORIZONTAL_MARGIN, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/design/system';
+import { reedRadii, SCREEN_CONTENT_HORIZONTAL_MARGIN } from '@/design/system';
 import { styles as shared } from './workout-shared.styles';
 
 export const styles = StyleSheet.create({
@@ -17,7 +17,6 @@ export const styles = StyleSheet.create({
   },
   timelineRailContentDocked: {
     gap: 12,
-    paddingBottom: 128,
     paddingTop: 8,
   },
   timelineLineItem: {
@@ -155,47 +154,5 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 240,
     paddingVertical: 28,
-  },
-  // The dock is the home dock's shape: chrome-gutter sides, canvas behind, one 52px row.
-  dock: {
-    bottom: 0,
-    left: 0,
-    paddingHorizontal: SCREEN_CHROME_HORIZONTAL_MARGIN,
-    paddingTop: 8,
-    position: 'absolute',
-    right: 0,
-    zIndex: 20,
-  },
-  dockRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  dockFill: {
-    flex: 1,
-  },
-  dockIcon: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    height: 52,
-    justifyContent: 'center',
-    width: 52,
-  },
-  dockWide: {
-    alignItems: 'center',
-    borderRadius: reedRadii.pill,
-    flex: 1,
-    flexDirection: 'row',
-    gap: 8,
-    height: 52,
-    justifyContent: 'center',
-  },
-  finishSheet: {
-    gap: 12,
-    paddingTop: 4,
-  },
-  finishCopy: {
-    gap: 4,
-    paddingBottom: 8,
   },
 });

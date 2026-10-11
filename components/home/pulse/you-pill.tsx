@@ -1,7 +1,6 @@
 import { Image, Pressable } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useUser } from '@clerk/expo';
-import * as haptics from '@/design/haptics';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 
@@ -17,7 +16,7 @@ export function YouPill({ onPress }: { onPress: () => void }) {
       accessibilityHint="Opens body, goals, training setup, and settings."
       accessibilityLabel="You"
       accessibilityRole="button"
-      onPress={() => { haptics.selection(); onPress(); }}
+      onPress={() => {  onPress(); }}
       style={({ pressed }) => [
         {
           alignItems: 'center',

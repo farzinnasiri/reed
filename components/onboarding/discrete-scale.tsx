@@ -1,4 +1,5 @@
-import { useRef } from 'react';
+import { usePickerHaptics } from '@/design/haptic-feedback';
+import { useEffect, useRef } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
@@ -10,20 +11,21 @@ export type ScaleStop = { label: string; color: string };
 /** The rail can be dragged; every stop is also a labeled, keyboard-accessible button. */
 export function DiscreteScale({ label, stops, value, onChange, numberOffset = 1, compact = false }: { compact?: boolean; numberOffset?: number; label: string; stops: ScaleStop[]; value: number | null; onChange: (value: number) => void }) {
   const { theme } = useReedTheme();
+  const pickerFeedback = usePickerHaptics();
   const width = useRef(0);
   const rail = useRef<View>(null);
   const last = useRef(value);
-  last.current = value;
-  const choose = (next: number) => {
+  useEffect(() => { last.current = value; }, [value]);
+  const choose = (next: number, continuous = false) => {
     const clamped = Math.max(0, Math.min(stops.length - 1, next));
     if (last.current === clamped) return;
     last.current = clamped;
-    haptics.selection();
+    if (continuous) pickerFeedback.preview(); else haptics.selection();
     onChange(clamped);
   };
   const drag = (pageX: number) => rail.current?.measureInWindow(left => {
     if (!Number.isFinite(pageX)) return;
-    choose(Math.round(Math.max(0, Math.min(1, (pageX - left - 24) / Math.max(1, width.current - 48))) * (stops.length - 1)));
+    choose(Math.round(Math.max(0, Math.min(1, (pageX - left - 24) / Math.max(1, width.current - 48))) * (stops.length - 1)), true);
   });
   return (
     <View style={styles.root}>
@@ -41,6 +43,8 @@ export function DiscreteScale({ label, stops, value, onChange, numberOffset = 1,
         onLayout={event => { width.current = event.nativeEvent.layout.width; }}
         onStartShouldSetResponder={() => true}
         onResponderGrant={event => drag(event.nativeEvent.pageX)}
+        onResponderRelease={pickerFeedback.settle}
+        onResponderTerminate={pickerFeedback.cancel}
         onResponderMove={event => drag(event.nativeEvent.pageX)}
         style={styles.railTouch}
         {...(Platform.OS === 'web' ? { 'aria-valuemin': 0, 'aria-valuemax': stops.length - 1, 'aria-valuenow': value ?? undefined, 'aria-valuetext': value === null ? 'Not answered' : stops[value].label, tabIndex: 0, onKeyDown: (event: { key: string; preventDefault: () => void }) => {

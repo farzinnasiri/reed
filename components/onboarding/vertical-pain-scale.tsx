@@ -30,8 +30,8 @@ export function VerticalPainScale({ area, value, height, onPreview, onChange }: 
     position.set(reduced ? target : withSpring(target, reedSprings.snappy));
     last.set(value ?? -1);
   }, [dragging, last, position, reduced, travel, value]);
-  const preview = useCallback((next: number) => { haptics.selection(); onPreview(next); }, [onPreview]);
-  const commit = (next: number) => onChange(Math.max(0, Math.min(4, next)));
+  const preview = useCallback((next: number) => { haptics.detent(); onPreview(next); }, [onPreview]);
+  const commit = (next: number) => { haptics.settled(); onChange(Math.max(0, Math.min(4, next))); };
   const pan = Gesture.Pan().minDistance(0)
     .onBegin(event => {
       dragging.set(true);

@@ -1,5 +1,5 @@
 import { StyleSheet } from 'react-native';
-import { reedRadii } from '@/design/system';
+import { reedRadii, reedTheme } from '@/design/system';
 import { styles as shared } from './workout-shared.styles';
 
 export const styles = StyleSheet.create({
@@ -7,10 +7,21 @@ export const styles = StyleSheet.create({
   restBody: {
     alignItems: 'center',
     flex: 1,
+    minHeight: 0,
     gap: 20,
     justifyContent: 'center',
     paddingBottom: 8,
     paddingTop: 8,
+  },
+  restChoices: {
+    alignSelf: 'stretch',
+    gap: reedTheme.spacing.xs,
+  },
+  restActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: reedTheme.spacing.xs,
+    justifyContent: 'flex-end',
   },
   timerButton: {
     alignItems: 'center',

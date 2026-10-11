@@ -1,13 +1,18 @@
-import type { WorkoutTiming } from './workout-duration';
-import { SessionHeaderMascot } from '@/components/reed/session/session-header-mascot';
+import { WorkoutDurationEditor } from './workout-duration';
+import { normalizeMetricValueForField } from '@/domains/workout/metric-formatting';
+import { clampSeconds, getRestSnapshot } from '@/domains/workout/rest';
+import { SessionDockMascot } from '@/components/reed/session/session-dock-mascot';
 import { SessionMascotProvider } from '@/components/reed/session/session-mascot';
 import { SessionWhisper } from '@/components/reed/session/session-whisper';
 import { ReedSessionSheet, type SessionAskContext } from '@/components/reed/session/reed-session-sheet';
 import { useMascot } from '@/components/reed/mascot';
 import { StageRecedeProvider, useStageRecedeStyle } from '@/design/stage-recede';
+import { reedSprings } from '@/design/motion';
+import { reedSessionMetrics } from '@/design/system';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import Animated from 'react-native-reanimated';
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react';
 import { ReedSwapFeedback, type ReedSwapSnapshot } from '@/components/reed/session/reed-swap-feedback';
 import { analytics } from '@/lib/analytics';
 import { ActivityIndicator, View } from 'react-native';
@@ -19,9 +24,14 @@ import type { WorkoutEntryIntent } from '@/components/home/app-routes';
 import { useReedTheme } from '@/design/provider';
 import { AddExerciseSheet } from './workout-add-exercise-sheet';
 import { ExercisePage } from './workout-exercise-page';
-import { WorkoutSessionInsightsSheet } from './workout-session-insights-sheet';
 import { WorkoutSessionNotesSheet } from './workout-session-notes-sheet';
-import { WorkoutSessionStatusStrip } from './workout-session-status-strip';
+import { SessionClock, SessionStripActions, WorkoutSessionStrip } from './workout-session-status-strip';
+import { SESSION_STRIP_ACTIONS_HEIGHT, SESSION_STRIP_HEIGHT } from './workout-session-status-strip.styles';
+import { SessionDock } from './session-dock';
+import { DOCK_ROW_HEIGHT, useExerciseDockSize } from './session-dock.styles';
+import { FinishSessionSheet } from './finish-session-sheet';
+import { SessionPanel } from './session-panel';
+import { deriveNextAction } from './session-next-action';
 import { styles } from './workout-surface.styles';
 import type {
   LiveCardioFinishSummary,
@@ -47,9 +57,12 @@ type WorkoutSurfaceProps = {
 
 function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: WorkoutSurfaceProps) {
   const { theme } = useReedTheme();
+  const exerciseDockSize = useExerciseDockSize();
   const stageStyle = useStageRecedeStyle();
   const sessionMascot = useMascot('watching');
   const [isReedOpen, setIsReedOpen] = useState(false);
+  // Reed leaves the conversation sheet as it starts to close, not when it has finished, so she is back by the time it is gone.
+  const [isReedClosing, setIsReedClosing] = useState(false);
   const [askContext, setAskContext] = useState<SessionAskContext | null>(null);
   const [committedSet, setCommittedSet] = useState<{
     id: Id<'activityLogs'>;
@@ -57,6 +70,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     at: number;
   } | null>(null);
   const beforeSwap = useRef<ReedSwapSnapshot | null>(null);
+  const [durationOpenedAt, setDurationOpenedAt] = useState<number | null>(null);
+  const panelTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (panelTimer.current) clearTimeout(panelTimer.current); }, []);
+  // Sheets open once the session panel has settled, so the two never fight over the stage.
+  const afterPanel = useCallback((action: () => void) => {
+    if (panelTimer.current) clearTimeout(panelTimer.current);
+    panelTimer.current = setTimeout(action, reedSprings.morph.duration);
+  }, []);
   const [confirmedSwap, setConfirmedSwap] = useState<ReedSwapSnapshot | null>(null);
   const finishSwap = useCallback(() => {
     setConfirmedSwap(null);
@@ -75,7 +96,6 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     reactedSet.current = whisper.eventId;
     sessionMascot.react(whisper.kind === 'pr' ? 'surprised' : whisper.kind === 'caution' ? 'concerned' : 'happy');
     sessionMascot.act(whisper.kind === 'pr' ? 'hop' : 'tick');
-    if (whisper.kind === 'pr') haptics.success();
   }, [sessionMascot, whisper]);
   const { view, openHistory, openDraft, openActive, openSession, showPage, applyIntent } = useWorkoutNavigation();
   const page = view.kind === 'active' ? view.page : 'timeline';
@@ -88,6 +108,7 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   const updateSet = useMutation(api.liveSessions.updateSet);
   const deleteSet = useMutation(api.liveSessions.deleteSet);
   const finishSession = useMutation(api.liveSessions.finishSession);
+  const setSessionDuration = useMutation(api.liveSessions.setSessionDuration);
   const endRest = useMutation(api.liveSessions.endRest);
   const updateRestProcess = useMutation(api.liveSessions.updateRestProcess);
   const startLiveCardio = useMutation(api.liveSessions.startLiveCardio);
@@ -101,17 +122,18 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   const captureOperation = useUserOperation('workout.capture', 'Could not save this change. Please try again.');
   const timelineOperation = useUserOperation('workout.timeline', 'Could not update the session. Please try again.');
   const isWorking = captureOperation.isWorking;
-  const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
+  const [addSheetMode, setAddSheetMode] = useState<'queue' | null>(null);
+  const isAddSheetOpen = addSheetMode !== null;
   const [isPickerInteracting, setIsPickerInteracting] = useState(false);
   const isTimelineMutationPending = timelineOperation.isWorking;
   const [localError, setErrorMessage] = useState<string | null>(null);
   const errorMessage = localError ?? captureOperation.errorMessage ?? timelineOperation.errorMessage;
-  const [isConfirmingFinishSession, setIsConfirmingFinishSession] = useState(false);
-  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
   const [isSessionNotesOpen, setIsSessionNotesOpen] = useState(false);
+  const [isFinishOpen, setIsFinishOpen] = useState(false);
+  // The session just finished, so its recap celebrates once; leaving the recap clears it.
+  const [justFinishedId, setJustFinishedId] = useState<Id<'liveSessions'> | null>(null);
   const [isSavingSessionNotes, setIsSavingSessionNotes] = useState(false);
   const [liveCardioFinishSummary, setLiveCardioFinishSummary] = useState<LiveCardioFinishSummary | null>(null);
-  const [statusStripHeight, setStatusStripHeight] = useState(60);
   const {
     data: sessionInsights,
     error: sessionInsightsError,
@@ -147,14 +169,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     if (restExerciseId) { setIsPickerInteracting(false); setEditingSet(null); setErrorMessage(null); }
   }
   if (session === null && view.kind === 'active') {
-    openHistory(); setEditingSet(null); setIsInsightsOpen(false);
+    openHistory(); setEditingSet(null);
   }
   const [handledIntent, setHandledIntent] = useState<WorkoutEntryIntent | null>(null);
   if (entryIntent !== handledIntent && session !== undefined) {
     setHandledIntent(entryIntent ?? null);
     if (entryIntent) {
       applyIntent(entryIntent, Boolean(session));
-      setIsAddSheetOpen(false); setIsConfirmingFinishSession(false);
+      setAddSheetMode(null);
       setIsSessionNotesOpen(false); setErrorMessage(null);
     }
   }
@@ -180,13 +202,15 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   const insightsStatus = session?.statusStrip ? session.statusStrip : fallbackStatus;
 
   const closeAddSheet = () => {
-    setIsAddSheetOpen(false);
+    setAddSheetMode(null);
   };
 
   async function runMutation<T>(action: () => Promise<T>) {
     setErrorMessage(null);
     timelineOperation.clearError();
-    return captureOperation.run(action);
+    const result = await captureOperation.run(action);
+    if (result.status === 'error') haptics.warning();
+    return result;
   }
 
   async function handleSaveSessionNotes(sessionId: Id<'liveSessions'>, notes: string) {
@@ -195,8 +219,10 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
 
     try {
       await updateSessionNotes({ notes, sessionId });
+      haptics.saved();
       setIsSessionNotesOpen(false);
     } catch (error) {
+      haptics.warning();
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSavingSessionNotes(false);
@@ -206,7 +232,9 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function runTimelineMutation<T>(action: () => Promise<T>) {
     setErrorMessage(null);
     captureOperation.clearError();
-    return timelineOperation.run(action);
+    const result = await timelineOperation.run(action);
+    if (result.status === 'error') haptics.warning();
+    return result;
   }
 
   async function handleStartSession() {
@@ -217,7 +245,6 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleSelectExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
     await runTimelineMutation(async () => {
       await selectExercise({ sessionExerciseId });
-      setIsConfirmingFinishSession(false);
       setEditingSet(null);
       setLiveCardioFinishSummary(null);
       showPage('exercise');
@@ -227,7 +254,6 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleOpenSet(sessionExerciseId: Id<'liveSessionExercises'>, setEntry: TimelineSet) {
     await runTimelineMutation(async () => {
       await selectExercise({ sessionExerciseId });
-      setIsConfirmingFinishSession(false);
       setEditingSet({
         metrics: setEntry.metrics,
         sessionExerciseId,
@@ -243,13 +269,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
 
   async function handleAddExercise(exerciseCatalogId: Id<'exerciseCatalog'>) {
     const shouldTrackSessionStarted = !session;
-    setIsConfirmingFinishSession(false);
     closeAddSheet();
     await runTimelineMutation(async () => {
       await addExercise({ exerciseCatalogId });
       if (shouldTrackSessionStarted) {
         analytics.workoutSessionStarted();
+        sounds.workoutStarted();
       }
+      if (shouldTrackSessionStarted) haptics.light(); else haptics.saved();
       analytics.exerciseAdded();
       openActive();
     });
@@ -261,13 +288,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     }
 
     const shouldTrackSessionStarted = !session;
-    setIsConfirmingFinishSession(false);
     closeAddSheet();
     await runTimelineMutation(async () => {
       await addExercises({ exerciseCatalogIds });
       if (shouldTrackSessionStarted) {
         analytics.workoutSessionStarted();
+        sounds.workoutStarted();
       }
+      if (shouldTrackSessionStarted) haptics.light(); else haptics.saved();
       analytics.exerciseAdded({
         addMode: 'bulk',
         exerciseCount: exerciseCatalogIds.length,
@@ -279,12 +307,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleRemoveExercise(sessionExerciseId: Id<'liveSessionExercises'>) {
     await runTimelineMutation(async () => {
       await removeExercise({ sessionExerciseId });
+      haptics.saved();
     });
   }
 
   async function handleReorderTimeline(orderedSessionExerciseIds: Id<'liveSessionExercises'>[]) {
     const result = await runTimelineMutation(async () => {
       await reorderExercises({ orderedSessionExerciseIds });
+      haptics.selection();
     });
 
     return result.status === 'success';
@@ -295,12 +325,14 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
 
     try {
       await toggleFavorite({ exerciseCatalogId });
+      haptics.selection();
     } catch (error) {
+      haptics.warning();
       setErrorMessage(getErrorMessage(error));
     }
   }
 
-  async function handleCaptureSwipeRight() {
+  async function handleCaptureSwipeRight(afterSet: 'rest' | 'nextExercise' = 'rest') {
     if (!captureCard) {
       return;
     }
@@ -313,18 +345,23 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
           setOutcomeDetails,
           warmup,
         });
+        haptics.saved();
         setEditingSet(null);
         return;
       }
 
       const committed = await logSet({
+        afterSet,
         metrics: metricValues,
         sessionExerciseId: captureCard.sessionExerciseId,
         setOutcomeDetails,
         warmup,
       });
+      haptics.saved();
       setCommittedSet({ id: committed.setLogId, exercise: captureCard.sessionExerciseId, at: committed.loggedAt });
       sessionMascot.act('tick');
+      // Finishing an exercise with nothing queued lands on the timeline, where adding or finishing is one tap.
+      if (afterSet === 'nextExercise' && !committed.nextSessionExerciseId) showPage('timeline');
       analytics.workoutSetLogged({
         setNumber: captureCard.currentSetNumber,
         warmup,
@@ -335,6 +372,7 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleStartLiveCardio(sessionExerciseId: Id<'liveSessionExercises'>) {
     await runMutation(async () => {
       await startLiveCardio({ sessionExerciseId });
+      haptics.toggle(true);
       setEditingSet(null);
       setLiveCardioFinishSummary(null);
     });
@@ -348,15 +386,22 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     await runMutation(async () => {
       if (liveCardioCard.isRunning) {
         await pauseLiveCardio({});
+        haptics.toggle(false);
       } else {
         await resumeLiveCardio({});
+        haptics.toggle(true);
       }
     });
   }
 
   async function handleAdjustLiveCardioMetric(key: string, delta: number) {
+    const field = liveCardioCard?.trackedFields.find(field => field.key === key);
+    if (!field || !liveCardioCard) return;
+    const current = liveCardioCard.trackedMetrics[key] ?? field.defaultValue;
+    const changed = normalizeMetricValueForField(field, current + delta) !== current;
     await runMutation(async () => {
       await adjustLiveCardioMetric({ delta, key });
+      if (changed) haptics.selection();
     });
   }
 
@@ -372,7 +417,9 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     }
 
     setEditingSet(null);
+    haptics.saved();
     setLiveCardioFinishSummary({
+      imageUrl: liveCardioCard.imageUrl,
       elapsedSeconds,
       exerciseName: liveCardioCard.exerciseName,
       nextExerciseId,
@@ -397,36 +444,42 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleDeleteSet(setLogId: Id<'activityLogs'>) {
     await runMutation(async () => {
       await deleteSet({ setLogId });
+      haptics.saved();
       if (editingSet?.setLogId === setLogId) {
         setEditingSet(null);
       }
     });
   }
 
-  async function handleFinishSession() {
+  /** `durationSeconds` is the length the user chose over the clock's, for a session left open too long. */
+  async function handleFinishSession(durationSeconds?: number) {
     if (!session) {
-      setIsConfirmingFinishSession(false);
       setEditingSet(null);
-      setIsAddSheetOpen(false);
+      setAddSheetMode(null);
       openHistory();
       showPage('timeline');
       return;
     }
 
+    const sessionId = session.session.sessionId;
     await runMutation(async () => {
+      if (durationSeconds !== undefined) await setSessionDuration({ sessionId, durationSeconds });
       const result = await finishSession({});
       const totalSets =
         session?.timeline.reduce((total: number, row: { setCount: number }) => total + row.setCount, 0) ?? 0;
       const exerciseCount = session?.timeline.length ?? 0;
       if (!result.deletedEmptySession) {
+        if (totalSets > 0) { haptics.success(); sounds.workoutCompleted(sessionId); }
         analytics.workoutSessionFinished({
           exerciseCount,
           totalSets,
         });
       }
-      setIsConfirmingFinishSession(false);
+      setIsFinishOpen(false);
       setEditingSet(null);
-      openHistory();
+      // A finished session ends on its recap; an empty one was never saved, so there is nothing to show.
+      if (result.deletedEmptySession) openHistory();
+      else { setJustFinishedId(sessionId); openSession(sessionId); }
       showPage('timeline');
     });
   }
@@ -434,13 +487,26 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
   async function handleRestSwipeRight() {
     await runMutation(async () => {
       await endRest({});
+      haptics.light();
       // Stay on the exercise page; next-set capture card appears via getCurrent.
     });
+  }
+
+  /** Done with this exercise from rest: open the next queued one, or land on the timeline. */
+  async function handleRestMoveOn() {
+    const nextExerciseId = restCard ? getNextTimelineExerciseId(session?.timeline ?? [], restCard.sessionExerciseId) : null;
+    const result = await runMutation(async () => {
+      await endRest({});
+      if (nextExerciseId) await selectExercise({ sessionExerciseId: nextExerciseId });
+      haptics.light();
+    });
+    if (result.status === 'success' && !nextExerciseId) showPage('timeline');
   }
 
   async function handleRestSwipeLeft() {
     await runMutation(async () => {
       await endRest({});
+      haptics.light();
       // Keep exercise context; after ending rest the capture card returns
       // to the same exercise so users can continue from the last set flow.
     });
@@ -453,21 +519,28 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
 
     await runMutation(async () => {
       await updateRestProcess({ mode: 'toggleRunning' });
+      haptics.toggle(!getRestSnapshot(restCard).isRunning);
     });
   }
 
   async function handleAdjustRest(deltaSeconds: number) {
+    const remaining = restCard ? getRestSnapshot(restCard).remainingSeconds : null;
+    const changed = remaining !== null && clampSeconds(remaining + deltaSeconds, 15, 240) !== remaining;
     setErrorMessage(null);
     try {
       await updateRestProcess({ deltaSeconds, mode: 'adjustBy' });
+      if (changed) haptics.selection();
     } catch (error) {
+      haptics.warning();
       setErrorMessage(getErrorMessage(error));
     }
   }
 
   async function handlePresetRest(durationSeconds: number) {
+    const remaining = restCard ? getRestSnapshot(restCard).remainingSeconds : null;
     await runMutation(async () => {
       await updateRestProcess({ durationSeconds, mode: 'setDuration' });
+      if (remaining !== durationSeconds || restCard?.durationSeconds !== durationSeconds) haptics.selection();
     });
   }
 
@@ -493,24 +566,26 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
       label: row ? `${row.exerciseName}${setNumber ? ` · set ${setNumber}` : ''}` : 'Your session',
       ...(fromWhisper && whisper ? { whisper: whisper.text } : {}),
     });
-    haptics.light();
+    setIsReedClosing(false);
     setIsReedOpen(true);
   }
 
+  // Content starts below the session strip; the strip itself is placed by `WorkoutSessionStrip`.
+  // A live session's timeline has Finish and Notes in a second row of the strip, so its content starts lower.
+  const hasStripActions = view.kind === 'active' && page === 'timeline';
+  const contentTopInset = insets.top + theme.spacing.lg + SESSION_STRIP_HEIGHT + (hasStripActions ? SESSION_STRIP_ACTIONS_HEIGHT : 0) + theme.spacing.sm;
+  const dockBottom = insets.bottom + theme.spacing.xs;
+
   function renderSessionChrome({
     children,
-    onBack,
-    onOpenInsights,
+    dock,
     overlays,
-    status,
-    timing,
+    strip,
   }: {
     children: ReactNode;
-    onBack: () => void;
-    onOpenInsights?: () => void;
+    dock?: ReactNode;
     overlays?: ReactNode;
-    status: LiveSessionStatusStrip;
-    timing?: WorkoutTiming;
+    strip: ComponentProps<typeof WorkoutSessionStrip>;
   }) {
     return (
       <View style={styles.root}>
@@ -518,35 +593,23 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
           <ReedSwapFeedback before={confirmedSwap} onFinished={finishSwap}>
             <View style={styles.activeWorkoutPage}>{children}</View>
           </ReedSwapFeedback>
-          <View
-            onLayout={(e) => setStatusStripHeight(e.nativeEvent.layout.height + insets.top + theme.spacing.lg + theme.spacing.sm)}
-            style={[styles.statusStripFloating, { top: insets.top + theme.spacing.lg }]}
-          >
-            <WorkoutSessionStatusStrip
-              onBack={onBack}
-              reed={
-                session ? (
-                  <SessionHeaderMascot mascot={sessionMascot} hidden={isReedOpen} onTalk={() => openReed(false)} />
-                ) : undefined
-              }
-              onOpenInsights={onOpenInsights}
-              status={status}
-              timing={timing ?? (view.kind === 'active' && session ? { ...session.session } : undefined)}
-            />
-          </View>
+          {dock}
         </Animated.View>
+        <WorkoutSessionStrip {...strip} />
         {session ? (
           <>
             <SessionWhisper
               value={whisper ?? null}
-              top={statusStripHeight + theme.spacing.xs}
+              bottom={dockBottom + DOCK_ROW_HEIGHT + theme.spacing.xs}
+              left={theme.spacing.chromeGutter + (page === 'exercise' ? exerciseDockSize : reedSessionMetrics.dock) * 0.7}
               allowed={!isReedOpen && !isPickerInteracting && !isWorking && page === 'exercise'}
               onOpen={() => openReed(true)}
             />
             <ReedSessionSheet
               open={isReedOpen}
               context={askContext}
-              onClose={() => setIsReedOpen(false)}
+              onClose={() => { setIsReedOpen(false); setIsReedClosing(false); }}
+              onClosing={() => setIsReedClosing(true)}
               onApplied={(exerciseId) => {
                 if (beforeSwap.current?.exerciseId === exerciseId) setConfirmedSwap(beforeSwap.current);
                 sessionMascot.react('happy');
@@ -568,56 +631,52 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     );
   }
 
-  if (session === null && view.kind === 'draft') {
-    const draftStatus: LiveSessionStatusStrip = {
-      completedSetsLabel: '0 sets',
-      durationLabel: '0m',
-      microLineTokens: [],
-      workSlotKind: 'active',
-      workSlotLabel: 'Open',
-    };
+  const addExerciseSheet = (
+    <AddExerciseSheet
+      isOpen={isAddSheetOpen}
+      isWorking={isWorking || isTimelineMutationPending}
+      onAddBulk={handleAddExercisesBulk}
+      onAddSingle={handleAddExercise}
+      onClose={closeAddSheet}
+      onToggleFavorite={handleToggleFavorite}
+    />
+  );
 
+  if (session === null && view.kind === 'draft') {
     return renderSessionChrome({
       children: (
         <TimelinePage
           activeRestCard={null}
-          contentTopInset={statusStripHeight}
-          elapsedLabel={null}
+          contentTopInset={contentTopInset}
           errorMessage={
             errorMessage ??
             (restPermissionDenied ? 'Enable notifications to get rest alerts when the app is in the background.' : null)
           }
+          exercises={null}
+          isWorking={isTimelineMutationPending}
           timeline={[]}
-          editor={{
-            kind: 'draft',
-            isConfirmingFinishSession: isConfirmingFinishSession,
-            isWorking: isTimelineMutationPending,
-            onAddExercise: () => {
-              setIsConfirmingFinishSession(false);
-              setIsAddSheetOpen(true);
-            },
-            onClearFinishSessionConfirm: () => setIsConfirmingFinishSession(false),
-            onFinishSession: handleFinishSession,
-            onToggleFinishSessionConfirm: () => setIsConfirmingFinishSession((current) => !current),
-          }}
         />
       ),
-      onBack: () => {
-        setIsConfirmingFinishSession(false);
-        setIsAddSheetOpen(false);
-        openHistory();
+      dock: (
+        <SessionDock
+          disabled={isTimelineMutationPending}
+          mascot={<SessionDockMascot hidden={false} mascot={sessionMascot} />}
+          next={{ kind: 'add' }}
+          onAdd={() => setAddSheetMode('queue')}
+          onNext={() => setAddSheetMode('queue')}
+          page="timeline"
+          restCard={null}
+        />
+      ),
+      overlays: addExerciseSheet,
+      strip: {
+        lead: <SessionClock fallback="New" />,
+        onBack: () => {
+          setAddSheetMode(null);
+          openHistory();
+        },
+        sets: '0 sets',
       },
-      overlays: (
-        <AddExerciseSheet
-          isOpen={isAddSheetOpen}
-          isWorking={isWorking || isTimelineMutationPending}
-          onAddBulk={handleAddExercisesBulk}
-          onAddSingle={handleAddExercise}
-          onClose={closeAddSheet}
-          onToggleFavorite={handleToggleFavorite}
-        />
-      ),
-      status: draftStatus,
     });
   }
 
@@ -625,52 +684,56 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     return <WorkoutHistoryScreen
       selectedEndedSessionId={view.kind === 'past-session' ? view.sessionId : null}
       onOpenSession={openSession}
-      onShowHistory={openHistory}
+      onShowHistory={() => { setJustFinishedId(null); openHistory(); }}
       onResume={openActive}
+      onFinishOld={() => { openActive(); setIsFinishOpen(true); }}
+      justFinishedId={justFinishedId}
       onStart={handleStartSession}
       onBack={onBack}
-      contentTopInset={statusStripHeight}
+      contentTopInset={contentTopInset}
+      mascot={sessionMascot}
       renderSessionChrome={renderSessionChrome}
     />;
   }
+
+  const nextAction = deriveNextAction({
+    capture: captureCard,
+    liveCardio: liveCardioCard,
+    rest: restCard,
+    timeline: session.timeline,
+  });
+  const position = captureCard
+    ? `${captureCard.exerciseName} · set ${captureCard.currentSetNumber}`
+    : (restCard?.exerciseName ?? liveCardioCard?.exerciseName ?? null);
+  const lastSetAt = latestSetTime(session.timeline);
+  const discardsOnFinish = session.timeline.length === 0 || (session.session.fromPlan && lastSetAt === null);
 
   const renderWorkoutPage = (targetPage: WorkoutPage) =>
     targetPage === 'timeline' ? (
       <TimelinePage
         activeRestCard={restRuntime}
-        contentTopInset={statusStripHeight}
-        elapsedLabel={null}
-        sessionStartedAt={session.session.startedAt}
+        contentTopInset={contentTopInset}
         errorMessage={
           errorMessage ??
           (restPermissionDenied ? 'Enable notifications to get rest alerts when the app is in the background.' : null)
         }
-        hasNotes={Boolean(session.session.userNotes?.trim())}
-        onOpenNotes={() => setIsSessionNotesOpen(true)}
-        timeline={session.timeline}
-        editor={{
-          kind: 'active',
-          isConfirmingFinishSession: isConfirmingFinishSession,
-          isWorking: isTimelineMutationPending,
-          onAddExercise: () => {
-            setIsConfirmingFinishSession(false);
-            setIsAddSheetOpen(true);
-          },
-          onClearFinishSessionConfirm: () => setIsConfirmingFinishSession(false),
-          onFinishSession: handleFinishSession,
-          onToggleFinishSessionConfirm: () => setIsConfirmingFinishSession((current) => !current),
-          exercises: {
-            onDeleteSet: handleDeleteSet,
-            onOpenExercise: handleSelectExercise,
-            onOpenSet: handleOpenSet,
-            onReorderTimeline: handleReorderTimeline,
-            onRemoveExercise: handleRemoveExercise,
-          },
+        exercises={{
+          onDeleteSet: handleDeleteSet,
+          onOpenExercise: handleSelectExercise,
+          onOpenSet: handleOpenSet,
+          onReorderTimeline: handleReorderTimeline,
+          onRemoveExercise: handleRemoveExercise,
         }}
+        isWorking={isTimelineMutationPending}
+        timeline={session.timeline}
       />
     ) : (
       <ExercisePage
-        contentTopInset={statusStripHeight}
+        history={{
+          exercise: session.timeline.find(row => row.sessionExerciseId === (captureCard?.sessionExerciseId ?? restCard?.sessionExerciseId ?? liveCardioCard?.sessionExerciseId)) ?? null,
+          onCancelEdit: () => setEditingSet(null),
+        }}
+        contentTopInset={contentTopInset}
         capture={{
           card: captureCard,
           editingSetNumber: activeSetEditor?.setNumber ?? null,
@@ -713,8 +776,10 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
         rest={{
           card: restCard,
           errorMessage,
-          isWorking,
+          isWorking: isWorking || isTimelineMutationPending,
           onAdjust: handleAdjustRest,
+          onMoveOn: handleRestMoveOn,
+          nextExerciseName: restCard ? session.timeline.find(row => row.sessionExerciseId === getNextTimelineExerciseId(session.timeline, restCard.sessionExerciseId))?.exerciseName ?? null : null,
           onPreset: handlePresetRest,
           onSwipeLeft: handleRestSwipeLeft,
           onSwipeRight: handleRestSwipeRight,
@@ -728,8 +793,6 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     // Nested exercise/rest/live-cardio surfaces return to the session timeline first.
     if (page === 'timeline') {
       openHistory();
-      setIsConfirmingFinishSession(false);
-      setIsInsightsOpen(false);
       setIsSessionNotesOpen(false);
       return;
     }
@@ -739,35 +802,51 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
     showPage('timeline');
   }
 
+  const mascot = <SessionDockMascot hidden={isReedOpen && !isReedClosing} mascot={sessionMascot} onTalk={() => openReed(false)} size={page === 'exercise' ? exerciseDockSize : reedSessionMetrics.dock} />;
+
+  const panelExerciseId = captureCard?.sessionExerciseId ?? restCard?.sessionExerciseId ?? liveCardioCard?.sessionExerciseId ?? null;
+  const panelSetCount = session.timeline.find(row => row.sessionExerciseId === panelExerciseId)?.sets.length ?? 0;
+  const hasLoggedSets = session.timeline.some(row => row.sets.length > 0);
+  const panelPeekHeight = page === 'timeline'
+    ? reedSessionMetrics.panelPeekBase + (hasLoggedSets ? reedSessionMetrics.panelGlanceBody : 0)
+    : reedSessionMetrics.panelPeekBase
+      + Math.min(4, session.timeline.length) * reedSessionMetrics.panelExerciseRow
+      + (panelSetCount ? reedSessionMetrics.panelExerciseRow + Math.min(4, panelSetCount) * reedSessionMetrics.panelSetRow : 0);
+
   return renderSessionChrome({
     children: renderWorkoutPage(page),
-    onBack: handleStatusStripBack,
-    onOpenInsights: () => {
-      setIsInsightsOpen(true);
-      void refreshSessionInsights();
-    },
+    dock: page === 'timeline' ? (
+      <SessionDock
+        disabled={isTimelineMutationPending}
+        mascot={mascot}
+        next={nextAction}
+        onAdd={() => setAddSheetMode('queue')}
+        onNext={() => {
+          if (nextAction.kind === 'start') void handleSelectExercise(nextAction.exerciseId);
+          else showPage('exercise');
+        }}
+        page="timeline"
+        restCard={nextAction.kind === 'open' ? restRuntime : null}
+      />
+    ) : (
+      <SessionDock mascot={mascot} page="exercise" />
+    ),
     overlays: (
       <>
-        <AddExerciseSheet
-          isOpen={isAddSheetOpen}
+        {addExerciseSheet}
+        <WorkoutDurationEditor openedAt={durationOpenedAt} onClose={() => setDurationOpenedAt(null)} timing={{ ...session.session }} />
+        <FinishSessionSheet
+          discardsOnFinish={discardsOnFinish}
+          exerciseCount={session.timeline.length}
+          fromPlan={session.session.fromPlan}
           isWorking={isWorking}
-          onAddBulk={handleAddExercisesBulk}
-          onAddSingle={handleAddExercise}
-          onClose={closeAddSheet}
-          onToggleFavorite={handleToggleFavorite}
+          lastSetAt={lastSetAt}
+          manualDurationSeconds={session.session.manualDurationSeconds}
+          onClose={() => setIsFinishOpen(false)}
+          onFinish={durationSeconds => void handleFinishSession(durationSeconds)}
+          open={isFinishOpen}
+          startedAt={session.session.startedAt}
         />
-
-        <WorkoutSessionInsightsSheet
-          errorMessage={sessionInsightsError}
-          insights={sessionInsights}
-          isLoading={isSessionInsightsLoading}
-          isOpen={isInsightsOpen}
-          onClose={() => setIsInsightsOpen(false)}
-          onRetry={() => {
-            void refreshSessionInsights();
-          }}
-        />
-
         <WorkoutSessionNotesSheet
           initialNotes={session.session.userNotes ?? ''}
           isOpen={isSessionNotesOpen}
@@ -777,8 +856,58 @@ function WorkoutSurfaceContent({ entryIntent, onBack, onEntryIntentHandled }: Wo
         />
       </>
     ),
-    status: insightsStatus,
+    strip: {
+      actions: page === 'timeline' ? (
+        <SessionStripActions
+          hasNotes={Boolean(session.session.userNotes?.trim())}
+          onFinish={() => setIsFinishOpen(true)}
+          onNotes={() => setIsSessionNotesOpen(true)}
+        />
+      ) : undefined,
+      lead: <SessionClock manualDurationSeconds={session.session.manualDurationSeconds} startedAt={session.session.startedAt} />,
+      onBack: handleStatusStripBack,
+      panelPeekHeight,
+      panelFullHeight: session.timeline.some(row => row.sets.length) ? undefined : reedSessionMetrics.panelFullBase,
+      panel: controls => (
+        <SessionPanel
+          controls={controls}
+          workout={{
+            page,
+            timeline: session.timeline,
+            activeExerciseId: panelExerciseId,
+            onOpenExercise: exercise => { controls.close(); afterPanel(() => void handleSelectExercise(exercise.sessionExerciseId)); },
+            onOpenSet: (exercise, set) => { controls.close(); afterPanel(() => void handleOpenSet(exercise.sessionExerciseId, set)); },
+          }}
+          session={{
+            durationFallback: insightsStatus.durationLabel,
+            discardsOnFinish,
+            exerciseCount: session.timeline.length,
+            insights: sessionInsights,
+            insightsError: sessionInsightsError,
+            insightsLoading: isSessionInsightsLoading,
+            isWorking,
+            notes: session.session.userNotes ?? '',
+            timing: { ...session.session },
+          }}
+          actions={{
+            onFinish: () => { controls.close(); afterPanel(() => setIsFinishOpen(true)); },
+            onOpenNotes: () => { controls.close(); afterPanel(() => setIsSessionNotesOpen(true)); },
+            onEditDuration: () => { controls.close(); afterPanel(() => setDurationOpenedAt(Date.now())); },
+            onRefreshInsights: refreshSessionInsights,
+          }}
+        />
+      ),
+      position,
+      sets: insightsStatus.completedSetsLabel,
+    },
   });
+}
+
+/** When the most recent set in the session was logged, or null if none was. */
+function latestSetTime(timeline: TimelineRow[]) {
+  let latest: number | null = null;
+  for (const row of timeline) for (const setEntry of row.sets) if (latest === null || setEntry.loggedAt > latest) latest = setEntry.loggedAt;
+  return latest;
 }
 
 function getNextTimelineExerciseId(

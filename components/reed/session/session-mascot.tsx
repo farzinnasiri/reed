@@ -1,6 +1,8 @@
 import {
   createContext,
+  useCallback,
   useContext,
+  useId,
   useEffect,
   useRef,
   useState,
@@ -33,12 +35,15 @@ const HOST = "reed-workout-mascot";
 type Placement = {
   open: boolean;
   header: MascotAnchor | null;
+  /** The slot that placed `header`, so a slot going away never clears the place a newer one took. */
+  owner: string | null;
   controller: MascotController | null;
 };
 const Context = createContext<{
   placement: Placement;
   setOpen: (open: boolean) => void;
-  anchor: (anchor: MascotAnchor | null) => void;
+  anchor: (anchor: MascotAnchor, owner: string) => void;
+  release: (owner: string) => void;
   drive: (controller: MascotController) => void;
   sheetPosition: SharedValue<number>;
 } | null>(null);
@@ -65,17 +70,20 @@ export function SessionMascotProvider({ children }: { children: ReactNode }) {
   const [placement, setPlacement] = useState<Placement>({
     open: false,
     header: null,
+    owner: null,
     controller: null,
   });
   const [actions] = useState(() => ({
     setOpen: (open: boolean) =>
       setPlacement((p) => (p.open === open ? p : { ...p, open })),
-    anchor: (header: MascotAnchor | null) =>
+    anchor: (header: MascotAnchor, owner: string) =>
       setPlacement((p) =>
-        p.header?.cx === header?.cx && p.header?.cy === header?.cy
+        p.owner === owner && p.header?.cx === header.cx && p.header?.cy === header.cy && p.header?.size === header.size
           ? p
-          : { ...p, header },
+          : { ...p, header, owner },
       ),
+    release: (owner: string) =>
+      setPlacement((p) => (p.owner === owner ? { ...p, header: null, owner: null } : p)),
     drive: (controller: MascotController) =>
       setPlacement((p) => ({ ...p, controller })),
   }));
@@ -111,16 +119,22 @@ export function useSessionMascot(controller: MascotController, sheet: boolean) {
   }, [controller, drive, placement.open, sheet]);
   return context;
 }
+/** Where Reed is on this screen: a box it is drawn into, at `size`. One slot is mounted at a time. */
 export function SessionMascotSlot({
   controller,
   open,
+  size = metrics.dock,
 }: {
   controller: MascotController;
   open: boolean;
+  size?: number;
 }) {
-  const { setOpen, anchor } = useSessionMascot(controller, false);
+  const { setOpen, anchor: place, release } = useSessionMascot(controller, false);
+  const { width: viewportWidth, height: viewportHeight } = useWindowDimensions();
+  const owner = useId();
+  const anchor = useCallback((next: MascotAnchor) => place(next, owner), [owner, place]);
   const slot = useRef<View>(null);
-  useEffect(() => () => anchor(null), [anchor]);
+  useEffect(() => () => release(owner), [owner, release]);
   useEffect(() => {
     setOpen(open);
   }, [open, setOpen]);
@@ -128,11 +142,11 @@ export function SessionMascotSlot({
     if (open) return;
     const frame = requestAnimationFrame(() =>
       slot.current?.measureInWindow((x, y, width, height) =>
-        anchor({ cx: x + width / 2, cy: y + height / 2, size: metrics.header }),
+        anchor({ cx: x + width / 2, cy: y + height / 2, size }),
       ),
     );
     return () => cancelAnimationFrame(frame);
-  }, [anchor, open]);
+  }, [anchor, open, size, viewportWidth, viewportHeight]);
   return (
     <View
       ref={slot}
@@ -143,11 +157,11 @@ export function SessionMascotSlot({
             anchor({
               cx: x + width / 2,
               cy: y + height / 2,
-              size: metrics.header,
+              size,
             });
         })
       }
-      style={{ width: metrics.hit, height: metrics.hit }}
+      style={{ width: size, height: size }}
     />
   );
 }
@@ -180,25 +194,26 @@ function GlidingMascot({
     );
   }, [placement.open, progress, reduced]);
   const header = placement.header;
+  const drawn = metrics.drawn;
   // Fixed 88% sheet: handle 24px, then a 56px header slot, matching ReedSheet.
   const destinationX = theme.spacing.chromeGutter + metrics.sheetMascot / 2;
   const style = useAnimatedStyle(() => {
     const raw = progress.get(),
       t = reduced ? (raw > 0.5 ? 1 : 0) : raw;
     // While any other sheet is open the stage behind recedes (scales and fades about its centre).
-    // The header mascot sits on that stage, so it recedes with it; in the conversation sheet it does not.
+    // Reed sits on that stage, so it recedes with it and fades out; in the conversation sheet it does not.
     const dim = (recede?.get() ?? 0) * (1 - t);
     const recedeScale = reduced ? 1 : 1 - dim * (1 - reedMotion.scale.stageRecede);
     const fromX = width / 2 + ((header?.cx ?? 0) - width / 2) * recedeScale;
     const fromY = height / 2 + ((header?.cy ?? 0) - height / 2) * recedeScale;
     return {
-      opacity: (!header ? 0 : reduced ? Math.abs(raw * 2 - 1) : 1) * (1 - dim * (1 - reedMotion.opacity.stageRecede)),
+      // Sheets and the session panel cover the bottom of the screen, where Reed lives: it steps out of sight with them.
+      opacity: (!header ? 0 : reduced ? Math.abs(raw * 2 - 1) : 1) * (1 - dim),
       transform: [
-        { translateX: fromX + (destinationX - fromX) * t - metrics.sheetMascot / 2 },
-        { translateY: fromY + (destinationY.get() - fromY) * t - metrics.sheetMascot / 2 },
+        { translateX: fromX + (destinationX - fromX) * t - drawn / 2 },
+        { translateY: fromY + (destinationY.get() - fromY) * t - drawn / 2 },
         {
-          scale:
-            ((metrics.header + (metrics.sheetMascot - metrics.header) * t) / metrics.sheetMascot) * recedeScale,
+          scale: (((header?.size ?? metrics.dock) + (metrics.sheetMascot - (header?.size ?? metrics.dock)) * t) / drawn) * recedeScale,
         },
       ],
     };
@@ -210,8 +225,8 @@ function GlidingMascot({
           position: "absolute",
           top: 0,
           left: 0,
-          width: metrics.sheetMascot,
-          height: metrics.sheetMascot,
+          width: drawn,
+          height: drawn,
           pointerEvents: "none",
         },
         style,
@@ -219,9 +234,9 @@ function GlidingMascot({
     >
       {placement.controller ? (
         <ReedMascot
-          size={metrics.sheetMascot}
+          size={drawn}
           mascot={placement.controller}
-          halo={false}
+          halo
         />
       ) : null}
     </Animated.View>

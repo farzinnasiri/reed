@@ -6,7 +6,6 @@ import { ReedSheet } from '@/components/ui/reed-sheet';
 import { ReedText } from '@/components/ui/reed-text';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
-import * as haptics from '@/design/haptics';
 
 export function WorkoutMenu({ hasOpenSession, onClose, onOpenSession, onOpenSessions, onQuickLog, visible }: {
   hasOpenSession: boolean;
@@ -21,7 +20,7 @@ export function WorkoutMenu({ hasOpenSession, onClose, onOpenSession, onOpenSess
   const pendingAction = useRef<(() => void) | null>(null);
 
   function choose(action: () => void) {
-    haptics.selection();
+
     pendingAction.current = action;
     sheetRef.current?.dismiss();
   }

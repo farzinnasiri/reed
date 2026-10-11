@@ -4,7 +4,6 @@ import Animated, { Easing, cancelAnimation, scrollTo, useAnimatedRef, useDerived
 import Svg, { ClipPath, Defs, G, Path, Rect } from 'react-native-svg';
 import type { MascotExpression } from '@/components/reed/mascot';
 import { ReedText } from '@/components/ui/reed-text';
-import * as haptics from '@/design/haptics';
 import { reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedOnboardingMetrics as metrics } from '@/design/system';
@@ -77,14 +76,14 @@ export function LetterStep({ draft }: StepProps) {
     act?.('hop');
     const timers = [setTimeout(() => setLetterDelivered(true), motion.deliveryMs + motion.flapMs)];
     for (const line of lines) if (line.expression) timers.push(setTimeout(() => react?.(line.expression!, line.duration), line.at));
-    timers.push(setTimeout(() => { setLetterReady(true); setRevealed(true); haptics.soft(); }, signatureAt + motion.signatureMs + motion.signatureHoldMs));
+    timers.push(setTimeout(() => { setLetterReady(true); setRevealed(true); }, signatureAt + motion.signatureMs + motion.signatureHoldMs));
     return () => { timers.forEach(clearTimeout); stop?.(); };
   }, [act, finished, lines, react, setLetterDelivered, setLetterReady, signatureAt, stop]);
 
   const { height: windowHeight } = useWindowDimensions();
   const [noteWidth, setNoteWidth] = useState(0);
   const signatureWidth = Math.min(metrics.signatureWidth, noteWidth * metrics.signatureFraction);
-  const epoch = useRef(Date.now()).current;
+  const [epoch] = useState(Date.now);
   const body = useAnimatedRef<ScrollView>();
   const scroll = useSharedValue(0);
   const following = useSharedValue(!reduced);

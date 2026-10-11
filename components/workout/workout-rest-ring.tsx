@@ -2,6 +2,12 @@ import Svg, { Circle } from 'react-native-svg';
 import { View, StyleSheet } from 'react-native';
 import { ReedText } from '@/components/ui/reed-text';
 import { useReedTheme } from '@/design/provider';
+import { useEffect, useRef } from 'react';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
+import { reedMotion, reedReanimatedEasing } from '@/design/motion';
+import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type WorkoutRestRingProps = {
   durationSeconds: number;
@@ -24,6 +30,20 @@ export function WorkoutRestRing({
   const progress =
     durationSeconds > 0 ? Math.max(0, Math.min(1, remainingSeconds / durationSeconds)) : 0;
   const strokeDashoffset = circumference * (1 - progress);
+  const reducedMotion = useReedReducedMotion();
+  const offset = useSharedValue(strokeDashoffset);
+  const previous = useRef({ durationSeconds, remainingSeconds, isRunning });
+  useEffect(() => {
+    const tick = isRunning && previous.current.isRunning
+      && previous.current.durationSeconds === durationSeconds
+      && previous.current.remainingSeconds - remainingSeconds === 1;
+    offset.value = reducedMotion ? strokeDashoffset : withTiming(strokeDashoffset, {
+      duration: tick ? reedMotion.timer.tickMs : reedMotion.durations.mode,
+      easing: tick ? reedReanimatedEasing.linear : reedReanimatedEasing.easeOut,
+    });
+    previous.current = { durationSeconds, remainingSeconds, isRunning };
+  }, [durationSeconds, isRunning, offset, reducedMotion, remainingSeconds, strokeDashoffset]);
+  const animatedProps = useAnimatedProps(() => ({ strokeDashoffset: offset.value }));
 
   return (
     <View style={[styles.shell, { height: size, width: size }]}>
@@ -36,14 +56,14 @@ export function WorkoutRestRing({
           stroke={String(theme.colors.surfaceHigh)}
           strokeWidth={strokeWidth}
         />
-        <Circle
+        <AnimatedCircle
+          animatedProps={animatedProps}
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
           stroke={String(theme.colors.accent)}
           strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
           strokeLinecap="round"
           strokeWidth={strokeWidth}
           transform={`rotate(-90 ${size / 2} ${size / 2})`}

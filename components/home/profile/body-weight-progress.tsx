@@ -12,6 +12,7 @@ import { ReedSheet } from '@/components/ui/reed-sheet';
 import { DEFAULT_KG } from '@/components/reed/widgets/weight';
 import { WeightStepper } from '@/components/reed/widgets/weight-stepper';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import { useReedTheme } from '@/design/provider';
 import { getTapScaleStyle } from '@/design/motion';
 import { getLocalDayBounds } from '@/lib/local-day';
@@ -280,9 +281,11 @@ function WeightLog({ latestWeight, onDone, onSave }: {
     setErrorMessage(null);
     try {
       await onSave(valueKg);
-      haptics.success();
+      haptics.saved();
+      sounds.saved();
       onDone();
     } catch (error) {
+      haptics.warning();
       setErrorMessage(getErrorMessage(error));
     } finally {
       setIsSaving(false);
@@ -302,7 +305,7 @@ function WeightLog({ latestWeight, onDone, onSave }: {
         </ReedText>
       ) : null}
       {errorMessage ? <ReedText accessibilityLiveRegion="polite" tone="danger" variant="caption">{errorMessage}</ReedText> : null}
-      <ReedButton disabled={isSaving} label={isSaving ? 'Saving…' : 'Save'} onPress={() => void save()} variant="primary" />
+      <ReedButton hapticTap disabled={isSaving} label={isSaving ? 'Saving…' : 'Save'} onPress={() => void save()} variant="primary" />
     </View>
   );
 }

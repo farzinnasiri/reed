@@ -1,13 +1,16 @@
+import { HapticPressable } from './haptic-pressable';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
-import { reedSprings } from '@/design/motion';
+import { reedMotion, reedReanimatedEasing, reedSprings } from '@/design/motion';
+import { useReedReducedMotion } from '@/design/use-reed-reduced-motion';
 import { useReedTheme } from '@/design/provider';
 import { reedFonts, reedRadii } from '@/design/system';
 import { usePressAnimation } from '@/design/use-press-animation';
@@ -21,7 +24,10 @@ type SegmentedOption<T extends string> = {
 
 type SegmentedControlProps<T extends string> = {
   compact?: boolean;
+  disabled?: boolean;
+  haptic?: boolean;
   iconOnly?: boolean;
+  motion?: 'smooth' | 'quick';
   onChange: (value: T) => void;
   options: readonly SegmentedOption<T>[];
   style?: StyleProp<ViewStyle>;
@@ -38,7 +44,10 @@ type ItemLayout = {
 
 export function SegmentedControl<T extends string>({
   compact = false,
+  disabled = false,
+  haptic = false,
   iconOnly = false,
+  motion = 'smooth',
   onChange,
   options,
   style,
@@ -46,6 +55,7 @@ export function SegmentedControl<T extends string>({
   variant = 'default',
 }: SegmentedControlProps<T>) {
   const { theme } = useReedTheme();
+  const reducedMotion = useReedReducedMotion();
   const [itemLayouts, setItemLayouts] = useState<Record<string, ItemLayout>>({});
   const indicatorX = useSharedValue(0);
   const indicatorWidth = useSharedValue(0);
@@ -67,16 +77,17 @@ export function SegmentedControl<T extends string>({
       return;
     }
 
-    if (!hasPositionedIndicator.current) {
+    if (!hasPositionedIndicator.current || reducedMotion) {
       indicatorX.value = activeLayout.x;
       indicatorWidth.value = activeLayout.width;
       hasPositionedIndicator.current = true;
       return;
     }
 
-    indicatorX.value = withSpring(activeLayout.x, reedSprings.smooth);
-    indicatorWidth.value = withSpring(activeLayout.width, reedSprings.smooth);
-  }, [activeLayout, indicatorWidth, indicatorX]);
+    const timing = { duration: reedMotion.durations.standard, easing: reedReanimatedEasing.easeOut };
+    indicatorX.value = motion === 'quick' ? withTiming(activeLayout.x, timing) : withSpring(activeLayout.x, reedSprings.smooth);
+    indicatorWidth.value = motion === 'quick' ? withTiming(activeLayout.width, timing) : withSpring(activeLayout.width, reedSprings.smooth);
+  }, [activeLayout, indicatorWidth, indicatorX, motion, reducedMotion]);
 
   const indicatorStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: indicatorX.value }],
@@ -85,7 +96,7 @@ export function SegmentedControl<T extends string>({
 
   return (
     <View
-      accessibilityRole="tablist"
+      accessibilityRole={haptic ? 'none' : 'tablist'}
       style={[
         variant === 'pill' ? styles.pillShell : variant === 'card' ? styles.cardShell : styles.shell,
         variant === 'ghost'
@@ -126,13 +137,15 @@ export function SegmentedControl<T extends string>({
           <SegmentedItem
             accessibilityLabel={option.accessibilityLabel ?? option.label}
             compact={compact}
+            disabled={disabled}
+            haptic={haptic}
             hasIconAndLabel={hasIconAndLabel}
             icon={option.icon}
             iconOnly={iconOnly}
             isActive={isActive}
             key={option.value}
             label={option.label}
-            onChange={() => onChange(option.value)}
+            onChange={() => { if (!isActive && !disabled) onChange(option.value); }}
             onLayout={nextLayout => {
               setItemLayouts(layouts => {
                 const current = layouts[option.value];
@@ -154,6 +167,8 @@ export function SegmentedControl<T extends string>({
 function SegmentedItem({
   accessibilityLabel,
   compact,
+  disabled,
+  haptic,
   hasIconAndLabel,
   icon,
   iconOnly,
@@ -166,6 +181,8 @@ function SegmentedItem({
 }: {
   accessibilityLabel?: string;
   compact: boolean;
+  disabled: boolean;
+  haptic: boolean;
   hasIconAndLabel: boolean;
   icon?: ReactNode;
   iconOnly: boolean;
@@ -180,9 +197,11 @@ function SegmentedItem({
   const { animatedStyle, onPressIn, onPressOut } = usePressAnimation();
 
   return (
-    <Pressable
+    <HapticPressable
+      disabled={disabled}
+      feedback={haptic && !isActive}
       accessibilityLabel={accessibilityLabel}
-      accessibilityRole="tab"
+      accessibilityRole={haptic ? 'button' : 'tab'}
       accessibilityState={{ selected: isActive }}
       onLayout={event => {
         onLayout({
@@ -228,7 +247,7 @@ function SegmentedItem({
           </ReedText>
         ) : null}
       </Animated.View>
-    </Pressable>
+    </HapticPressable>
   );
 }
 

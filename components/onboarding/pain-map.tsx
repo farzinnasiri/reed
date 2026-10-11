@@ -102,8 +102,8 @@ export function BodyMap({ availableHeight, onChange, pain, sex, shape }: {
     </View>
     <View style={[styles.controls, { gap }]}>
       <ReedText tone="secondary" variant="caption" style={styles.areaHeading} accessibilityLiveRegion="polite">{points.length ? `Selected areas (${points.length})` : ''}</ReedText>
-      <Pressable accessibilityRole="button" accessibilityLabel={view === 'front' ? 'Rotate to back' : 'Rotate to front'} onPress={() => { haptics.selection(); setView(view === 'front' ? 'back' : 'front'); setViewRequest(previous => previous + 1); }} style={styles.iconButton}><Ionicons name="sync-outline" size={24} color={String(theme.colors.inkSecondary)} /></Pressable>
-      <Pressable accessibilityLabel={listOpen ? 'Close area list' : 'Choose body area from list'} accessibilityRole="button" accessibilityState={{ expanded: listOpen }} onPress={() => { haptics.selection(); setListOpen(!listOpen); }} style={[styles.addButton, { gap: theme.spacing.xxs }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={view === 'front' ? 'Rotate to back' : 'Rotate to front'} onPress={() => { setView(view === 'front' ? 'back' : 'front'); setViewRequest(previous => previous + 1); }} style={styles.iconButton}><Ionicons name="sync-outline" size={24} color={String(theme.colors.inkSecondary)} /></Pressable>
+      <Pressable accessibilityLabel={listOpen ? 'Close area list' : 'Choose body area from list'} accessibilityRole="button" accessibilityState={{ expanded: listOpen }} onPress={() => { setListOpen(!listOpen); }} style={[styles.addButton, { gap: theme.spacing.xxs }]}>
         <Ionicons name={listOpen ? 'close' : 'add-outline'} size={20} color={String(theme.colors.inkSecondary)} /><ReedText tone="secondary" variant="caption">{listOpen ? 'Done' : 'Add area'}</ReedText>
       </Pressable>
     </View>

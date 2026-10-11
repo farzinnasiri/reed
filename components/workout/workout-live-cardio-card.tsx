@@ -120,12 +120,13 @@ export function WorkoutLiveCardioCard({
               <View style={styles.liveAction}>
                 <ReedButton
                   disabled={isWorking}
+                  hapticTap
                   label={liveCardioCard.isRunning ? 'Pause' : liveElapsedSeconds > 0 ? 'Resume' : 'Start'}
                   onPress={onToggleLiveCardioRunning}
                 />
               </View>
               <View style={styles.liveAction}>
-                <ReedButton disabled={isWorking} label="Finish" onPress={() => onFinishLiveCardio(liveElapsedSeconds)} variant="secondary" />
+                <ReedButton hapticTap disabled={isWorking} label="Finish" onPress={() => onFinishLiveCardio(liveElapsedSeconds)} variant="secondary" />
               </View>
             </View>
           </View>
@@ -195,6 +196,7 @@ export function WorkoutLiveCardioCard({
           ) : null}
           <ReedButton
             disabled={isWorking}
+            hapticTap
             label={isWorking ? 'Starting…' : 'Start tracking'}
             onPress={() => onStartLiveCardio(captureCard.sessionExerciseId)}
           />

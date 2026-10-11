@@ -8,6 +8,7 @@ import { useCompactElapsedLabel } from '@/components/workout/use-compact-elapsed
 import { useReedTheme } from '@/design/provider';
 import { reedPulseStripMetrics } from '@/design/system';
 import type { ActiveWorkout } from '../app-shell-context';
+import { PulseDays } from './pulse-days';
 import type { PulseData } from './use-pulse';
 
 export const PULSE_STRIP_HEIGHT = 52;
@@ -30,20 +31,7 @@ export function PulseStrip({ pulse, dateLabel }: { pulse: PulseData | undefined;
     <StripFrame onWidth={setWidth} chevron="chevron-down">
       <View style={[styles.row, { gap: theme.spacing.xs }]}>
         <View style={styles.item}>
-          <View style={[styles.days, compact && { gap: reedPulseStripMetrics.compactDayGap }]}>
-            {days.map((day, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.day,
-                  compact && { width: reedPulseStripMetrics.compactDayWidth },
-                  day === 'done' ? { backgroundColor: theme.colors.accent } : null,
-                  day === 'today' ? { borderColor: theme.colors.accent, borderWidth: 1.5 } : null,
-                  day === 'none' ? { backgroundColor: theme.colors.surfaceHigh } : null,
-                ]}
-              />
-            ))}
-          </View>
+          <PulseDays compact={compact} days={days} />
           {pulse ? (
             <View style={styles.readout}>
               <StripNumber>{pulse.week.count}</StripNumber>
@@ -168,15 +156,6 @@ const styles = StyleSheet.create({
   date: { flexShrink: 1 },
   details: { flex: 1, minWidth: 0 },
   frame: { alignItems: 'center', flexDirection: 'row', height: PULSE_STRIP_HEIGHT },
-  day: {
-    borderRadius: 3,
-    height: 14,
-    width: 6,
-  },
-  days: {
-    flexDirection: 'row',
-    gap: 3,
-  },
   item: {
     alignItems: 'center',
     flexDirection: 'row',

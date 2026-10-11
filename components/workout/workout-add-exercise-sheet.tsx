@@ -14,6 +14,7 @@ import { SegmentedControl } from '@/components/ui/segmented-control';
 import { getTapScaleStyle } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { styles } from './workout-add-exercise-sheet.styles';
+import { ExerciseImage } from './exercise-image';
 import type { CatalogItem, FilterOption } from './workout-surface.types';
 import { useAddExerciseSearchSession, type AddExerciseFilterSectionKey } from './use-add-exercise-search-session';
 
@@ -468,8 +469,9 @@ const CatalogRow = memo(function CatalogRow({
       ]}
     >
       <Pressable accessibilityLabel={`Add ${item.name}`} accessibilityRole="button" onPress={() => onAddSingle(item._id)} style={({ pressed }) => [styles.catalogRowPressable, getTapScaleStyle(pressed)]}>
+        <ExerciseImage imageUrl={item.imageUrl} />
         <View style={styles.catalogRowCopy}>
-          <ReedText numberOfLines={1} variant="bodyStrong">{item.name}</ReedText>
+          <ReedText numberOfLines={2} variant="bodyStrong">{item.name}</ReedText>
           <ReedText numberOfLines={1} tone="muted" variant="caption">
             {[item.exerciseClass, item.primaryTargetAreaLabels[0] ?? item.primaryFocusAreaLabels[0] ?? item.mainMuscleGroups[0], item.equipment[0]].filter(Boolean).join(' · ')}
           </ReedText>

@@ -112,14 +112,19 @@ export const searchForPicker = query({
   },
   handler: async (ctx, args) => {
     const profile = await requireViewerProfile(ctx);
-    const queryText = args.query?.trim().toLowerCase() ?? '';
+    const queryText = normalizeExerciseSearchQuery(args.query ?? '');
+    const searchQuery = createSearchQuery(queryText);
+    // Body areas are derived metadata, so their names need not exist in imported searchText.
+    // Browse the supported index for these queries and keep the same bounded page/cursor.
+    const isBodyAreaQuery = searchQuery !== null
+      && (getTargetAreaQuery(searchQuery) !== null || getFocusAreaQuery(searchQuery) !== null);
     const selectedFocusAreas = normalizeExerciseFocusAreas(args.focusAreas);
     const selectedTargetAreas = normalizeExerciseTargetAreas(args.targetAreas);
     const selectedEquipment = normalizeMultiFilters(args.equipment);
     const targetCount = Math.max(1, Math.min(args.paginationOpts.numItems, 100));
     // Convex permits one paginated read per invocation. Filtering may produce a short page;
     // return its cursor so the picker can request the next page without losing any matches.
-    const page = queryText
+    const page = queryText && !isBodyAreaQuery
         ? await ctx.db
             .query('exerciseCatalog')
             .withSearchIndex('search_text', q =>
@@ -580,7 +585,6 @@ function getQueryMatchRank(exercise: SupportedExercise, queryText: string): numb
     ...focusAreas.primaryTargetAreas,
     ...focusAreas.primaryTargetAreas.map(area => exerciseTargetAreaLabels[area]),
     ...exercise.mainMuscleGroups,
-    ...exercise.secondaryMuscleGroups,
     ...exercise.equipment,
     ...exercise.movementPatterns,
     ...exercise.contextTags,
@@ -598,20 +602,32 @@ function getQueryMatchRank(exercise: SupportedExercise, queryText: string): numb
   if (hasSearchMatch(primaryValues, query, 'includes')) {
     return 2;
   }
-  if (hasFuzzySearchMatch(primaryValues, query)) {
+  if (hasTokenSearchMatch([exercise.name], query)) {
     return 3;
   }
-  if (hasSearchMatch(metadataValues, query, 'exact')) {
+  // Lower is better. A token in the name, alias, or family outranks an exact metadata hit.
+  if (hasTokenSearchMatch(primaryValues, query)) {
     return 4;
   }
-  if (hasSearchMatch(metadataValues, query, 'startsWith')) {
+  if (hasSearchMatch(metadataValues, query, 'exact')) {
     return 5;
   }
-  if (hasSearchMatch(metadataValues, query, 'includes')) {
+  if (hasSearchMatch(metadataValues, query, 'startsWith')) {
     return 6;
   }
-  if (hasSearchMatch([exercise.searchText], query, 'includes')) {
+  if (hasTokenSearchMatch([...primaryValues, ...metadataValues], query)) {
     return 7;
+  }
+  const secondaryValues = [
+    ...exercise.secondaryMuscleGroups,
+    ...focusAreas.secondaryFocusAreas.map(area => exerciseFocusAreaLabels[area]),
+    ...focusAreas.secondaryTargetAreas.map(area => exerciseTargetAreaLabels[area]),
+  ];
+  if (hasTokenSearchMatch([...primaryValues, ...metadataValues, ...secondaryValues], query)) {
+    return 8;
+  }
+  if (hasTokenSearchMatch([...primaryValues, ...metadataValues, exercise.searchText], query)) {
+    return 9;
   }
 
   return null;
@@ -719,30 +735,17 @@ function matchesSearchValue(value: string, query: string, mode: SearchMatchMode)
   return value.includes(query);
 }
 
-function hasFuzzySearchMatch(values: string[], query: SearchQuery) {
-  return values.some(value => {
-    const normalized = normalizeSearchValue(value);
-
-    if (!normalized) {
-      return false;
-    }
-
-    const compact = compactSearchValue(normalized);
-    const compactSingular = singularizeCompactSearchValue(compact);
-    if (
-      isWithinSearchTypoDistance(query.compact, compact)
-      || isWithinSearchTypoDistance(query.compactSingular, compact)
-      || isWithinSearchTypoDistance(query.compact, compactSingular)
-      || isWithinSearchTypoDistance(query.compactSingular, compactSingular)
-    ) {
-      return true;
-    }
-
-    const valueTokens = normalized.split(' ');
-    return query.tokens.every(queryToken =>
-      valueTokens.some(valueToken => isWithinSearchTypoDistance(queryToken, valueToken)),
-    );
-  });
+function hasTokenSearchMatch(values: string[], query: SearchQuery) {
+  const valueTokens = Array.from(new Set(values.flatMap(value =>
+    normalizeExerciseSearchQuery(value).split(' ').filter(Boolean),
+  )));
+  // All terms must match, but they can come from different fields and appear in any order.
+  // Prefixes apply to every term, not just the final term supported by the search index.
+  return query.tokens.every(queryToken => valueTokens.some(valueToken =>
+    valueToken === queryToken
+    || (queryToken.length >= 2 && valueToken.startsWith(queryToken))
+    || (queryToken.length >= 5 && isWithinSearchTypoDistance(queryToken, valueToken)),
+  ));
 }
 
 function isWithinSearchTypoDistance(query: string, value: string) {
@@ -750,7 +753,7 @@ function isWithinSearchTypoDistance(query: string, value: string) {
     return query === value;
   }
 
-  const maxDistance = query.length >= 5 || value.length >= 5 ? 2 : 1;
+  const maxDistance = query.length >= 8 && value.length >= 8 ? 2 : 1;
   return getBoundedDamerauLevenshteinDistance(query, value, maxDistance) <= maxDistance;
 }
 
@@ -807,6 +810,28 @@ function normalizeSearchValue(value: string) {
     .replace(/[^a-z0-9]+/g, ' ')
     .trim()
     .replace(/\s+/g, ' ');
+}
+
+// Normalize the query before both candidate retrieval and ranking. These are common gym
+// abbreviations and anatomy aliases, not aliases for individual exercise variants.
+const searchTermAliases: Record<string, string> = {
+  db: 'dumbbell', dbs: 'dumbbell', dumbbells: 'dumbbell',
+  bb: 'barbell', barbells: 'barbell',
+  kb: 'kettlebell', kbs: 'kettlebell', kettlebells: 'kettlebell',
+  bicep: 'biceps', tricep: 'triceps',
+  pec: 'chest', pecs: 'chest', pectoral: 'chest', pectorals: 'chest',
+  quad: 'quads', quadriceps: 'quads', hamstring: 'hamstrings',
+  calf: 'calves', lat: 'lats', delt: 'delts',
+  pushup: 'push up', pushups: 'push up',
+  pullup: 'pull up', pullups: 'pull up',
+  chinup: 'chin up', chinups: 'chin up',
+  situp: 'sit up', situps: 'sit up',
+};
+
+function normalizeExerciseSearchQuery(value: string) {
+  return normalizeSearchValue(value).split(' ')
+    .map(token => searchTermAliases[token] ?? token)
+    .join(' ');
 }
 
 function compactSearchValue(value: string) {

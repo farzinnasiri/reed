@@ -7,6 +7,7 @@ import { api } from '@/convex/_generated/api';
 import { ReedButton } from '@/components/ui/reed-button';
 import { ReedText } from '@/components/ui/reed-text';
 import * as haptics from '@/design/haptics';
+import * as sounds from '@/design/sounds';
 import { useReedTheme } from '@/design/provider';
 import { getLocalDayBounds } from '@/lib/local-day';
 import { WidgetCard } from './widget-card';
@@ -47,9 +48,11 @@ export function WeighInCard({ lastKg, lastLoggedAt, onDismiss, origin, disclosur
       const now = Date.now();
       const bounds = getLocalDayBounds(now);
       await upsertTodayBodyWeight({ dayEndAt: bounds.endAt, dayStartAt: bounds.startAt, observedAt: now, valueKg });
-      haptics.success();
+      haptics.saved();
+      sounds.saved();
       disclosure?.onChange(false);
     } catch {
+      haptics.warning();
       setHasFailed(true);
     } finally {
       setIsSaving(false);
@@ -76,7 +79,7 @@ export function WeighInCard({ lastKg, lastLoggedAt, onDismiss, origin, disclosur
       {lastKg !== null && lastLoggedAt !== null ? <ReedText tone="muted" variant="caption" style={{ marginBottom: theme.spacing.sm }}>Previous: {lastKg.toFixed(1)} kg · {formatShortDate(lastLoggedAt)}</ReedText> : null}
       <WeightStepper
         onChange={setValueKg}
-        trailing={<ReedButton disabled={isSaving} label={isSaving ? 'Saving' : 'Save'} onPress={() => void save()} variant="soft" />}
+        trailing={<ReedButton hapticTap disabled={isSaving} label={isSaving ? 'Saving' : 'Save'} onPress={() => void save()} variant="soft" />}
         valueKg={valueKg}
       />
       {hasFailed ? <ReedText style={styles.error} tone="danger" variant="caption">Could not save. Try again.</ReedText> : null}

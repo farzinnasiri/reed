@@ -58,6 +58,7 @@ export type ReedMessage = {
     url: string;
   }>;
   createdAt: number;
+  completedAt?: number;
   chapterId?: string;
   id: string;
   isAgentThinkingMessage?: boolean;

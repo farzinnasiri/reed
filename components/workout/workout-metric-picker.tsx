@@ -1,3 +1,6 @@
+import { EffortHelp } from './effort-help';
+import { type EffortKind } from '@/domains/workout/effort';
+import * as haptics from '@/design/haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, Pressable, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
@@ -15,11 +18,13 @@ import {
   roundMetricValue,
 } from '@/domains/workout/metric-formatting';
 import { ReedText } from '@/components/ui/reed-text';
+import { bareInputStyle } from '@/components/ui/focus';
 import { ReedSwapText } from '@/components/reed/session/reed-swap-feedback';
 import { getTapScaleStyle, reedReanimatedEasing } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedRadii } from '@/design/system';
 import { useRunningTicker } from './use-running-ticker';
+import { useStartCountdown } from './use-start-countdown';
 
 const ITEM_HEIGHT = 24;
 const VISIBLE_ROWS = 5;
@@ -28,6 +33,8 @@ const PICKER_TOUCH_WIDTH = 116;
 
 type WorkoutMetricPickerProps = {
   compact?: boolean;
+  availableHeight?: number;
+  effortKind?: EffortKind;
   field: RecipeFieldDefinition;
   onInteractionEnd?: () => void;
   onInteractionStart?: () => void;
@@ -38,6 +45,8 @@ type WorkoutMetricPickerProps = {
 
 export function WorkoutMetricPicker({
   compact = false,
+  availableHeight,
+  effortKind = 'strength',
   field,
   onInteractionEnd,
   onInteractionStart,
@@ -59,12 +68,18 @@ export function WorkoutMetricPicker({
   const gestureStartIndex = useSharedValue(0);
   const gesturePreviewIndex = useSharedValue(0);
   const gestureEndedNormally = useSharedValue(false);
-  const valueFontSize = isDurationMetric
+  const defaultValueFontSize = isDurationMetric
     ? Math.max(42, Math.min(58, Math.floor(width * 0.15)))
     : Math.max(48, Math.min(68, Math.floor(width * 0.165)));
+  const valueFontSize = availableHeight === undefined ? defaultValueFontSize : Math.max(32, Math.min(
+    defaultValueFontSize,
+    (availableHeight - (field.key === 'rpe' ? 44 : 18) - (isDurationMetric ? 46 : 0) - 16) / 0.9,
+  ));
+  const pickerHeight = availableHeight === undefined ? PICKER_TOUCH_HEIGHT : Math.min(PICKER_TOUCH_HEIGHT, availableHeight);
+  const itemHeight = Math.min(ITEM_HEIGHT, pickerHeight / (VISIBLE_ROWS + 1));
   const rowMinHeight = compact
     ? Math.max(98, Math.min(124, Math.floor(height * 0.135)))
-    : Math.max(132, Math.min(180, Math.floor(height * 0.19)));
+    : Math.max(112, Math.min(180, Math.floor(height * 0.19)));
   const [isDurationRunning, setIsDurationRunning] = useState(false);
   const [hasStartedDuration, setHasStartedDuration] = useState(false);
   const [isEditingDuration, setIsEditingDuration] = useState(false);
@@ -72,6 +87,7 @@ export function WorkoutMetricPicker({
   const [durationMinutesDraft, setDurationMinutesDraft] = useState('');
   const [durationSecondsDraft, setDurationSecondsDraft] = useState('');
   const [numericDraft, setNumericDraft] = useState('');
+  const durationDraftRef = useRef({ minutes: '', seconds: '' });
   const durationMinutesInputRef = useRef<TextInput | null>(null);
   const durationSecondsInputRef = useRef<TextInput | null>(null);
   const numericInputRef = useRef<TextInput | null>(null);
@@ -87,7 +103,22 @@ export function WorkoutMetricPicker({
   const selectedIndex = findNearestIndex(values, normalizedValue);
   const [previewIndex, setPreviewIndex] = useState(selectedIndex);
   const previewValue = values[previewIndex] ?? normalizedValue;
-  const accentColor = getMetricAccentColor(theme, field, previewValue);
+  const accentColor = getMetricAccentColor(theme, field);
+  const countdown = useStartCountdown(at => {
+    runningBaseValueRef.current = 0;
+    onChangeRef.current(normalizeMetricInput(0, minValue, maxValue));
+    setHasStartedDuration(true);
+    runningStartedAtRef.current = at;
+    setIsDurationRunning(true);
+  });
+  const isPreparing = countdown.remaining !== null;
+  const cancelCountdown = countdown.cancel;
+  useEffect(() => {
+    if (!isPreparing) return;
+    onInteractionStart?.();
+    return () => onInteractionEnd?.();
+  }, [isPreparing, onInteractionEnd, onInteractionStart]);
+  useEffect(() => { cancelCountdown(); }, [field.key, cancelCountdown]);
 
   useEffect(() => { currentValueRef.current = normalizedValue; onChangeRef.current = onChange; }, [normalizedValue, onChange]);
 
@@ -167,6 +198,8 @@ export function WorkoutMetricPicker({
     if (!isDurationMetric) {
       return;
     }
+    haptics.toggle(!isDurationRunning && !isPreparing);
+    if (isPreparing) { countdown.cancel(); return; }
     cancelAnimation(dragOffsetY);
     dragOffsetY.value = 0;
     if (isEditingDuration) {
@@ -181,8 +214,8 @@ export function WorkoutMetricPicker({
       return;
     }
 
-    runningBaseValueRef.current = hasStartedDuration ? normalizedValue : 0;
-    if (!hasStartedDuration) onChange(normalizeMetricInput(0, minValue, maxValue));
+    if (!hasStartedDuration) { countdown.start(); return; }
+    runningBaseValueRef.current = normalizedValue;
     setHasStartedDuration(true);
     runningStartedAtRef.current = Date.now();
     setIsDurationRunning(true);
@@ -197,9 +230,11 @@ export function WorkoutMetricPicker({
     const totalSeconds = Math.round(normalizedValue);
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
+    countdown.cancel();
     stopDurationRun();
     setDurationMinutesDraft(String(minutes));
     setDurationSecondsDraft(seconds.toString().padStart(2, '0'));
+    durationDraftRef.current = { minutes: String(minutes), seconds: seconds.toString().padStart(2, '0') };
     setIsEditingDuration(true);
   }
 
@@ -219,14 +254,16 @@ export function WorkoutMetricPicker({
       return;
     }
 
-    const normalizedMinutes = normalizeMinutePart(durationMinutesDraft);
-    const normalizedSeconds = normalizeSecondPart(durationSecondsDraft);
+    // A blur or submit can arrive before React commits the final digit.
+    const normalizedMinutes = normalizeMinutePart(durationDraftRef.current.minutes);
+    const normalizedSeconds = normalizeSecondPart(durationDraftRef.current.seconds);
 
     if (normalizedMinutes.length > 0 || normalizedSeconds.length > 0) {
       const minutes = normalizedMinutes.length > 0 ? Number.parseInt(normalizedMinutes, 10) : 0;
       const seconds = normalizedSeconds.length > 0 ? Number.parseInt(normalizedSeconds, 10) : 0;
       const parsed = minutes * 60 + Math.max(0, Math.min(59, seconds));
-      onChange(normalizeMetricInput(parsed, minValue, maxValue));
+      const next = normalizeMetricInput(parsed, minValue, maxValue);
+      if (next !== value) { haptics.selection(); onChange(next); }
     }
 
     setIsEditingDuration(false);
@@ -245,7 +282,8 @@ export function WorkoutMetricPicker({
         ? Number.parseFloat(normalized)
         : Number.parseInt(normalized, 10);
       if (Number.isFinite(parsed)) {
-        onChange(normalizeMetricValueForField(field, parsed));
+        const next = normalizeMetricValueForField(field, parsed);
+        if (next !== value) { haptics.selection(); onChange(next); }
       }
     }
 
@@ -255,26 +293,24 @@ export function WorkoutMetricPicker({
 
   function handleDurationMinutesChange(text: string) {
     const normalized = normalizeMinutePart(text);
+    durationDraftRef.current.minutes = normalized;
     setDurationMinutesDraft(normalized);
   }
 
   function handleDurationSecondsChange(text: string) {
     const normalized = normalizeSecondPart(text);
+    durationDraftRef.current.seconds = normalized;
     setDurationSecondsDraft(normalized);
-
-    if (normalized.length >= 2) {
-      durationSecondsInputRef.current?.blur();
-    }
   }
 
   function handleDurationEditorBlur() {
-    requestAnimationFrame(() => {
+    setTimeout(() => {
       const minuteInputFocused = durationMinutesInputRef.current?.isFocused() ?? false;
       const secondInputFocused = durationSecondsInputRef.current?.isFocused() ?? false;
       if (!minuteInputFocused && !secondInputFocused) {
         commitDurationEdit();
       }
-    });
+    }, 0);
   }
 
   function handleNumericChange(text: string) {
@@ -287,9 +323,14 @@ export function WorkoutMetricPicker({
 
   const commitValueAtIndex = useCallback((index: number) => {
     const nextValue = values[Math.max(0, Math.min(values.length - 1, index))];
-    if (nextValue !== value) onChange(nextValue);
+    if (nextValue !== value) { haptics.settled(); onChange(nextValue); }
     setPreviewIndex(index);
   }, [onChange, value, values]);
+
+  const previewValueAtIndex = useCallback((index: number) => {
+    setPreviewIndex(index);
+    haptics.detent();
+  }, []);
 
   const beginWheelGesture = useCallback((index: number) => {
     setPreviewIndex(index);
@@ -308,7 +349,7 @@ export function WorkoutMetricPicker({
 
   const visibleTicks = useMemo(() => buildVisibleTicks(values, previewIndex), [previewIndex, values]);
   const pickerGesture = useMemo(() => Gesture.Pan()
-    .enabled(!(isDurationMetric && (isEditingDuration || isDurationRunning)) && !isEditingNumeric)
+    .enabled(!(isDurationMetric && (isEditingDuration || isDurationRunning || isPreparing)) && !isEditingNumeric)
     .activeOffsetY([-4, 4])
     .failOffsetX([-4, 4])
     .onStart(() => {
@@ -320,18 +361,18 @@ export function WorkoutMetricPicker({
       scheduleOnRN(beginWheelGesture, selectedIndex);
     })
     .onUpdate(event => {
-      const rawIndex = gestureStartIndex.value - event.translationY / ITEM_HEIGHT;
+      const rawIndex = gestureStartIndex.value - event.translationY / itemHeight;
       const nextIndex = Math.max(0, Math.min(values.length - 1, Math.round(rawIndex)));
-      dragOffsetY.value = (nextIndex - rawIndex) * ITEM_HEIGHT;
+      dragOffsetY.value = (nextIndex - rawIndex) * itemHeight;
       if (nextIndex !== gesturePreviewIndex.value) {
         gesturePreviewIndex.value = nextIndex;
-        scheduleOnRN(setPreviewIndex, nextIndex);
+        scheduleOnRN(previewValueAtIndex, nextIndex);
       }
     })
     .onEnd(event => {
       gestureEndedNormally.value = true;
       scheduleOnRN(endWheelInteraction);
-      const rawIndex = gestureStartIndex.value - event.translationY / ITEM_HEIGHT;
+      const rawIndex = gestureStartIndex.value - event.translationY / itemHeight;
       const nextIndex = Math.max(0, Math.min(values.length - 1, Math.round(rawIndex)));
       dragOffsetY.value = withTiming(0, { duration: 120, easing: reedReanimatedEasing.easeOut }, finished => {
         if (finished) scheduleOnRN(commitValueAtIndex, nextIndex);
@@ -343,25 +384,28 @@ export function WorkoutMetricPicker({
         dragOffsetY.value = withTiming(0, { duration: 120, easing: reedReanimatedEasing.easeOut });
         scheduleOnRN(cancelWheelInteraction, selectedIndex);
       }
-    }), [beginWheelGesture, cancelWheelInteraction, commitValueAtIndex, dragOffsetY, endWheelInteraction, gestureEndedNormally, gesturePreviewIndex, gestureStartIndex, isDurationMetric, isDurationRunning, isEditingDuration, isEditingNumeric, selectedIndex, values]);
+    }), [beginWheelGesture, cancelWheelInteraction, commitValueAtIndex, dragOffsetY, endWheelInteraction, gestureEndedNormally, gesturePreviewIndex, gestureStartIndex, isDurationMetric, isDurationRunning, isEditingDuration, isEditingNumeric, isPreparing, itemHeight, previewValueAtIndex, selectedIndex, values]);
   const pickerTicksStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dragOffsetY.value }] }));
 
   return (
-    <View style={[styles.row, { minHeight: rowMinHeight }]}>
+    <View style={[styles.row, availableHeight === undefined ? { minHeight: rowMinHeight } : { flex: 1, minHeight: 0 }]}>
       <View style={styles.copy}>
         <View style={styles.metricHeaderRow}>
-          <ReedText style={{ color: theme.colors.inkMuted }} variant="caption">
-            {formatMetricLabel(field)}
-            {normalizedPreviousValue !== undefined
+          <ReedText style={{ color: isPreparing ? theme.colors.dataWarm : theme.colors.inkMuted }} variant="caption">
+            {isPreparing ? 'Ready' : formatMetricLabel(field)}
+            {!isPreparing && normalizedPreviousValue !== undefined
               ? ` · Prev ${formatMetricValue(field, normalizedPreviousValue)}`
               : ''}
           </ReedText>
+          {field.key === 'rpe' ? <EffortHelp kind={effortKind} /> : null}
         </View>
-        <View style={styles.metricValueAnchor}>
+        <View style={[styles.metricValueAnchor, { minHeight: Math.floor(valueFontSize * 0.9) }]}>
           {isDurationMetric && isEditingDuration ? (
-            <View style={styles.durationEditRow}>
+            <View style={[styles.durationEditRow, { minHeight: Math.floor(valueFontSize * 0.9) }]}>
               <TextInput
+                accessibilityLabel="Duration minutes"
                 autoFocus
+                selectTextOnFocus
                 keyboardType="number-pad"
                 maxLength={3}
                 onBlur={handleDurationEditorBlur}
@@ -372,7 +416,10 @@ export function WorkoutMetricPicker({
                 style={[
                   styles.durationInput,
                   styles.durationMinutesInput,
+                  bareInputStyle,
                   {
+                    borderBottomColor: accentColor,
+                    height: Math.floor(valueFontSize * 0.9),
                     color: accentColor,
                     fontSize: valueFontSize,
                     lineHeight: Math.floor(valueFontSize * 0.9),
@@ -391,6 +438,8 @@ export function WorkoutMetricPicker({
                 :
               </ReedSwapText>
               <TextInput
+                accessibilityLabel="Duration seconds"
+                selectTextOnFocus
                 keyboardType="number-pad"
                 maxLength={2}
                 onBlur={handleDurationEditorBlur}
@@ -401,7 +450,10 @@ export function WorkoutMetricPicker({
                 style={[
                   styles.durationInput,
                   styles.durationSecondsInput,
+                  bareInputStyle,
                   {
+                    borderBottomColor: accentColor,
+                    height: Math.floor(valueFontSize * 0.9),
                     color: accentColor,
                     fontSize: valueFontSize,
                     lineHeight: Math.floor(valueFontSize * 0.9),
@@ -412,7 +464,9 @@ export function WorkoutMetricPicker({
             </View>
           ) : supportsManualNumericEdit && isEditingNumeric ? (
             <TextInput
+              accessibilityLabel={formatMetricLabel(field)}
               autoFocus
+              selectTextOnFocus
               keyboardType={supportsDecimalNumericEdit ? 'decimal-pad' : 'number-pad'}
               maxLength={5}
               onBlur={handleNumericBlur}
@@ -422,7 +476,10 @@ export function WorkoutMetricPicker({
               returnKeyType="done"
               style={[
                 styles.numericInput,
+                bareInputStyle,
                 {
+                  borderBottomColor: accentColor,
+                  height: Math.floor(valueFontSize * 0.9),
                   color: accentColor,
                   fontSize: valueFontSize,
                   letterSpacing: -1.2,
@@ -433,20 +490,22 @@ export function WorkoutMetricPicker({
             />
           ) : (
             <Pressable
-              disabled={!supportsManualEdit}
+              accessibilityRole={supportsManualEdit ? 'button' : undefined}
+              accessibilityLabel={isPreparing ? `Ready, ${countdown.remaining}` : `Edit ${formatMetricLabel(field)}`}
+              disabled={!supportsManualEdit || isPreparing}
               onPress={isDurationMetric ? beginDurationEdit : beginNumericEdit}
               style={({ pressed }) => (supportsManualEdit ? [styles.metricValuePressable, getTapScaleStyle(pressed)] : [styles.metricValuePressable])}
             >
               <ReedSwapText field={field}
                 style={{
-                  color: accentColor,
+                  color: isPreparing ? theme.colors.dataWarm : accentColor,
                   fontSize: valueFontSize,
                   letterSpacing: isDurationMetric ? -1.2 : -1.8,
                   lineHeight: Math.floor(valueFontSize * 0.9),
                 }}
                 variant="display"
               >
-                {formatMetricValue(field, previewValue)}
+                {isPreparing ? String(countdown.remaining) : formatMetricValue(field, previewValue)}
               </ReedSwapText>
             </Pressable>
           )}
@@ -455,7 +514,7 @@ export function WorkoutMetricPicker({
           <View style={styles.durationRunRow}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={isDurationRunning ? 'Pause duration timer' : 'Start duration timer'}
+              accessibilityLabel={isPreparing ? 'Cancel start countdown' : isDurationRunning ? 'Pause duration timer' : hasStartedDuration ? 'Resume duration timer' : 'Start duration timer'}
               onPress={toggleDurationRun}
               style={({ pressed }) => [
                 styles.durationRunButton,
@@ -468,41 +527,39 @@ export function WorkoutMetricPicker({
             >
               <Ionicons
                 color={String(theme.colors.ink)}
-                name={isDurationRunning ? 'pause' : 'play'}
+                name={isPreparing ? 'stop' : isDurationRunning ? 'pause' : 'play'}
                 size={22}
-                style={isDurationRunning ? undefined : styles.durationPlayIcon}
+                style={isDurationRunning || isPreparing ? undefined : styles.durationPlayIcon}
               />
             </Pressable>
-            <ReedText style={styles.durationRunLabel} tone="muted" variant="bodyStrong">
-              {isDurationRunning ? 'Pause timer' : hasStartedDuration ? 'Resume timer' : 'Start timer'}
-            </ReedText>
-            <Pressable accessibilityRole="button" accessibilityLabel="Reset duration timer" onPress={() => { stopDurationRun(); setHasStartedDuration(false); onChange(normalizeMetricInput(0, minValue, maxValue)); }} style={({ pressed }) => [{ minHeight: 44, justifyContent: 'center', paddingHorizontal: theme.spacing.xs }, getTapScaleStyle(pressed)]}><ReedText tone="muted" variant="caption">Reset</ReedText></Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Reset duration timer" onPress={() => { const next = normalizeMetricInput(0, minValue, maxValue); if (isPreparing || isDurationRunning || next !== value) haptics.selection(); countdown.cancel(); stopDurationRun(); setHasStartedDuration(false); onChange(next); }} style={({ pressed }) => [{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }, getTapScaleStyle(pressed)]}><Ionicons name="refresh-outline" size={22} color={String(theme.colors.inkMuted)} /></Pressable>
           </View>
         ) : null}
       </View>
 
       <GestureDetector gesture={pickerGesture}>
-        <View style={styles.pickerShell}>
+        <View style={[styles.pickerShell, { height: pickerHeight }]}>
         <View
           style={[
             styles.centerIndicator,
             { pointerEvents: 'none' },
             {
               backgroundColor: accentColor,
+              top: (pickerHeight - 18) / 2,
             },
           ]}
         />
-        <Animated.View style={[styles.pickerTicks, pickerTicksStyle]}>
+        <Animated.View style={[styles.pickerTicks, { height: itemHeight * VISIBLE_ROWS }, pickerTicksStyle]}>
           {visibleTicks.map((tick, rowIndex) => {
             if (!tick) {
-              return <View key={`empty-${rowIndex}`} style={styles.tickRow} />;
+              return <View key={`empty-${rowIndex}`} style={[styles.tickRow, { height: itemHeight }]} />;
             }
 
             const isSelected = tick.index === previewIndex;
             const isMajor = tick.index % 2 === 0;
 
             return (
-              <View key={String(tick.value)} style={styles.tickRow}>
+              <View key={String(tick.value)} style={[styles.tickRow, { height: itemHeight }]}>
                 <View
                   style={[
                     styles.tickMark,
@@ -567,14 +624,8 @@ function buildVisibleTicks(values: number[], selectedIndex: number) {
 function getMetricAccentColor(
   theme: ReturnType<typeof useReedTheme>['theme'],
   field: RecipeFieldDefinition,
-  value: number,
 ) {
-  if (field.key === 'rpe') {
-    const min = field.min ?? field.pickerMin;
-    const max = field.max ?? field.pickerMax;
-    const t = max <= min ? 0 : Math.max(0, Math.min(1, (value - min) / (max - min)));
-    return blendHex('#fbbf24', '#b91c1c', t);
-  }
+  if (field.key === 'rpe') return String(theme.colors.dataWarm);
 
   const key = field.key;
 
@@ -583,28 +634,6 @@ function getMetricAccentColor(
   }
 
   return String(theme.colors.ink);
-}
-
-function blendHex(fromHex: string, toHex: string, t: number) {
-  const from = parseHexColor(fromHex);
-  const to = parseHexColor(toHex);
-  const clamped = Math.max(0, Math.min(1, t));
-  const r = Math.round(from.r + (to.r - from.r) * clamped);
-  const g = Math.round(from.g + (to.g - from.g) * clamped);
-  const b = Math.round(from.b + (to.b - from.b) * clamped);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
-function parseHexColor(hex: string) {
-  const normalized = hex.replace('#', '');
-  const value = normalized.length === 3 ? normalized.split('').map(char => char + char).join('') : normalized;
-  const parsed = Number.parseInt(value, 16);
-
-  return {
-    b: parsed & 255,
-    g: (parsed >> 8) & 255,
-    r: (parsed >> 16) & 255,
-  };
 }
 
 function normalizeMetric(value: number, min: number, max: number) {
@@ -644,6 +673,7 @@ const styles = StyleSheet.create({
   },
   copy: {
     flex: 1,
+    minWidth: 0,
     gap: 8,
     justifyContent: 'center',
     position: 'relative',
@@ -662,9 +692,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 46,
   },
-  durationRunLabel: {
-    fontFamily: 'Figtree_600SemiBold',
-  },
   durationRunRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -675,6 +702,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   durationInput: {
+    borderBottomWidth: 1,
     fontFamily: 'Figtree_600SemiBold',
     fontVariant: ['tabular-nums'],
     letterSpacing: -1.2,
@@ -690,12 +718,15 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   durationEditRow: {
+    width: '100%',
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'flex-start',
     minHeight: 54,
   },
   numericInput: {
+    width: '100%',
+    borderBottomWidth: 1,
     fontFamily: 'Figtree_600SemiBold',
     fontVariant: ['tabular-nums'],
     minWidth: 54,
@@ -704,11 +735,13 @@ const styles = StyleSheet.create({
     textAlign: 'left',
   },
   durationMinutesInput: {
-    minWidth: 54,
+    width: '55%',
+    flexShrink: 1,
     textAlign: 'right',
   },
   durationSecondsInput: {
-    minWidth: 42,
+    width: '40%',
+    flexShrink: 1,
   },
   pickerShell: {
     alignItems: 'flex-end',

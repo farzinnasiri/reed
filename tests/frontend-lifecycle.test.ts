@@ -29,7 +29,9 @@ test('rest owner schedules an extended deadline and cancels on pause and removal
   const { WorkoutRestEffects } = platformModule<typeof import('../components/workout/workout-rest-effects')>(
     'components/workout/workout-rest-effects.tsx',
     {
-      'react-native': { AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) } },
+      'react-native': { Platform: { OS: 'ios' }, AppState: { currentState: 'active', addEventListener: () => ({ remove() {} }) } },
+      '@/design/haptics': { attention() {} },
+      '@/design/sound-feedback': { useSoundPreference: () => ({ ready: true, enabled: true }) },
       '@/lib/client-observability': observability,
       [process.cwd() + '/lib/client-observability.ts']: observability,
       '@/lib/rest-timer-alerts': {
@@ -71,16 +73,55 @@ test('rest owner schedules an extended deadline and cancels on pause and removal
   await act(async () => root.unmount());
 });
 
+test('muting a running rest timer replaces its notification without changing the deadline', async () => {
+  let soundEnabled = true;
+  const scheduled: { sound: string | null; fireAt: number }[] = [];
+  const cleared: string[] = [];
+  const onPermissionDenied = () => {};
+  const { useRestBackgroundAlerts } = platformModule<typeof import('../components/workout/use-rest-background-alerts')>(
+    'components/workout/use-rest-background-alerts.ts', {
+      '@/design/sound-feedback': { useSoundPreference: () => ({ ready: true, enabled: soundEnabled }) },
+      '@/lib/rest-alert-definition': { restCompleteAlert: { sound: 'rest.wav' }, silentRestCompleteAlert: { sound: null } },
+      '@/lib/rest-timer-alerts': { ensureRestTimerAlertPermissionsAsync: async () => 'granted' },
+      '@/lib/client-observability': observability,
+      [process.cwd() + '/lib/client-observability.ts']: observability,
+      '@/lib/background-alerts': {
+        clearBackgroundAlertAsync: async (id: string | null) => { if (id) cleared.push(id); },
+        scheduleBackgroundAlertAsync: async ({ definition, fireAt }: { definition: { sound: string | null }; fireAt: number }) => {
+          scheduled.push({ sound: definition.sound, fireAt });
+          return { notificationId: String(scheduled.length), status: 'scheduled' };
+        },
+      },
+    },
+  );
+  const restCard = { durationSeconds: 60, remainingSeconds: 60, startedAt: Date.now(), isRunning: true,
+    isComplete: false, exerciseName: 'Test', nextSetNumber: 2, sessionExerciseId: 'exercise', previousSetSummary: null } as RestCard;
+  function Rest() { useRestBackgroundAlerts({ cardMode: 'rest', restCard, onPermissionDenied }); return null; }
+  const root = createRoot(document.getElementById('root')!);
+  await act(async () => root.render(createElement(Rest)));
+  soundEnabled = false;
+  await act(async () => root.render(createElement(Rest)));
+  assert.deepEqual(scheduled, [
+    { sound: 'rest.wav', fireAt: restCard.startedAt! + 60_000 },
+    { sound: null, fireAt: restCard.startedAt! + 60_000 },
+  ]);
+  assert.deepEqual(cleared, ['1']);
+  await act(async () => root.unmount());
+  assert.deepEqual(cleared, ['1', '2']);
+});
+
 test('speech reset rejects late transcripts; repeated stop transcribes once', async () => {
   const result = deferred<{ text: string }>();
   const texts: string[] = [];
   let transcriptions = 0;
+  const recordingStates: boolean[] = [];
   const recorder = { stop: async () => {} };
   const getToken = async () => 'test-token';
   const { useSpeechDraft } = platformModule<typeof import('../lib/speech/use-speech-draft')>(
     'lib/speech/use-speech-draft.ts',
     {
       '@clerk/expo': { useAuth: () => ({ getToken }) },
+      '@/design/sounds': { soundPolicy: { setRecording: (_owner: symbol, value: boolean) => recordingStates.push(value) } },
       'expo-audio': {
         RecordingPresets: { HIGH_QUALITY: {} },
         useAudioRecorder: () => recorder,
@@ -116,6 +157,7 @@ test('speech reset rejects late transcripts; repeated stop transcribes once', as
     void voice.stop();
   });
   assert.equal(transcriptions, 1);
+  assert.deepEqual(recordingStates, [true, false]);
   await act(async () => voice.reset());
   assert.equal(voice.state.status, 'idle');
   await act(async () => {
@@ -259,7 +301,12 @@ test('activity stopwatch pauses into the duration field, resumes, refreshes on f
   const durations: number[] = [];
   const running: boolean[] = [];
   const { DurationStopwatch } = platformModule<typeof import('../components/workout/duration-stopwatch')>('components/workout/duration-stopwatch.tsx', {
+    '@expo/vector-icons/Ionicons': { default: () => null, __esModule: true },
+    '@/design/timer-preference': { useStartCountdownPreference: () => ({ seconds: 0 }) },
+    '@/design/haptics': { toggle() {}, selection() {} },
+    '@/components/ui/haptic-pressable': { HapticPressable: ({ children, onPress, accessibilityLabel }: { children: React.ReactNode; onPress: () => void; accessibilityLabel: string }) => React.createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children) },
     'react-native': {
+      Platform: { OS: 'ios' },
       AppState: { addEventListener: (_: string, callback: typeof foreground) => { foreground = callback; return { remove() {} }; } },
       View: ({ children }: { children: React.ReactNode }) => React.createElement('div', null, children),
       Pressable: ({ children, onPress, accessibilityLabel }: { children: React.ReactNode; onPress: () => void; accessibilityLabel: string }) => React.createElement('button', { onClick: onPress, 'aria-label': accessibilityLabel }, children),
@@ -290,6 +337,55 @@ test('activity stopwatch pauses into the duration field, resumes, refreshes on f
   } finally {
     await act(async () => root.unmount());
     Date.now = originalNow;
+  }
+});
+
+test('start countdown excludes preparation, supports three/five seconds and cancels on reset, background and unmount', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: 1000 });
+  let preference = 3;
+  let foreground!: (state: string) => void;
+  const starts: number[] = [];
+  let cancelled = 0;
+  const { useStartCountdown } = platformModule<typeof import('../components/workout/use-start-countdown')>('components/workout/use-start-countdown.ts', {
+    '@/design/timer-preference': { useStartCountdownPreference: () => ({ seconds: preference }) },
+    'react-native': { Platform: { OS: 'ios' }, AppState: { addEventListener: (_: string, callback: typeof foreground) => { foreground = callback; return { remove() {} }; } } },
+  });
+  let countdown!: ReturnType<typeof useStartCountdown>;
+  function Timer() { countdown = useStartCountdown(at => starts.push(at), () => cancelled++); return null; }
+  const root = createRoot(document.getElementById('root')!);
+  const advance = async (ms: number) => act(async () => t.mock.timers.tick(ms));
+  try {
+    await act(async () => root.render(createElement(Timer)));
+    await act(async () => countdown.start());
+    assert.equal(countdown.remaining, 3);
+    await advance(1000); assert.equal(countdown.remaining, 2);
+    await advance(1000); assert.equal(countdown.remaining, 1);
+    assert.deepEqual(starts, []);
+    await advance(1000); assert.equal(countdown.remaining, null);
+    assert.deepEqual(starts, [4000]);
+    await act(async () => countdown.start());
+    await act(async () => countdown.cancel());
+    await advance(5000); assert.deepEqual(starts, [4000]);
+    preference = 5;
+    await act(async () => root.render(createElement(Timer)));
+    await act(async () => countdown.start());
+    assert.equal(countdown.remaining, 5);
+    await advance(4000); assert.equal(countdown.remaining, 1);
+    await act(async () => foreground('background'));
+    await advance(1000); assert.deepEqual(starts, [4000]);
+    assert.equal(cancelled, 2);
+    preference = 0;
+    await act(async () => root.render(createElement(Timer)));
+    await act(async () => countdown.start());
+    assert.equal(countdown.remaining, null);
+    assert.deepEqual(starts, [4000, 14000]);
+    preference = 3;
+    await act(async () => root.render(createElement(Timer)));
+    await act(async () => countdown.start());
+    await act(async () => root.unmount());
+    await advance(5000); assert.deepEqual(starts, [4000, 14000]);
+  } finally {
+    await act(async () => root.unmount());
   }
 });
 

@@ -50,7 +50,25 @@ export const reedAuthMetrics = { maxWidth: 440, mascot: 128, compactMascot: 96, 
 
 export const reedProfileMetrics = { maxWidth: 640, detailFraction: .88, avatar: 56, hit: 44, metricHeight: 68 } as const;
 
-export const reedSessionMetrics = { header: 40, hit: 44, sheetMascot: 56, sheetFraction: 0.88, handle: 24 } as const;
+// `dock`: Reed's slot in the session dock (and the Sessions page dock). `recap`: its slot in a finished
+// session's hero. `drawn`: the one size it is drawn at, then scaled down to wherever it is.
+export const reedSessionMetrics = { panelPeekFraction: .56, panelPeekMin: 280, panelPeekBase: 180, panelGlanceBody: 190, panelFullBase: 400, panelExerciseRow: 64, panelSetRow: 44, dock: 88, exerciseDock: 128, compactExerciseDock: 96, compactHeight: 740, recap: 96, drawn: 96, hit: 44, sheetMascot: 56, sheetFraction: 0.88, handle: 24 } as const;
+
+export const reedWorkoutReviewMetrics = {
+  artwork: 64, swipeAction: 88, wheelRow: 44, wheelRows: 5, editorFraction: .78, actionsFraction: .5,
+} as const;
+
+export const reedExerciseImageMetrics = {
+  row: { width: 44, height: 44 },
+  timeline: { width: 36, height: 36 },
+  heading: { width: 56, height: 56 },
+  canvas: '#ffffff',
+  // An inscribed square keeps every corner of the original artwork inside the circle.
+  containRatio: Math.SQRT1_2,
+  // Past 1 on purpose: the circle crops the white canvas so the exercise itself fills it.
+  headingContainRatio: 1.3,
+  previewFraction: .88,
+} as const;
 
 // DESIGN.md → Shapes. Do not invent in-between radii.
 export const reedRadii = {
@@ -106,6 +124,7 @@ const reedColors = {
   // DESIGN.md has no danger border token; derived from danger-ink so error states keep an outline.
   dangerBorder: 'rgba(240, 163, 163, 0.3)',
   successInk: '#9ad7a8',
+  successFill: 'rgba(120, 200, 140, 0.14)',
   line: 'rgba(255, 240, 220, 0.07)',
   lineStrong: 'rgba(255, 240, 220, 0.14)',
   scrim: 'rgba(6, 5, 4, 0.5)',

@@ -18,12 +18,11 @@ test('every hold egg is a well-formed scene of real faces', () => {
 
 test('a hold plays its timeline end to end and waits on the last step until release', () => {
   for (const egg of HOLD_EGGS) {
-    const { steps, taps } = holdPlayback(egg);
+    const { steps } = holdPlayback(egg);
     assert.equal(steps.length, egg.during.length);
     const holds = steps.map(step => typeof step === 'string' ? 0 : step.ms ?? 0);
     holds.slice(0, -1).forEach((ms, index) => assert.equal(ms, egg.during[index + 1].at - egg.during[index].at));
     assert.equal(holds.at(-1), HOLD_LAST_STEP_MS);
-    assert.deepEqual(taps.map(tap => tap.at), egg.during.filter(step => step.haptic).map(step => step.at));
   }
 });
 

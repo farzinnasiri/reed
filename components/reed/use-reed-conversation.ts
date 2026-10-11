@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useConvexConnectionState, useMutation, useQuery } from 'convex/react';
-import * as haptics from '@/design/haptics';
+import { conversationFailureFeedback, createConversationFeedback } from './reed-feedback';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { startClientWideEvent } from '@/lib/client-observability';
@@ -53,6 +53,7 @@ export function useReedConversation() {
 
       return {
         createdAt: message.createdAt,
+        completedAt: message.completedAt,
         chapterId: message.chapterId,
         attachments: message.attachments?.map(attachment => ({
           id: attachment._id,
@@ -134,9 +135,14 @@ export function useReedConversation() {
       if (pendingRef.current === nonce) pendingRef.current = null;
       setPendingSendNonce(current => current === nonce ? null : current);
       setOptimisticMessages(current => current.filter(message => message.id !== `optimistic-assistant-${nonce}`).map(message => message.id === `optimistic-user-${nonce}` ? { ...message, status: 'failed' as const } : message));
-      haptics.warning();
+      conversationFailureFeedback();
     });
   }, [sendReedMessage]);
+
+  const [observeFeedback] = useState(createConversationFeedback);
+  useEffect(() => {
+    observeFeedback(messages, !history.isLoadingInitialMessages, connection.isWebSocketConnected);
+  }, [connection.isWebSocketConnected, history.isLoadingInitialMessages, messages, observeFeedback]);
 
   const sendPrompt = useCallback((prompt: string, source: ComposerSource, attachments: Array<{ storageId: Id<'_storage'> }> = [], context?: ReedMessageContext) => {
     const text = prompt.trim();
@@ -166,7 +172,7 @@ export function useReedConversation() {
     }).catch(error => {
       const operation = startClientWideEvent('reed.retry');
       operation.fail(error, 'reed-assistant-retry-failed');
-      haptics.warning();
+      conversationFailureFeedback();
     });
   }, [pendingRunId, retryReedAssistantMessage]);
 

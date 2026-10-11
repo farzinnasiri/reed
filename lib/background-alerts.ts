@@ -1,5 +1,4 @@
 import { AppState, Platform } from 'react-native';
-import type { AudioSource } from 'expo-audio';
 
 export type ScheduledAlertPermissionStatus = 'granted' | 'permission_denied' | 'unavailable';
 export type ScheduledAlertStatus = 'scheduled' | 'expired' | ScheduledAlertPermissionStatus;
@@ -7,8 +6,8 @@ export type ScheduledAlertStatus = 'scheduled' | 'expired' | ScheduledAlertPermi
 export type ScheduledAlertDefinition<Payload> = {
   androidChannelId: string;
   androidChannelName: string;
-  foregroundSound?: AudioSource;
-  sound: 'default' | string;
+  foregroundManaged?: boolean;
+  sound: 'default' | string | null;
   vibrationPattern?: number[];
   buildContent: (payload: Payload) => {
     body: string;
@@ -52,8 +51,8 @@ async function configureNotificationHandlerOnce() {
 
   configuredNotificationHandler = true;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
+    handleNotification: async notification => ({
+      shouldPlaySound: !(AppState.currentState === 'active' && notification.request.content.data?.foregroundManaged === true),
       shouldSetBadge: false,
       shouldShowBanner: AppState.currentState !== 'active',
       shouldShowList: AppState.currentState !== 'active',
@@ -80,7 +79,7 @@ export async function ensureScheduledAlertPermissionsAsync<Payload>(
     logScheduledAlert('ensure-channel', {
       channelId: definition.androidChannelId,
       platform: Platform.OS,
-      sound: definition.sound,
+      sound: definition.sound ?? undefined,
     });
     await Notifications.setNotificationChannelAsync(definition.androidChannelId, {
       importance: Notifications.AndroidImportance.MAX,
@@ -129,8 +128,9 @@ export async function scheduleBackgroundAlertAsync<Payload>({
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       body: content.body,
-      sound: definition.sound,
+      sound: definition.sound ?? false,
       title: content.title,
+      data: { foregroundManaged: definition.foregroundManaged === true },
     },
     trigger: {
       channelId: Platform.OS === 'android' ? definition.androidChannelId : undefined,
@@ -169,7 +169,7 @@ export async function showImmediateBackgroundAlertAsync<Payload>({
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       body: content.body,
-      sound: definition.sound,
+      sound: definition.sound ?? false,
       title: content.title,
     },
     trigger: null,

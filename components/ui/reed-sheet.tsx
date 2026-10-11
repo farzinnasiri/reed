@@ -25,6 +25,8 @@ type ReedSheetProps = {
    */
   open?: boolean;
   onDismiss?: () => void;
+  /** Called the moment the sheet starts closing (a drag, the scrim, Back), not when it has finished: `onDismiss` waits for the end. */
+  onClosing?: () => void;
   ref?: Ref<BottomSheetModal>;
   /** Wrap the content in a scroll view; the sheet still grows with its content up to the screen. */
   scrollable?: boolean;
@@ -62,7 +64,7 @@ const SHEET_REDUCED_MOTION = {
  * `BottomSheetModalProvider` above it. If a `StageRecedeProvider` is mounted, opening the sheet
  * recedes the stage.
  */
-export function ReedSheet({ children, onDismiss, open, ref, scrollable = false, conversation = false, heightFraction, onBack, onSnapIndexChange, position, snapIndex }: ReedSheetProps) {
+export function ReedSheet({ children, onClosing, onDismiss, open, ref, scrollable = false, conversation = false, heightFraction, onBack, onSnapIndexChange, position, snapIndex }: ReedSheetProps) {
   const { theme } = useReedTheme();
   const insets = useSafeAreaInsets();
   const { height: viewportHeight } = useWindowDimensions();
@@ -221,7 +223,10 @@ export function ReedSheet({ children, onDismiss, open, ref, scrollable = false, 
       }}
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
-      onAnimate={(_from, to) => setIsOpen(to >= 0)}
+      onAnimate={(_from, to) => {
+        setIsOpen(to >= 0);
+        if (to < 0) onClosing?.();
+      }}
       onChange={index => {
         setIsOpen(index >= 0);
         if (index >= 0) {

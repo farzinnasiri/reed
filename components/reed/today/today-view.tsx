@@ -7,7 +7,6 @@ import { ReedText } from '@/components/ui/reed-text';
 import { useEntryAnimation } from '@/design/use-entry-animation';
 import { reedHomeMascotMetrics, reedHomeUtilityMetrics } from '@/design/system';
 import { getTapScaleStyle, reedMotion } from '@/design/motion';
-import * as haptics from '@/design/haptics';
 import { useFiveMinuteNow } from '@/components/home/use-five-minute-now';
 import { useReedTheme } from '@/design/provider';
 import { usePulse } from '@/components/home/pulse/use-pulse';
@@ -150,7 +149,7 @@ export function TodayView({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Chat history"
-            onPress={() => { haptics.selection(); history.open(); }}
+            onPress={() => {  history.open(); }}
             style={({ pressed }) => [styles.history, { gap: theme.spacing.xxs, paddingHorizontal: theme.spacing.xs }, getTapScaleStyle(pressed)]}
           >
             <Ionicons name="time-outline" size={reedHomeUtilityMetrics.icon} color={String(theme.colors.inkSecondary)} />

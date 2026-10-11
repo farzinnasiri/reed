@@ -2,43 +2,18 @@ import { StyleSheet } from 'react-native';
 import { reedRadii } from '@/design/system';
 
 export const styles = StyleSheet.create({
-  sessionInsightsContent: {
-    flex: 1,
-    gap: 12,
-    minHeight: 0,
-    paddingBottom: 14,
-    paddingHorizontal: 16,
-    paddingTop: 10,
-  },
   sessionInsightsLoadingBody: {
     alignItems: 'center',
-    flex: 1,
+    gap: 8,
     justifyContent: 'center',
+    minHeight: 120,
   },
   sessionInsightsRetry: {
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  sessionInsightsHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sessionInsightsHeaderCopy: {
-    gap: 2,
-  },
-  sessionInsightsHeaderActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 8,
-  },
-  sessionInsightsScroll: {
-    flex: 1,
-    minHeight: 0,
-  },
-  sessionInsightsScrollContent: {
-    gap: 14,
-    paddingBottom: 18,
+  sessionInsightsSections: {
+    gap: 20,
   },
   sessionInsightsSectionBlock: {
     gap: 10,
@@ -370,12 +345,6 @@ export const styles = StyleSheet.create({
     fontFamily: 'Figtree_600SemiBold',
     minWidth: 76,
     textAlign: 'right',
-  },
-  sheetClose: {
-    alignItems: 'center',
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
   },
   sessionInsightsSnapshotGridCompact: {
     flexWrap: 'wrap',

@@ -1,8 +1,8 @@
+import { HapticPressable } from '@/components/ui/haptic-pressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Pressable, type DimensionValue } from "react-native";
+import { type DimensionValue } from "react-native";
 import Animated from "react-native-reanimated";
 import { ReedText } from "@/components/ui/reed-text";
-import * as haptics from "@/design/haptics";
 import { reedMotion } from "@/design/motion";
 import { useReedTheme } from "@/design/provider";
 import { reedSuggestionMetrics, reedTodaySuggestionMetrics } from "@/design/system";
@@ -40,7 +40,7 @@ export function ReplyChip({
   const press = usePressAnimation({ pressMs: reedMotion.suggestions.pressMs });
   return (
     <Animated.View style={[{ maxWidth, ...(grid ? { width: '100%' } : {}) }, entry, press.animatedStyle]}>
-      <Pressable
+      <HapticPressable feedback="direct"
         accessibilityHint="Sends this to Reed."
         accessibilityLabel={label}
         accessibilityRole="button"
@@ -48,7 +48,7 @@ export function ReplyChip({
         disabled={disabled}
         hitSlop={6}
         onPressIn={() => {
-          haptics.selection();
+
           press.onPressIn();
         }}
         onPressOut={press.onPressOut}
@@ -73,7 +73,7 @@ export function ReplyChip({
         >
           {label}
         </ReedText>
-      </Pressable>
+      </HapticPressable>
     </Animated.View>
   );
 }

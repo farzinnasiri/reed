@@ -5,7 +5,6 @@ import Animated, { useAnimatedStyle, useSharedValue, withRepeat, withSequence, w
 import { ReedText } from '@/components/ui/reed-text';
 import { ReedButton } from '@/components/ui/reed-button';
 import { getTapScaleStyle, runReedLayoutAnimation } from '@/design/motion';
-import * as haptics from '@/design/haptics';
 import { useReedTheme } from '@/design/provider';
 import { reedOnboardingMetrics, reedRadii, withColorAlpha } from '@/design/system';
 import { BODY_SHAPES, CATEGORY_BY_ID, PUSH_OPTIONS, RHYTHMS, SLEEP_OPTIONS, SYNTH_LINES, WEEKDAYS } from './content';
@@ -25,12 +24,12 @@ export function SynthStep({ next }: StepProps) {
   useEffect(() => {
     const timers = SYNTH_LINES.map((_, index) => setTimeout(() => {
       setDone(index + 1);
-      haptics.selection();
+
       reed?.act('tick');
     }, 900 + SYNTH_LINE_MS * (index + 1)));
     const finish = setTimeout(() => {
       reed?.react('happy', 1200);
-      haptics.light();
+
     }, 900 + SYNTH_LINE_MS * SYNTH_LINES.length + 150);
     const advance = setTimeout(next, 900 + SYNTH_LINE_MS * SYNTH_LINES.length + 900);
     return () => {
@@ -215,7 +214,7 @@ function SummaryCard({ children, onEdit, summary, title }: { children: ReactNode
   const [open, setOpen] = useState(false);
   return (
     <View style={[styles.summaryRow, { borderBottomColor: theme.colors.line }]}>
-      <Pressable {...(Platform.OS === 'web' ? { 'aria-expanded': open } : {})} accessibilityLabel={title} accessibilityRole="button" accessibilityState={{ expanded: open }} style={({ pressed }) => [styles.summaryToggle, getTapScaleStyle(pressed)]} onPress={() => { haptics.selection(); runReedLayoutAnimation(); setOpen(current => !current); }}>
+      <Pressable {...(Platform.OS === 'web' ? { 'aria-expanded': open } : {})} accessibilityLabel={title} accessibilityRole="button" accessibilityState={{ expanded: open }} style={({ pressed }) => [styles.summaryToggle, getTapScaleStyle(pressed)]} onPress={() => {  runReedLayoutAnimation(); setOpen(current => !current); }}>
         <View style={styles.summaryCopy}>
           <ReedText tone="muted" variant="caption">{title}</ReedText>
           <ReedText numberOfLines={1} tone={title === 'Your starting plan' ? 'accent' : 'secondary'} variant="body">{summary}</ReedText>
@@ -232,7 +231,7 @@ function SummaryCard({ children, onEdit, summary, title }: { children: ReactNode
 
 function ReviewFact({ label, onEdit, value }: { label: string; onEdit: () => void; value: string }) {
   const { theme } = useReedTheme();
-  return <Pressable accessibilityLabel={`Edit ${label.toLowerCase()}`} accessibilityRole="button" style={({ pressed }) => [styles.reviewFact, getTapScaleStyle(pressed)]} onPress={() => { haptics.selection(); onEdit(); }}>
+  return <Pressable accessibilityLabel={`Edit ${label.toLowerCase()}`} accessibilityRole="button" style={({ pressed }) => [styles.reviewFact, getTapScaleStyle(pressed)]} onPress={() => {  onEdit(); }}>
     <View style={styles.summaryCopy}><ReedText tone="muted" variant="caption">{label}</ReedText><ReedText variant="body">{value}</ReedText></View>
     <Ionicons color={String(theme.colors.inkMuted)} name="create-outline" size={18} />
   </Pressable>;

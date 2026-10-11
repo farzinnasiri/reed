@@ -3,7 +3,6 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { ReedText } from '@/components/ui/reed-text';
-import * as haptics from '@/design/haptics';
 import { getTapScaleStyle, reedMotion } from '@/design/motion';
 import { useReedTheme } from '@/design/provider';
 import { reedWidgetMetrics } from '@/design/system';
@@ -56,7 +55,7 @@ export function ExpandableWidget({ disclosure, summary, children, actions }: {
       <View style={{ flexDirection: 'row', gap: theme.spacing.xs, alignItems: 'center' }}>
         {actions}
         <Pressable accessibilityRole="button" accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${summary.label} widget`} accessibilityState={{ expanded }} aria-expanded={expanded} aria-controls={id}
-          onPress={() => { haptics.selection(); onChange(!expanded); }}
+          onPress={() => {  onChange(!expanded); }}
           style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.md, minHeight: reedWidgetMetrics.summaryHeight, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, flex: 1 }, getTapScaleStyle(pressed)]}>
           <Ionicons name={summary.complete ? 'checkmark-circle-outline' : summary.icon} size={reedWidgetMetrics.summaryIcon} color={String(summary.complete ? theme.colors.successInk : theme.colors.accentInk)} />
           <View style={{ gap: theme.spacing.xxs, flex: 1 }}>

@@ -15,7 +15,6 @@ import { holdPlayback, pickHoldEgg, type HoldEgg } from "./hold-eggs";
 import type { ReedPresenceState } from "./presence-state";
 
 // The taps a hold scene can ask for, by name.
-const tapHaptics = { light: haptics.light, medium: haptics.medium, selection: haptics.selection, soft: haptics.soft };
 
 export function MascotTouch({
   children,
@@ -38,13 +37,11 @@ export function MascotTouch({
   const taps = useRef<number[]>([]),
     lastEgg = useRef(0);
   const timeouts = useRef<ReturnType<typeof setTimeout>[]>([]);
-  // The scene playing while held, and the haptic taps still to come.
+  // The visual scene playing while held.
   const holdEgg = useRef<HoldEgg | null>(null),
-    lastHoldEgg = useRef<string | undefined>(undefined),
-    holdTaps = useRef<ReturnType<typeof setTimeout>[]>([]);
+    lastHoldEgg = useRef<string | undefined>(undefined);
   useEffect(() => () => {
     timeouts.current.forEach(clearTimeout);
-    holdTaps.current.forEach(clearTimeout);
   }, []);
   const { gazeX, gazeY } = mascot;
   const pan = Gesture.Pan()
@@ -105,9 +102,8 @@ export function MascotTouch({
         const egg = pickHoldEgg(Math.random, lastHoldEgg.current);
         holdEgg.current = egg;
         lastHoldEgg.current = egg.id;
-        const { steps, taps } = holdPlayback(egg);
+        const { steps } = holdPlayback(egg);
         mascot.play(steps);
-        holdTaps.current = taps.map(({ at, kind }) => setTimeout(() => tapHaptics[kind](), at));
         if (!reduced) {
           sx.set(withSpring(reedMotion.touch.squishX, reedSprings.pop));
           sy.set(withSpring(reedMotion.touch.squishY, reedSprings.pop));
@@ -120,10 +116,7 @@ export function MascotTouch({
         y.set(reduced ? 0 : withSpring(0, reedSprings.pop));
         if (held.current) {
           held.current = false;
-          holdTaps.current.forEach(clearTimeout);
-          holdTaps.current = [];
-          haptics.medium();
-          mascot.play(holdEgg.current?.outro ?? ["happy"]);
+                mascot.play(holdEgg.current?.outro ?? ["happy"]);
           mascot.act("spring");
         }
       }}
@@ -140,7 +133,6 @@ export function MascotTouch({
         ) {
           taps.current = [];
           lastEgg.current = now;
-          haptics.light();
           mascot.play([
             { expression: "surprised", ms: reedMotion.touch.shakeMs },
             { expression: "dizzy", ms: reedMotion.touch.dizzyMs },
@@ -154,7 +146,6 @@ export function MascotTouch({
             ),
           );
         } else {
-          haptics.selection();
           mascot.act(state === "thinking" ? "wobble" : "bounce");
         }
       }}
