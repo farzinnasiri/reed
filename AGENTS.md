@@ -141,6 +141,12 @@ Essential thread positioning must not wait for `requestAnimationFrame`: T3 previ
 
 60. The mascot-only exercise dock must stay within the mascot's width plus its gutters. Its empty full-width row intercepts lower card actions on web even when the dock style says `pointerEvents: 'box-none'`. Keep its bounds narrow rather than placing invisible hit areas over rest choices.
 
+61. Hevy CSV imports group sessions by their shared start/end times, but an exercise can appear twice within one session with `set_index` restarting at zero. Preserve those exercise blocks separately. Imported session exercises snapshot their historical recipe: a single exported side measurement uses an aggregate recipe rather than inventing left/right results. Keep missing RPE and other measurements absent; `summarizeMetrics` already supports incomplete historical metrics.
+
+62. `trainingKnowledge.getRecordHighlights` uses a five-year activity lookback, while journey snapshot records use 365 days and clamp to the profile's creation time. Importing older workouts does not expand the snapshot's evidence window. Verify record calculations through Training Knowledge as well as rebuilding the coaching snapshot.
+
+63. Clerk login persistence is configured under `session_settings`, not `session.lifetime`, which is the short-lived access-token lifetime. Reed's current development instance uses a 30-day inactivity timeout with maximum lifetime disabled for rolling sessions; tokens remain 60 seconds. Changing the policy leaves existing sessions' old `expire_at` values intact, so verify a fresh sign-in rather than assuming old sessions received the new lifetime. Carry this policy over when configuring the production Clerk instance.
+
 ## Keep These Invariants
 
 Portal context note: gorhom's portal renders content at its host. Keep the shared Reed conversation/draft provider above `BottomSheetModalProvider`. Pass workout visibility and the mascot controller bridge explicitly into session-sheet content; feature contexts beneath the navigator do not automatically survive that portal.
